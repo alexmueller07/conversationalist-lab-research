@@ -1,0 +1,15 @@
+# Normalise line endings in the repository; check out native on Windows.
+* text=auto
+
+*.py   text diff=python
+*.md   text
+*.yaml text
+*.toml text
+*.csv  text
+
+*.mp4 binary
+*.wav binary
+*.onnx binary
+*.task binary
+*.tflite binary
+*.parquet binary

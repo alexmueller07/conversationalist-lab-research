@@ -1,0 +1,73 @@
+# Example configuration overrides.
+#
+# Every value here is already the default; the file exists to show the
+# structure and to be copied and edited. Only the keys you actually change
+# need to be present -- unknown keys are rejected rather than ignored, so a
+# typo fails loudly instead of silently doing nothing.
+#
+#   convlab analyse recordings/ -c configs/default.yaml -o workspace/
+#
+# The resolved configuration is written verbatim into every run's
+# manifest.json, so any number in a results table traces back to the
+# parameters that produced it.
+
+audio:
+  sample_rate: 16000
+  frame_hz: 100.0            # master analysis grid; 10 ms frames
+  speech_band: [300.0, 3400.0]
+
+sync:
+  max_offset_s: 30.0         # largest camera offset searched
+  n_probes: 9
+  min_agreement_s: 0.050     # flag sync above this scatter
+
+vad:
+  threshold: 0.5
+  min_speech_s: 0.10
+
+attribution:
+  ratio_scale_db: 6.0
+  both_penalty: 1.0
+  source_smooth_s: 0.15      # see docs/METHODS.md 4.4 before changing
+  source_smooth_percentile: 70.0
+
+turns:
+  ipu_gap_s: 0.18            # inter-pausal unit boundary
+  backchannel_max_s: 1.2
+  max_gap_s: 10.0            # beyond this is a lapse, not a response
+  interruption_success_s: 1.0
+
+asr:
+  model: small.en            # medium.en is better if runtime allows
+  beam_size: 5
+  batched: true
+
+prosody:
+  f0_floor_hz: 60.0
+  f0_ceiling_hz: 500.0
+  adaptive_bracket: true     # two-pass speaker-specific pitch range
+
+vision:
+  fps: 25.0                  # 12.5 roughly halves runtime; nods are 1-4 Hz
+  min_coverage: 0.60         # below this, facial measures are withheld
+  nod_min_cycles: 1.2
+  gaze_on_partner_deg: 12.0
+
+semantic:
+  model: sentence-transformers/all-MiniLM-L6-v2
+  callback_min_lag_turns: 4
+  callback_min_similarity: 0.35
+  callback_anchor_max_df: 0.25
+
+synchrony:
+  window_s: 30.0
+  n_surrogates: 50           # chance baseline; do not set to 0
+  random_seed: 20260730
+
+qc:
+  min_session_s: 60.0
+  min_turns: 20
+  max_attribution_uncertain: 0.20
+
+cache: true
+model_dir: models

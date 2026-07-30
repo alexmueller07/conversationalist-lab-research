@@ -1,0 +1,28 @@
+
+====================================================================================
+convlab validation
+====================================================================================
+  [PASS] sync offset recovery        max error (ms) =   0.0000 (<= 10.0)  5 offsets from 0 to 11 s
+  [PASS] nod recall                  recall =   1.0000 (>= 0.85)  7 planted
+  [PASS] nod precision               precision =   1.0000 (>= 0.85)  
+  [PASS] nod vs single dips          false positives =   0.0000 (<= 0.0)  0.6-cycle dips must not count
+  [PASS] nod vs head shakes          false positives =   0.0000 (<= 0.0)  yaw oscillation must not read as pitch
+  [PASS] nod vs postural drift       false positives =   0.0000 (<= 0.0)  slow drift only
+  [PASS] synchrony false positive    max |z| on independent signals =   1.0564 (<= 1.96)  raw correlation was 0.32 -- why the baseline matters
+  [PASS] synchrony sensitivity       z on coupled signals =  10.0714 (>= 3.0)  lag recovered -1.20s (true -1.20s)
+  [PASS] callback precision          precision =   0.9667 (>= 0.8)  29 true positives, 1 false
+  [PASS] callback recall             recall =   1.0000 (>= 0.8)  0 missed across 7 scripts
+  [PASS] speech detection            F1 per person =   0.9387 (>= 0.88)  4 scripted sessions
+  [PASS] speaker identity confusion  error rate =   0.0004 (<= 0.03)  wrong person named, among committed single-speaker frames
+  [PASS] speaker attribution         strict state accuracy =   0.8993 (>= 0.86)  single-speaker frames; also counts frames labelled as overlap
+  [PASS] overlap precision           precision =   0.9712 (>= 0.75)  simultaneous speech
+  [PASS] overlap recall              recall =   0.6056 (>= 0.5)  under-detection is the safer failure here
+  [PASS] turn detection precision    precision =   0.8938 (>= 0.85)  
+  [PASS] turn detection recall       recall =   0.9500 (>= 0.88)  
+  [PASS] turn onset accuracy         median error (ms) =   5.7693 (<= 60.0)  against exact scripted onsets
+  [PASS] response latency accuracy   median error (ms) =  56.2491 (<= 80.0)  session median floor transfer offset
+  [PASS] backchannel precision       precision =   0.9643 (>= 0.85)  
+  [PASS] backchannel recall          recall =   0.7733 (>= 0.7)  
+------------------------------------------------------------------------------------
+  21/21 checks passed
+  note: Synthetic material cannot establish accuracy on human participants. These checks establish that known events produce correct numbers.

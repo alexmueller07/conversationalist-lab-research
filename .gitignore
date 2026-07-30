@@ -1,0 +1,27 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Model assets are fetched, never committed
+models/
+!models/.gitkeep
+
+# Analysis workspaces contain participant-derived data. Never commit.
+workspace/
+out/
+runs/
+*.wav
+*.mp4
+*.mkv
+*.mov
+*.avi
+!tests/fixtures/**/*.wav
+
+.DS_Store
+Thumbs.db
