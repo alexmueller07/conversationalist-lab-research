@@ -107,7 +107,9 @@ def _fmt(value: float | None, unit: str = "") -> str:
 def _timeline_svg(context: AnalysisContext, width: int = 1120, row: int = 26) -> str:
     """Speaker ribbon with event markers, as inline SVG."""
     duration = max(context.duration, 1e-6)
-    left, right = 46, 12
+    # Wide enough for the longest right-aligned row label ("Callbacks");
+    # at 46 px they were silently clipped to "allbacks".
+    left, right = 78, 12
     plot = width - left - right
 
     def x(t: float) -> float:
