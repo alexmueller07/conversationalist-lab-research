@@ -102,6 +102,22 @@ class AttributionConfig:
     """Relative weight of the lip-motion likelihood. Lower than the acoustic
     weight because face tracking drops out more often than audio does."""
 
+    visual_weight_solo: float = 2.5
+    """Weight for lip motion when the two tracks carry the *same* audio and
+    the acoustic cue does not exist at all.
+
+    Some recording setups mix one shared microphone feed into every camera's
+    file. Then both tracks are bit-identical, the level difference is
+    uniformly zero, and lip motion is the only evidence there is. It has to
+    carry the decision on its own, so it is weighted to compete with the
+    HMM's transition prior rather than merely nudge it."""
+
+    identical_channel_db: float = 0.5
+    """Robust spread of the inter-channel level difference, in dB, below
+    which the two tracks are treated as the same audio. A genuine pair of
+    close-up microphones separates the speakers by 15-25 dB, so anything
+    under half a decibel is a shared mix, not a quiet room."""
+
     calibration_percentile: float = 90.0
     """Per-channel gain is calibrated from this percentile of frame energy
     during that channel's confident-speech frames, which makes the level

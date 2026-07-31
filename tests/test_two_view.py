@@ -73,6 +73,75 @@ class TestTwoViewSessions:
         assert session.has_close_pair and not session.has_wide
 
 
+class TestViewTokenMatching:
+    """A view token must be a whole field, never a substring.
+
+    A bare "_a" matching inside a participant id like AN101 labels every file
+    in a study as person A and mangles the session id at the same time. Real
+    filenames contain participant codes far more often than view tokens.
+    """
+
+    def test_participant_code_is_not_a_view_token(self, tmp_path):
+        from convlab.session import _classify_view
+
+        for stem in ("AN101_AN101", "AN102_AN101", "1101_101", "ABC12_S3"):
+            assert _classify_view(stem) is None, f"{stem} should carry no view token"
+
+    def test_genuine_tokens_still_match(self):
+        from convlab.session import _classify_view
+
+        assert _classify_view("dyad012_close_a") == "close_a"
+        assert _classify_view("dyad012_close_b") == "close_b"
+        assert _classify_view("dyad012_wide") == "wide"
+        assert _classify_view("d1_cam_a") == "close_a"
+        assert _classify_view("d1_p2") == "close_b"
+        assert _classify_view("session3_a") == "close_a"
+        assert _classify_view("b_session3") == "close_b"
+
+
+class TestPairingWithoutTokens:
+    """<participant>_<session> naming, which carries no A/B token at all."""
+
+    def test_pairs_on_the_trailing_session_field(self, tmp_path):
+        for name in ("1101_101", "1102_101", "AN101_AN101", "AN102_AN101"):
+            _touch(tmp_path / f"{name}.mp4")
+        sessions = {s.session_id: s for s in discover_sessions(tmp_path)}
+        assert set(sessions) == {"101", "AN101"}
+        assert sessions["101"].views["close_a"].name == "1101_101.mp4"
+        assert sessions["101"].views["close_b"].name == "1102_101.mp4"
+        assert sessions["AN101"].views["close_a"].name == "AN101_AN101.mp4"
+        assert sessions["AN101"].views["close_b"].name == "AN102_AN101.mp4"
+
+    def test_records_which_file_became_which_person(self, tmp_path):
+        for name in ("1101_101", "1102_101"):
+            _touch(tmp_path / f"{name}.mp4")
+        session = discover_sessions(tmp_path)[0]
+        assert session.metadata["participant_a"] == "1101"
+        assert session.metadata["participant_b"] == "1102"
+        assert session.metadata["file_a"] == "1101_101.mp4"
+
+    def test_odd_file_count_is_not_paired(self, tmp_path):
+        for name in ("1101_101", "1102_101", "1103_102"):
+            _touch(tmp_path / f"{name}.mp4")
+        with pytest.raises(Exception, match="could not work out"):
+            discover_sessions(tmp_path, strict=True)
+
+    def test_a_field_that_never_varies_is_not_a_session_key(self, tmp_path):
+        # "study" is shared by all four, so it cannot identify sessions;
+        # the participant/session field must be chosen instead.
+        for name in ("study_1101_101", "study_1102_101",
+                     "study_1201_102", "study_1202_102"):
+            _touch(tmp_path / f"{name}.mp4")
+        sessions = {s.session_id for s in discover_sessions(tmp_path)}
+        assert sessions == {"101", "102"}
+
+    def test_explicit_tokens_take_priority_over_inference(self, tmp_path):
+        for name in ("d1_close_a", "d1_close_b"):
+            _touch(tmp_path / f"{name}.mp4")
+        session = discover_sessions(tmp_path)[0]
+        assert session.session_id == "d1"
+
+
 class TestVoiceActivitySource:
     def test_pipeline_selects_both_close_ups(self):
         """The stage must build its source list from the close-ups only."""

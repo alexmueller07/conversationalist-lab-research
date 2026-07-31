@@ -651,17 +651,49 @@ def attribute_speakers(
     delta = energy_a - energy_b
 
     calib = calibrate_channels(delta, p >= 0.5, cfg)
-    if not calib.ok:
-        warnings.append(
-            f"channel calibration weak (separation {calib.separation_db:.1f} dB, "
-            f"method {calib.method}); attribution leans on lip motion"
-        )
 
     s_a = _visual(lip_a, n, frame_hz, cfg)
     s_b = _visual(lip_b, n, frame_hz, cfg)
     has_visual = bool(np.any(s_a) or np.any(s_b))
-    w_vis = cfg.visual_weight if has_visual else 0.0
-    w_energy = cfg.energy_weight if calib.ok else cfg.energy_weight * 0.3
+
+    # Do the two files actually carry different audio? Some setups mix one
+    # shared microphone feed into every camera, in which case the level
+    # difference is identically zero and the acoustic cue does not exist.
+    # That has to be detected rather than merely down-weighted: a zero
+    # difference makes the acoustic term equal for both speakers, so it
+    # silently contributes nothing while still looking like it works.
+    speech_frames = delta[(p >= 0.5) & np.isfinite(delta)]
+    spread = (
+        float(1.4826 * np.median(np.abs(speech_frames - np.median(speech_frames))))
+        if speech_frames.size >= 50
+        else float("nan")
+    )
+    shared_audio = np.isfinite(spread) and spread < cfg.identical_channel_db
+
+    if shared_audio:
+        w_energy = 0.0
+        w_vis = cfg.visual_weight_solo if has_visual else 0.0
+        if has_visual:
+            warnings.append(
+                f"the two audio tracks are the same recording (level difference "
+                f"varies by only {spread:.2f} dB), so speakers cannot be told "
+                "apart acoustically; attribution is based entirely on which "
+                "person's mouth is moving"
+            )
+        else:
+            warnings.append(
+                f"the two audio tracks are the same recording ({spread:.2f} dB "
+                "spread) and no face was tracked, so there is no evidence of "
+                "who is speaking; per-person measures are not trustworthy"
+            )
+    else:
+        w_vis = cfg.visual_weight if has_visual else 0.0
+        w_energy = cfg.energy_weight if calib.ok else cfg.energy_weight * 0.3
+        if not calib.ok:
+            warnings.append(
+                f"channel calibration weak (separation {calib.separation_db:.1f} dB, "
+                f"method {calib.method}); attribution leans on lip motion"
+            )
 
     log_transition = _transition_matrix(cfg)
     min_frames = max(1, int(round(cfg.min_state_s * frame_hz)))
@@ -678,7 +710,16 @@ def attribute_speakers(
     source_model: SourceModel | None = None
     method = "difference-only"
 
-    if refine and level_model.ok:
+    # Unmixing inverts a two-microphone mixing matrix. With one shared feed
+    # there is no matrix to invert, and the fit can still look identifiable
+    # merely because one person talks louder than the other -- which would
+    # produce confident, meaningless output. So it is skipped outright.
+    if refine and shared_audio:
+        warnings.append(
+            "source unmixing skipped: it requires two genuinely different "
+            "microphone feeds"
+        )
+    elif refine and level_model.ok:
         alpha_db, beta_db = unmix_sources(energy_a, energy_b, level_model)
         alpha_db = _smooth_source(alpha_db, frame_hz, cfg)
         beta_db = _smooth_source(beta_db, frame_hz, cfg)
@@ -715,6 +756,8 @@ def attribute_speakers(
 
     diagnostics: dict[str, object] = {
         "method": method,
+        "shared_audio": float(shared_audio),
+        "channel_difference_spread_db": spread,
         "calibration_offset_db": calib.offset_db,
         "calibration_separation_db": calib.separation_db,
         "near_far_separation_a_db": level_model.separation_db[0],

@@ -26,10 +26,13 @@ close-ups because a wide shot cannot say which body belongs to whom.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator, Mapping
+from typing import Iterator, Mapping, Sequence
+
+log = logging.getLogger(__name__)
 
 PERSONS: tuple[str, str] = ("A", "B")
 """Canonical person labels. Ordering is fixed so that dyad-level measures
@@ -42,12 +45,32 @@ VIEW_ROLES: tuple[str, ...] = ("close_a", "close_b", "wide")
 
 VIDEO_SUFFIXES = {".mp4", ".mkv", ".mov", ".avi", ".m4v", ".mts", ".webm"}
 
-# Filename tokens that identify a view, longest-first so that "wide" is not
-# shadowed by a bare "w" and "cam_a" is not mistaken for "a" inside a word.
+_DELIM = r"[_\-\s.]"
+
+# Filename tokens that identify a view.
+#
+# Every alternative is anchored so it can only match a *whole delimited
+# field*, never a substring. Without that anchoring a bare "_a" matches
+# inside a participant id like "AN101", which silently labels every file in a
+# study as person A and mangles the session id at the same time. Real
+# filenames contain participant codes far more often than they contain view
+# tokens, so greedy matching here is not a small risk.
 _VIEW_PATTERNS: tuple[tuple[str, str], ...] = (
-    ("close_a", r"(?:close[_-]?a|cam[_-]?a|person[_-]?a|_a|\ba\b|p1|participant[_-]?1)"),
-    ("close_b", r"(?:close[_-]?b|cam[_-]?b|person[_-]?b|_b|\bb\b|p2|participant[_-]?2)"),
-    ("wide", r"(?:wide|room|both|overview|general|cam[_-]?3|view[_-]?3)"),
+    (
+        "close_a",
+        rf"(?:(?:^|{_DELIM})(?:close[_-]?a|cam[_-]?a|person[_-]?a|p1|"
+        rf"participant[_-]?1|a)(?:$|{_DELIM}))",
+    ),
+    (
+        "close_b",
+        rf"(?:(?:^|{_DELIM})(?:close[_-]?b|cam[_-]?b|person[_-]?b|p2|"
+        rf"participant[_-]?2|b)(?:$|{_DELIM}))",
+    ),
+    (
+        "wide",
+        rf"(?:(?:^|{_DELIM})(?:wide|room|both|overview|general|cam[_-]?3|"
+        rf"view[_-]?3)(?:$|{_DELIM}))",
+    ),
 )
 
 
@@ -167,6 +190,63 @@ def _strip_view_token(stem: str) -> str:
     return re.sub(r"[_\-\s]+", "_", low).strip("_- ")
 
 
+def _fields(stem: str) -> list[str]:
+    return [f for f in re.split(_DELIM, stem) if f]
+
+
+def pair_by_shared_field(paths: Sequence[Path]) -> tuple[dict[str, dict[str, Path]], str]:
+    """Pair files that carry no view token, using a shared filename field.
+
+    Many labs name recordings ``<participant>_<session>.mp4`` and never write
+    an A/B token at all. Such a folder is perfectly well organised and
+    contains everything needed, so refusing it would be pedantry.
+
+    The strategy is to find the *one* field position whose values partition
+    the folder into groups of exactly two. For
+    ``1101_101, 1102_101, AN101_AN101, AN102_AN101`` the last field does
+    that, giving sessions ``101`` and ``AN101``. Within each pair the files
+    are sorted, and the first becomes person A.
+
+    Returns the grouping and a human-readable description of what was
+    inferred, because this is a guess and the caller must be able to show it
+    to someone who can confirm it.
+    """
+    if len(paths) < 2 or len(paths) % 2 != 0:
+        return {}, ""
+
+    split = {p: _fields(p.stem) for p in paths}
+    widths = {len(f) for f in split.values()}
+    if len(widths) != 1:
+        return {}, ""
+    width = widths.pop()
+    if width < 2:
+        return {}, ""
+
+    # Prefer later fields: a trailing session id is the common convention.
+    for index in range(width - 1, -1, -1):
+        groups: dict[str, list[Path]] = {}
+        for path, fields in split.items():
+            groups.setdefault(fields[index], []).append(path)
+        if not groups or any(len(g) != 2 for g in groups.values()):
+            continue
+        # The chosen field must actually vary, or it is just a common prefix.
+        if len(groups) == 1 and len(paths) > 2:
+            continue
+
+        out: dict[str, dict[str, Path]] = {}
+        for key, members in groups.items():
+            first, second = sorted(members, key=lambda p: p.stem)
+            out[key] = {"close_a": first, "close_b": second}
+        position = "last" if index == width - 1 else f"field {index + 1}"
+        return out, (
+            f"no A/B token found; paired on the {position} filename field "
+            f"({len(out)} session(s)), assigning the first file of each pair "
+            "to person A"
+        )
+
+    return {}, ""
+
+
 def discover_sessions(root: str | Path, strict: bool = True) -> list[Session]:
     """Group the videos under ``root`` into sessions by filename convention.
 
@@ -186,12 +266,17 @@ def discover_sessions(root: str | Path, strict: bool = True) -> list[Session]:
     if not root.is_dir():
         raise SessionError(f"not a directory: {root}")
 
+    videos = [
+        p for p in sorted(root.rglob("*"))
+        if p.is_file() and p.suffix.lower() in VIDEO_SUFFIXES
+    ]
+    if not videos:
+        raise SessionError(f"no video files found under {root}")
+
     grouped: dict[str, dict[str, Path]] = {}
     unclassified: list[Path] = []
 
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in VIDEO_SUFFIXES:
-            continue
+    for path in videos:
         role = _classify_view(path.stem)
         if role is None:
             unclassified.append(path)
@@ -205,16 +290,37 @@ def discover_sessions(root: str | Path, strict: bool = True) -> list[Session]:
             )
         bucket[role] = path
 
+    # Nothing carried a view token: fall back to pairing on a shared field.
+    if not grouped and unclassified:
+        paired, note = pair_by_shared_field(unclassified)
+        if paired:
+            log.info("%s", note)
+            grouped = paired
+            unclassified = []
+
     if unclassified and strict:
         names = ", ".join(p.name for p in unclassified[:5])
         raise SessionError(
-            f"could not infer a view role for {len(unclassified)} file(s): {names}. "
-            "Rename them with a close_a / close_b / wide token, or supply a manifest."
+            f"could not work out which files belong together for "
+            f"{len(unclassified)} file(s): {names}. Name them with a "
+            "close_a / close_b token, use <participant>_<session> naming, or "
+            "supply a manifest."
         )
 
     sessions: list[Session] = []
     for sid, views in sorted(grouped.items()):
-        session = Session(session_id=sid, views=views)
+        # Record which file became which person. Under any inferred pairing
+        # the A/B assignment is arbitrary, so the mapping has to travel into
+        # the results or nobody can tell which participant a row refers to.
+        metadata: dict[str, object] = {}
+        for role, person in (("close_a", "A"), ("close_b", "B")):
+            if role in views:
+                stem = Path(views[role]).stem
+                metadata[f"file_{person.lower()}"] = Path(views[role]).name
+                parts = _fields(stem)
+                if len(parts) >= 2:
+                    metadata[f"participant_{person.lower()}"] = parts[0]
+        session = Session(session_id=sid, views=views, metadata=metadata)
         if strict and not session.has_close_pair:
             raise SessionError(
                 f"session {sid!r} has only {sorted(views)}; both close_a and "
