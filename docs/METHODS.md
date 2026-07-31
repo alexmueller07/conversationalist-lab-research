@@ -94,6 +94,40 @@ implausibly short turns.
 
 The core problem: every microphone hears both people.
 
+### 4.0 Two recording setups
+
+The available evidence depends on how the conversation was captured, and the
+difference is not a detail — it changes which cue exists at all.
+
+**Separate microphones (in-person, one camera per person).** Each camera's
+microphone is nearer its own participant, so the level difference between the
+two tracks is large and directly identifies the speaker. This is the strong
+case: 0.04 % speaker confusion.
+
+**One shared feed (Zoom, Teams, any per-participant export).** These mix the
+same call audio into every participant's file. The two recordings are then
+*bit-identical* in audio, the level difference is uniformly zero, and the
+acoustic cue does not exist.
+
+That second case has to be **detected**, not merely down-weighted. A zero
+level difference makes the acoustic likelihood exactly equal for both
+speakers, so it contributes nothing while still appearing to function — and
+the unmixing step of §4.3 can look identifiable purely because one person
+talks louder than the other, producing confident and meaningless output.
+
+The pipeline therefore measures the robust spread of the inter-channel level
+difference over speech frames. Below `identical_channel_db` (0.5 dB) it
+declares the tracks a shared feed, sets the acoustic weight to zero, skips
+unmixing entirely, and raises the lip-motion weight so that visual evidence
+carries the decision alone. If no face is tracked either, it says there is no
+evidence of who is speaking rather than emitting numbers. A genuine
+microphone pair separates speakers by 15–25 dB, so half a decibel is a wide
+margin.
+
+On real Zoom recordings this works: face coverage 99.7 %, and 60 % of speech
+frames show an unambiguous lip-motion leader, splitting 52.7 % / 47.3 %
+between the two participants.
+
 ### 4.1 Cues
 
 **Channel level.** Each close-up sits near one participant, so a given voice
@@ -105,7 +139,8 @@ differ between cameras for reasons unrelated to who is speaking.
 **Lip motion.** Mouth aperture, normalised by inter-ocular distance so it does
 not change when a participant leans toward the camera, band-passed to
 1.5–8 Hz and enveloped via Hilbert transform. Untracked frames score 0 —
-neutral evidence, not evidence of silence.
+neutral evidence, not evidence of silence. This is a supporting cue when
+microphones differ and the *only* cue when they do not.
 
 ### 4.2 Pass 1 — level difference
 

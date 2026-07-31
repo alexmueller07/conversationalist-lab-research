@@ -103,15 +103,35 @@ recordings/
 
 Put every pair in the one folder — it processes all of them in a batch.
 
-**Both files will contain both voices. That is expected and required.** The
-tool works out who is speaking from the *level difference* between the two
-microphones, since each camera sits nearer one person. A single mixed
-recording cannot be analysed; two separate ones can.
+**Both files will contain both voices. That is expected.** Working out who is
+speaking is the tool's job, and it handles the two setups differently:
 
-The tokens it recognises for person A are `close_a`, `cam_a`, `person_a`,
-`p1`, or a trailing `_a`; likewise `_b` for person B. If your filenames come
-off the camera as something like `MVI_0042.MP4`, use a
-[manifest](#for-developers) instead of renaming them.
+- **In-person, one camera per person.** Each camera's microphone sits nearer
+  its own participant, so the same voice arrives at the two microphones at
+  different levels. That level difference is the primary cue and it is very
+  strong (0.04 % speaker confusion).
+- **Zoom, Teams, or any per-participant export.** These mix one shared audio
+  feed into every participant's file, so the two recordings are *identical*
+  in audio and the level cue does not exist at all. The tool detects this
+  automatically and attributes speech from **which person's mouth is moving**
+  instead, using the per-participant video.
+
+You don't have to tell it which you have — it measures the level difference
+and says which mode it used in the log and the quality report.
+
+**Naming.** It recognises `close_a` / `cam_a` / `person_a` / `p1` for person A
+and the `b` / `p2` equivalents for person B. It also handles files with **no
+A/B token at all**, such as `<participant>_<session>.mp4`:
+
+```
+1101_101.mp4  +  1102_101.mp4       →  session 101
+AN101_AN101.mp4 + AN102_AN101.mp4   →  session AN101
+```
+
+It works out which field identifies the session, pairs on it, and records
+which participant became person A in the results (`meta_participant_a`). If
+your filenames follow no pattern at all, use a
+[manifest](#for-developers).
 
 A third **wide** view showing both people is supported but not needed —
 nothing measured depends on it. Against scripted conversations, two cameras
