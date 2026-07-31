@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 rem Double-click this file to open the convlab desktop application.
 rem
 rem It sets the app up the first time it runs (virtual environment plus
@@ -9,7 +9,7 @@ setlocal
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\python.exe" (
-    echo First run: setting up convlab. This takes a few minutes.
+    echo First run: setting up convlab. This downloads about 1.6 GB and takes 15-30 minutes.
     echo.
     where py >nul 2>nul
     if errorlevel 1 (

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Open the convlab desktop application on macOS or Linux.
 #
 # Sets the app up the first time it runs (virtual environment plus
@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 if [ ! -x ".venv/bin/python" ]; then
-    echo "First run: setting up convlab. This takes a few minutes."
+    echo "First run: setting up convlab. This downloads about 1.6 GB and takes 15-30 minutes."
     echo
     if ! command -v python3 >/dev/null 2>&1; then
         echo "Python 3.10 or newer is required but was not found."

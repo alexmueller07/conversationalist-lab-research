@@ -15,7 +15,11 @@ defined and unit-labelled in a codebook, plus a visual report per pair.
 # Install it
 
 You need **Python 3.10 or newer**. Everything else the installer handles.
-About 2 GB of disk, no GPU required.
+
+The first run downloads about **1.6 GB** of libraries and takes **15–30
+minutes** on a normal connection. That happens once. After that the app opens
+in seconds and runs entirely offline apart from a one-time 27 MB model
+download. No GPU required.
 
 ## Windows
 
@@ -32,9 +36,9 @@ About 2 GB of disk, no GPU required.
 
 4. **Double-click `launch-convlab.bat`.**
 
-   The first run installs everything and takes 5–15 minutes depending on your
-   connection — you'll see a black window with progress text. Leave it alone
-   until the app appears. Every run after that opens in a couple of seconds.
+   The first run installs everything — you'll see a black window with progress
+   text for 15–30 minutes. Leave it alone until the app appears. Every run
+   after that opens in a couple of seconds.
 
    > If Windows shows a blue "Windows protected your PC" box, click
    > **More info** → **Run anyway**. That appears for any unsigned script.
