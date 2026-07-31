@@ -98,6 +98,29 @@ class TestApp:
         assert str(app.stop_button["state"]) == "disabled"
 
 
+class TestStartupFailure:
+    def test_a_crash_is_logged_and_reported_not_silent(self, monkeypatch, tmp_path):
+        """The Windows launcher uses pythonw, which has no console.
+
+        An uncaught startup exception there produces no window and no output
+        at all, so main() has to turn it into something a user can report.
+        """
+        import convlab.gui as gui
+
+        monkeypatch.setattr(gui.tk, "Tk", lambda: (_ for _ in ()).throw(
+            RuntimeError("no display for you")))
+        monkeypatch.setattr(gui.Path, "home", staticmethod(lambda: tmp_path))
+        shown: list[tuple] = []
+        monkeypatch.setattr(gui.messagebox, "showerror",
+                            lambda *a, **k: shown.append(a))
+
+        assert gui.main() == 1
+        crash = tmp_path / ".convlab" / "crash.log"
+        assert crash.exists(), "a startup crash must leave a log behind"
+        assert "no display for you" in crash.read_text(encoding="utf-8")
+        assert shown, "a startup crash must be shown, not swallowed"
+
+
 class TestWorker:
     def test_incomplete_sessions_are_skipped_not_fatal(self, tmp_path):
         """One badly named pair must not abort the whole batch.

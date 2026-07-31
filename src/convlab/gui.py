@@ -620,11 +620,39 @@ class App:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry point for ``convlab gui`` and the ``convlab-gui`` script."""
-    root = tk.Tk()
-    App(root)
-    root.mainloop()
-    return 0
+    """Entry point for ``convlab gui`` and the ``convlab-gui`` script.
+
+    Startup failures are caught and shown. The Windows launcher starts the
+    app with ``pythonw``, which has no console, so an uncaught exception here
+    would produce absolutely nothing -- no window, no message, no traceback.
+    "I double-clicked it and nothing happened" is the least diagnosable bug
+    report there is, so any crash is written to a log file beside the app and
+    surfaced in a dialog.
+    """
+    try:
+        root = tk.Tk()
+        App(root)
+        root.mainloop()
+        return 0
+    except Exception:  # noqa: BLE001
+        report = traceback.format_exc()
+        log_path = Path.home() / ".convlab" / "crash.log"
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(report, encoding="utf-8")
+        except OSError:  # pragma: no cover - unwritable home
+            log_path = None
+
+        sys.stderr.write(report)
+        try:
+            messagebox.showerror(
+                "convlab could not start",
+                f"{report.strip().splitlines()[-1]}\n\n"
+                + (f"Full details written to:\n{log_path}" if log_path else ""),
+            )
+        except Exception:  # pragma: no cover - no display at all
+            pass
+        return 1
 
 
 if __name__ == "__main__":  # pragma: no cover
