@@ -311,7 +311,7 @@ convlab analyse sessions.json -o out/     # explicit manifest
 convlab demo -o out/
 convlab validate                   # 21 ground-truth checks
 convlab codebook -o docs/measures.md
-pytest                             # 151 tests, no models or media needed
+pytest                             # 152 tests, no models or media needed
 ```
 
 A manifest is the authoritative route when filenames aren't tidy, and it
