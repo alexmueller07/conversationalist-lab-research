@@ -136,6 +136,9 @@ def write_view(
     return path
 
 
+ROLE_SOURCE = {"close_a": "A", "close_b": "B", "wide": "wide"}
+
+
 def write_session(
     session,
     directory: str | Path,
@@ -144,20 +147,26 @@ def write_session(
     offsets: dict[str, float] | None = None,
     fps: float = 25.0,
     size: tuple[int, int] = (480, 360),
+    roles: tuple[str, ...] = ("close_a", "close_b"),
 ) -> dict[str, Path]:
-    """Write a :class:`~convlab.synth.session.SynthSession` as three views."""
+    """Write a :class:`~convlab.synth.session.SynthSession` as video files.
+
+    Defaults to the two close-up views, which is what the recording setup
+    actually produces. Pass ``roles=("close_a", "close_b", "wide")`` to
+    include a wide view as well.
+    """
     directory = Path(directory)
     face_videos = face_videos or {}
     offsets = offsets or {}
 
     written: dict[str, Path] = {}
-    for role, key in (("close_a", "A"), ("close_b", "B"), ("wide", None)):
+    for role in roles:
         written[role] = write_view(
             directory / f"{session_id}_{role}.mp4",
             session.tracks[role],
             session.sample_rate,
             session.duration,
-            face_video=face_videos.get(key) if key else face_videos.get("wide"),
+            face_video=face_videos.get(ROLE_SOURCE.get(role, role)),
             fps=fps,
             size=size,
             start_offset=offsets.get(role, 0.0),

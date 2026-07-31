@@ -106,12 +106,33 @@ def assess_quality(context: AnalysisContext, sync=None) -> QCReport:
 
     if context.turn_set is not None:
         n_turns = len(context.turn_set.turns)
+        # Two separate questions, and an absolute count conflates them.
+        # Whether a conversation happened at all is a matter of *rate*: 18
+        # turns in one minute is a lively exchange, 18 turns in ten minutes is
+        # barely an interaction. Whether its turn-level statistics can be
+        # trusted is a matter of *count*, because a median needs a sample.
+        # Judging both with one absolute threshold fails every short session
+        # regardless of how good it is.
         check(
-            "turn_count", float(n_turns), float(cfg.min_turns),
-            n_turns >= cfg.min_turns, "fatal",
-            f"{n_turns} turns detected (minimum {cfg.min_turns}); "
-            "turn-level statistics need more exchanges than this",
+            "turn_count_minimum", float(n_turns), float(cfg.min_turns_absolute),
+            n_turns >= cfg.min_turns_absolute, "fatal",
+            f"only {n_turns} turns detected; no turn-level statistic is "
+            "meaningful below about "
+            f"{cfg.min_turns_absolute}",
         )
+        check(
+            "turn_count_reliable", float(n_turns), float(cfg.min_turns),
+            n_turns >= cfg.min_turns, "warning",
+            f"{n_turns} turns; medians and IQRs are noisy below {cfg.min_turns}",
+        )
+        if context.duration > 0:
+            rate = n_turns / (context.duration / 60.0)
+            check(
+                "turn_rate", rate, cfg.min_turn_rate,
+                rate >= cfg.min_turn_rate, "fatal",
+                f"{rate:.1f} turns per minute; below {cfg.min_turn_rate} this "
+                "is not a two-way conversation",
+            )
 
     if context.transcript is not None:
         confidence = context.transcript.mean_confidence

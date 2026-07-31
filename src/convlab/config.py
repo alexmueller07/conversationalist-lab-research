@@ -374,7 +374,19 @@ class QCConfig:
 
     min_session_s: float = 60.0
     min_speech_proportion: float = 0.25
+
     min_turns: int = 20
+    """Below this, turn-level medians and spreads are noisy. A *warning*,
+    not a failure: the measures are still computed and may be pooled."""
+
+    min_turns_absolute: int = 8
+    """Below this nothing turn-level means anything at all, so the session
+    fails. Matches the threshold used for prosodic entrainment."""
+
+    min_turn_rate: float = 1.5
+    """Turns per minute. Judges whether a two-way conversation happened,
+    which is a question of rate rather than of total count -- an absolute
+    count would fail every short recording regardless of its quality."""
     max_attribution_uncertain: float = 0.20
     """Fraction of speech frames where attribution confidence is low."""
 

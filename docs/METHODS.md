@@ -64,6 +64,24 @@ presents as "this recording contains no speech", not as an error. Several
 channels are decoded in one pass by batching, since the recurrent state is
 per batch element.
 
+**Which track.** Voice activity is the per-frame *maximum* over the two
+close-up tracks, not the wide view. Each person is loudest in their own
+camera's microphone, so the maximum has the best chance of catching whoever
+is speaking; it makes two-camera and three-camera sessions behave
+identically; and it removes a dependency on a view that may not exist.
+Measured against scripted conversations:
+
+| Voice-activity source | Speech F1 | Turn recall | Turn precision |
+|---|---|---|---|
+| wide view (3 cameras) | 0.9431 | 0.960 | 0.915 |
+| one close-up (2 cameras, naive) | 0.9418 | 0.960 | 0.915 |
+| **max over both close-ups** | **0.9438** | 0.960 | 0.915 |
+
+Picking one close-up arbitrarily detects the far speaker through about 11 dB
+of attenuation; the maximum recovers that (per-person recall for the far
+speaker rises from 0.932 to 0.941). The wide view contributes nothing that
+the two close-ups do not.
+
 Segments are extracted with **hysteresis**: speech starts at `threshold`
 (0.5) but only ends once probability has stayed below `threshold − 0.15` for
 `min_silence_s` (60 ms). A single threshold chops normal speech into
@@ -375,9 +393,19 @@ get a usable baseline rather than a silently withheld measure.
 
 Every session gets `pass` / `review` / `fail` from checks on **inputs**:
 duration, sync confidence, speech proportion, attribution certainty, turn
-count, ASR confidence, face coverage. Deliberately *not* on whether results
-look plausible — screening out surprising values is how a real effect gets
-discarded.
+count and rate, ASR confidence, face coverage. Deliberately *not* on whether
+results look plausible — screening out surprising values is how a real effect
+gets discarded.
+
+**Turn count and turn rate answer different questions**, and an absolute
+count conflates them. Whether a conversation happened at all is a matter of
+*rate*: 18 turns in one minute is a lively exchange, 18 turns in ten minutes
+is barely an interaction. Whether its turn-level statistics can be trusted is
+a matter of *count*, because a median needs a sample. So there are three
+checks: a fatal floor of 8 turns (below which nothing turn-level means
+anything), a fatal minimum rate of 1.5 turns/minute, and a *warning* below 20
+turns that medians and spreads will be noisy. A single absolute threshold
+failed every short recording regardless of quality.
 
 Unavailable measures are written as rows with a null value and a stated
 reason. A zero and a missing value mean opposite things, and conflating them

@@ -2,7 +2,8 @@
 
 **Measure what makes someone a good conversationalist, from video.**
 
-Point it at a folder of recorded two-person conversations. It works out who
+Point it at a folder of recorded conversations — **two videos per pair, one
+per person**. It works out who
 spoke when, how quickly each replied, what they looked at, when they nodded,
 smiled and laughed, how their speech and movement tracked one another, and
 how all of that changed as the conversation went on — **104 measures**, each
@@ -88,21 +89,34 @@ the tool produces. *(Windows only — it needs the system speech engine.)*
 
 ## Analyse your own recordings
 
-**1. Name your files** so each session shares an id and each camera has a
-token in its name:
+**1. Name your files.** Each conversation is **two videos** — one showing each
+person's face. Give the pair a shared id and a person token:
 
 ```
 recordings/
 ├── dyad012_close_a.mp4     person A's face
 ├── dyad012_close_b.mp4     person B's face
-├── dyad012_wide.mp4        both people  (optional)
-├── dyad013_close_a.mp4
-└── ...
+├── dyad013_close_a.mp4     next pair
+├── dyad013_close_b.mp4
+└── ...                     as many pairs as you like
 ```
 
-`close_a` / `close_b` / `wide` are the tokens it looks for — `cam_a`,
-`person_a`, `p1` and a few others also work. The two close-up views are
-required; the wide view is optional.
+Put every pair in the one folder — it processes all of them in a batch.
+
+**Both files will contain both voices. That is expected and required.** The
+tool works out who is speaking from the *level difference* between the two
+microphones, since each camera sits nearer one person. A single mixed
+recording cannot be analysed; two separate ones can.
+
+The tokens it recognises for person A are `close_a`, `cam_a`, `person_a`,
+`p1`, or a trailing `_a`; likewise `_b` for person B. If your filenames come
+off the camera as something like `MVI_0042.MP4`, use a
+[manifest](#for-developers) instead of renaming them.
+
+A third **wide** view showing both people is supported but not needed —
+nothing measured depends on it. Against scripted conversations, two cameras
+score within 0.002 of three on speech detection and identically on turn
+detection.
 
 **2. Click Browse** next to *Recordings* and choose that folder. The app
 immediately lists what it found, so you'll know at once if a filename didn't
@@ -211,13 +225,14 @@ baseline at all.
 
 # The problem this solves
 
-Each pair is filmed three ways, and **every microphone picks up both people**:
+Each pair is filmed with one camera per person, and **every microphone picks
+up both people**:
 
 | View | Picture | Audio |
 |---|---|---|
 | `close_a` | person A's face | both voices |
 | `close_b` | person B's face | both voices |
-| `wide` | both people | both voices |
+| `wide` *(optional)* | both people | both voices |
 
 Nothing in the audio says whose voice it is, the cameras are started by hand
 so files are offset by seconds, and their clocks drift. Nearly every measure
@@ -319,13 +334,20 @@ pytest                             # 152 tests, no models or media needed
 ```
 
 A manifest is the authoritative route when filenames aren't tidy, and it
-carries study variables straight into the output tables:
+carries study variables straight into the output tables. Paths resolve
+relative to the manifest, so it can travel with the recordings:
 
 ```json
 [{"session_id": "dyad012",
   "views": {"close_a": "MVI_0042.MP4", "close_b": "MVI_0117.MP4"},
-  "metadata": {"condition": "control", "week": 3}}]
+  "metadata": {"condition": "control", "week": 3}},
+ {"session_id": "dyad013",
+  "views": {"close_a": "MVI_0208.MP4", "close_b": "MVI_0311.MP4"},
+  "metadata": {"condition": "treatment", "week": 3}}]
 ```
+
+Save it as `sessions.json` next to the videos and point the app or
+`convlab analyse` at that file instead of the folder.
 
 Pipeline order, and why:
 

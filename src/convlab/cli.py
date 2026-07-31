@@ -181,11 +181,15 @@ def cmd_demo(args: argparse.Namespace) -> int:
     faces = {}
     if args.faces:
         faces = {"A": args.faces[0], "B": args.faces[-1], "wide": args.faces[0]}
+
+    roles = ("close_a", "close_b", "wide") if args.wide else ("close_a", "close_b")
+    # Cameras started by hand never line up; offsetting the written files
+    # means the demo actually exercises the alignment stage.
     write_session(
-        session_audio, media, session_id="demo", face_videos=faces,
+        session_audio, media, session_id="demo", face_videos=faces, roles=roles,
         offsets={"close_a": 0.0, "close_b": 1.7, "wide": 0.4},
     )
-    print(f"  wrote three views to {media}")
+    print(f"  wrote {len(roles)} views to {media}")
 
     args.target = str(media)
     args.lenient = False
@@ -249,6 +253,8 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--seed", type=int, default=3)
     demo.add_argument("--faces", nargs="*", default=None,
                       help="optional videos of faces to loop into the close-up views")
+    demo.add_argument("--wide", action="store_true",
+                      help="also write an optional third wide view")
     demo.add_argument("-c", "--config", default=None)
     demo.add_argument("--model-dir", default=None)
     demo.add_argument("--skip", nargs="*", default=[])

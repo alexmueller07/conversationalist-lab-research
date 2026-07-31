@@ -337,8 +337,9 @@ class App:
         ttk.Label(header, text="Conversation analysis", style="H1.TLabel").pack(anchor="w")
         ttk.Label(
             header,
-            text="Point this at a folder of dyad recordings. Each session needs "
-                 "two close-up views and, optionally, a wide view.",
+            text="Point this at a folder of recordings. Each conversation is "
+                 "two videos - one showing each person's face. Both will "
+                 "contain both voices; that is expected.",
             style="Muted.TLabel",
         ).pack(anchor="w", pady=(2, 0))
 
@@ -364,8 +365,8 @@ class App:
 
         ttk.Label(
             paths,
-            text="Name files so each session shares an id and a camera token, "
-                 "e.g. dyad012_close_a.mp4 / dyad012_close_b.mp4 / dyad012_wide.mp4",
+            text="Name the two files with a shared id and a person token, "
+                 "e.g.  dyad012_close_a.mp4  and  dyad012_close_b.mp4",
             style="Muted.TLabel",
         ).grid(row=2, column=1, columnspan=3, sticky="w", padx=10, pady=(0, 4))
 
@@ -505,10 +506,10 @@ class App:
                 session = render_session(plan=build_script(n_turns=16, seed=5), seed=5)
                 write_session(
                     session, target, session_id="demo",
-                    offsets={"close_a": 0.0, "close_b": 1.7, "wide": 0.4},
+                    offsets={"close_a": 0.0, "close_b": 1.7},
                 )
                 self.queue.put(Message(
-                    "log", f"Wrote three views to {target}", "ok"))
+                    "log", f"Wrote two views to {target}", "ok"))
                 self.queue.put(Message("demo_ready", str(target)))
             except Exception as exc:  # noqa: BLE001
                 self.queue.put(Message("log", f"Demo failed: {exc}", "fail"))
