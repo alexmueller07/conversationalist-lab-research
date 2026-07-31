@@ -99,6 +99,33 @@ class TestApp:
 
 
 class TestWorker:
+    def test_incomplete_sessions_are_skipped_not_fatal(self, tmp_path):
+        """One badly named pair must not abort the whole batch.
+
+        The folder scan tells the user such sessions will be skipped, so the
+        worker has to actually skip them rather than raise on the first one.
+        """
+        import queue as _queue
+
+        from convlab.gui import Worker
+
+        for name in ("d1_close_a.mp4", "d1_close_b.mp4", "d2_close_a.mp4"):
+            (tmp_path / name).write_bytes(b"\x00" * 64)
+
+        outbox: _queue.Queue = _queue.Queue()
+        worker = Worker(str(tmp_path), str(tmp_path / "out"), (), "models",
+                        outbox, lenient=False)
+        worker.request_stop()  # stop right after discovery
+        worker.run()
+
+        messages = []
+        while not outbox.empty():
+            messages.append(outbox.get_nowait())
+        text = "\n".join(m.text for m in messages)
+        assert "Found 2 session(s)" in text
+        assert "skipping d2" in text
+        assert not any(m.kind == "error" for m in messages), text
+
     def test_stop_flag_is_observable(self):
         from convlab.gui import Worker
 

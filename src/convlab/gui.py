@@ -148,8 +148,24 @@ class Worker(threading.Thread):
                 models.ensure(row["name"], self.model_dir)
         self.send("log", "Models ready.", "ok")
 
-        sessions = list(iter_sessions(self.target, strict=not self.lenient))
-        self.send("log", f"Found {len(sessions)} session(s) in {self.target}")
+        # Discover leniently and skip what cannot be analysed, rather than
+        # letting one badly named pair abort the whole batch. Strict mode
+        # raises on the first incomplete session, which would contradict the
+        # folder scan's promise that such sessions are simply skipped.
+        found = list(iter_sessions(self.target, strict=False))
+        sessions = [s for s in found if s.has_close_pair]
+        skipped = [s for s in found if not s.has_close_pair]
+        self.send("log", f"Found {len(found)} session(s) in {self.target}")
+        for session in skipped:
+            self.send(
+                "log",
+                f"  skipping {session.session_id}: needs both close-up views, "
+                f"has {', '.join(sorted(session.views))}",
+                "warn",
+            )
+        if not sessions:
+            self.send("log", "Nothing to analyse.", "warn")
+            return
 
         output = Path(self.output)
         output.mkdir(parents=True, exist_ok=True)
