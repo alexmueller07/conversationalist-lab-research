@@ -1,4 +1,4 @@
-"""End-to-end analysis of one recorded conversation.
+﻿"""End-to-end analysis of one recorded conversation.
 
 The pipeline is a sequence of stages, each of which caches its result and
 each of which is allowed to fail without taking the rest down. A session
@@ -27,7 +27,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -49,6 +49,23 @@ from convlab.turns import build_turn_set
 from convlab.workspace import Workspace, fingerprint_file, make_key
 
 log = logging.getLogger(__name__)
+
+ProgressFn = Callable[[str, int, int], None]
+CancelFn = Callable[[], bool]
+
+
+PIPELINE_STAGES: tuple[str, ...] = (
+    "probe", "decode_audio", "sync", "vad", "face_tracking", "attribution",
+    "turns_provisional", "asr", "turns", "prosody", "semantics",
+    "face_signals", "body_tracking", "laughter", "measures",
+)
+"""Stage order, for progress reporting. Stages may be skipped, so a caller
+showing a progress bar should treat this as the maximum rather than a
+guarantee."""
+
+
+class Cancelled(Exception):
+    """Raised inside a stage when a caller has asked the run to stop."""
 
 
 @dataclass
@@ -74,10 +91,24 @@ class SessionResult:
 
 
 class _StageTimer:
-    def __init__(self, result: SessionResult, name: str):
+    def __init__(
+        self,
+        result: SessionResult,
+        name: str,
+        progress: "ProgressFn | None" = None,
+        cancel: "CancelFn | None" = None,
+    ):
         self.result, self.name = result, name
+        self.progress, self.cancel = progress, cancel
 
     def __enter__(self) -> "_StageTimer":
+        if self.cancel is not None and self.cancel():
+            raise Cancelled(f"stopped before stage '{self.name}'")
+        if self.progress is not None:
+            index = (
+                PIPELINE_STAGES.index(self.name) if self.name in PIPELINE_STAGES else 0
+            )
+            self.progress(self.name, index, len(PIPELINE_STAGES))
         self.start = time.perf_counter()
         self.report = StageReport(self.name, "ok")
         self.result.stages.append(self.report)
@@ -85,6 +116,10 @@ class _StageTimer:
 
     def __exit__(self, exc_type, exc, tb) -> bool:
         self.report.seconds = time.perf_counter() - self.start
+        if isinstance(exc, Cancelled):
+            self.report.status = "cancelled"
+            self.result.context.stage_status[self.name] = "cancelled"
+            return False  # propagate: the whole run should stop
         if exc is not None:
             self.report.status = "failed"
             self.report.detail = f"{exc_type.__name__}: {exc}"
@@ -105,8 +140,22 @@ def analyse_session(
     config: Config | None = None,
     output_root: str | Path = "workspace",
     skip: tuple[str, ...] = (),
+    progress: "ProgressFn | None" = None,
+    cancel: "CancelFn | None" = None,
 ) -> SessionResult:
-    """Run every stage for one session and compute the measure catalogue."""
+    """Run every stage for one session and compute the measure catalogue.
+
+    Parameters
+    ----------
+    progress:
+        Called as ``progress(stage_name, index, total)`` when each stage
+        begins, so a caller can show meaningful progress across a run that
+        takes tens of minutes.
+    cancel:
+        Polled between stages; returning True aborts the run by raising
+        :class:`Cancelled`. Checked at stage boundaries rather than inside
+        them, so a stop never leaves a half-written cache entry.
+    """
     cfg = config or Config()
     workspace = Workspace(output_root, session.session_id, enabled=cfg.cache)
 
@@ -119,6 +168,9 @@ def analyse_session(
     )
     result = SessionResult(session=session, context=context, workspace=workspace)
 
+    def stage_ctx(name: str) -> _StageTimer:
+        return _StageTimer(result, name, progress, cancel)
+
     sample_rate = cfg.audio.sample_rate
     frame_hz = cfg.audio.frame_hz
     model_dir = cfg.model_dir
@@ -128,7 +180,7 @@ def analyse_session(
 
     # ---- 1. probe -----------------------------------------------------
     infos: dict[str, Any] = {}
-    with _StageTimer(result, "probe") as stage:
+    with stage_ctx("probe") as stage:
         for role, path in session.views.items():
             infos[role] = probe(path)
         durations = [i.duration_s for i in infos.values() if i.duration_s > 0]
@@ -149,7 +201,7 @@ def analyse_session(
     # ---- 2. decode audio ----------------------------------------------
     tracks: dict[str, np.ndarray] = {}
     audio_starts: dict[str, float] = {}
-    with _StageTimer(result, "decode_audio") as stage:
+    with stage_ctx("decode_audio") as stage:
         for role in session.views:
             if not infos[role].has_audio:
                 context.note(f"{role} has no audio track")
@@ -167,7 +219,7 @@ def analyse_session(
 
     # ---- 3. sync ------------------------------------------------------
     offsets: dict[str, float] = {role: 0.0 for role in tracks}
-    with _StageTimer(result, "sync") as stage:
+    with stage_ctx("sync") as stage:
         if len(tracks) < 2:
             stage.skip("only one view")
         else:
@@ -191,7 +243,7 @@ def analyse_session(
 
     # ---- 4. voice activity --------------------------------------------
     speech_prob = np.zeros(n_frames)
-    with _StageTimer(result, "vad") as stage:
+    with stage_ctx("vad") as stage:
         vad_path = models.ensure("silero_vad", model_dir)
         vad = SileroVAD(vad_path, sample_rate)
         source = "wide" if "wide" in aligned else next(iter(aligned))
@@ -202,7 +254,7 @@ def analyse_session(
     # ---- 5. face tracking ---------------------------------------------
     face_tracks: dict[str, Any] = {}
     if "face" not in skip:
-        with _StageTimer(result, "face_tracking") as stage:
+        with stage_ctx("face_tracking") as stage:
             from convlab.vision.tracker import track_face
 
             face_model = models.ensure("face_landmarker", model_dir)
@@ -225,7 +277,7 @@ def analyse_session(
             )
 
     # ---- 6. speaker attribution ---------------------------------------
-    with _StageTimer(result, "attribution") as stage:
+    with stage_ctx("attribution") as stage:
         energies = {
             person: audio_io.frame_energy(
                 aligned[CLOSE_VIEW[person]], sample_rate, frame_hz,
@@ -267,14 +319,14 @@ def analyse_session(
         return result
 
     # ---- 7. first-pass turns (needed to target the recogniser) --------
-    with _StageTimer(result, "turns_provisional"):
+    with stage_ctx("turns_provisional"):
         context.turn_set = build_turn_set(
             context.attribution.speech, cfg.turns, context.duration
         )
 
     # ---- 8. transcription ---------------------------------------------
     if "asr" not in skip:
-        with _StageTimer(result, "asr") as stage:
+        with stage_ctx("asr") as stage:
             person_audio = {
                 p: aligned[CLOSE_VIEW[p]] for p in PERSONS if CLOSE_VIEW[p] in aligned
             }
@@ -297,7 +349,7 @@ def analyse_session(
             )
 
     # ---- 9. final turns, now with words -------------------------------
-    with _StageTimer(result, "turns") as stage:
+    with stage_ctx("turns") as stage:
         words = context.transcript.word_tuples() if context.transcript else None
         context.turn_set = build_turn_set(
             context.attribution.speech, cfg.turns, context.duration, words=words
@@ -310,7 +362,7 @@ def analyse_session(
 
     # ---- 10. prosody ---------------------------------------------------
     if "prosody" not in skip:
-        with _StageTimer(result, "prosody") as stage:
+        with stage_ctx("prosody") as stage:
             prosody = {}
             for person in PERSONS:
                 role = CLOSE_VIEW[person]
@@ -329,7 +381,7 @@ def analyse_session(
 
     # ---- 11. semantics -------------------------------------------------
     if "semantics" not in skip and context.transcript is not None:
-        with _StageTimer(result, "semantics") as stage:
+        with stage_ctx("semantics") as stage:
             from convlab.semantics import analyse_semantics
 
             context.semantics = analyse_semantics(
@@ -345,7 +397,7 @@ def analyse_session(
 
     # ---- 12. face signals ---------------------------------------------
     if face_tracks:
-        with _StageTimer(result, "face_signals") as stage:
+        with stage_ctx("face_signals") as stage:
             from convlab.vision.signals import derive_face_signals
 
             signals = {}
@@ -364,7 +416,7 @@ def analyse_session(
 
     # ---- 13. body ------------------------------------------------------
     if "body" not in skip:
-        with _StageTimer(result, "body_tracking") as stage:
+        with stage_ctx("body_tracking") as stage:
             from convlab.vision.signals import derive_body_signals
             from convlab.vision.tracker import track_body
 
@@ -404,7 +456,7 @@ def analyse_session(
 
     # ---- 14. laughter --------------------------------------------------
     if "laughter" not in skip:
-        with _StageTimer(result, "laughter") as stage:
+        with stage_ctx("laughter") as stage:
             yamnet = models.ensure("yamnet", model_dir)
             close = {p: aligned[CLOSE_VIEW[p]] for p in PERSONS if CLOSE_VIEW[p] in aligned}
             laughter = detect_laughter(
@@ -421,7 +473,7 @@ def analyse_session(
                 stage.skip("; ".join(laughter.warnings) or "unavailable")
 
     # ---- 15. measures --------------------------------------------------
-    with _StageTimer(result, "measures") as stage:
+    with stage_ctx("measures") as stage:
         result.measures = registry.compute(context)
         available = sum(1 for m in result.measures if m.available)
         stage.report.detail = f"{available}/{len(result.measures)} values available"
@@ -552,3 +604,5 @@ def _json_to_transcript(payload: dict) -> Transcript:
         n_dropped=int(payload.get("n_dropped", 0)),
         warnings=list(payload.get("warnings", [])),
     )
+
+

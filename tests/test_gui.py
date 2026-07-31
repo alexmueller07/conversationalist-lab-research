@@ -1,0 +1,155 @@
+﻿"""The desktop app builds and its worker protocol behaves.
+
+The window is never shown: it is created, pumped once so every widget is
+realised, and destroyed. That catches the failures that actually happen when
+a GUI is edited -- a bad style name, a missing grid weight, a typo in a
+command binding -- without needing anyone to look at it.
+"""
+
+from __future__ import annotations
+
+import queue
+
+import pytest
+
+tk = pytest.importorskip("tkinter")
+
+
+@pytest.fixture
+def root():
+    try:
+        window = tk.Tk()
+    except tk.TclError:  # pragma: no cover - headless machine
+        pytest.skip("no display available")
+    window.withdraw()
+    yield window
+    window.destroy()
+
+
+class TestApp:
+    def test_builds_and_realises_every_widget(self, root):
+        from convlab.gui import App
+
+        app = App(root)
+        root.update_idletasks()
+        assert str(app.run_button["state"]) == "normal"
+        assert str(app.stop_button["state"]) == "disabled"
+        assert str(app.dashboard_button["state"]) == "disabled"
+
+    def test_every_skippable_stage_has_a_toggle(self, root):
+        from convlab.gui import SKIPPABLE, App
+
+        app = App(root)
+        assert set(app.stage_vars) == {key for key, _, _ in SKIPPABLE}
+        assert all(var.get() for var in app.stage_vars.values())
+
+    def test_skip_list_matches_the_cli_choices(self, root):
+        from convlab.cli import build_parser
+        from convlab.gui import SKIPPABLE
+
+        parser = build_parser()
+        analyse = parser._subparsers._group_actions[0].choices["analyse"]
+        skip_action = next(a for a in analyse._actions if a.dest == "skip")
+        assert set(k for k, _, _ in SKIPPABLE) == set(skip_action.choices), (
+            "a stage the GUI offers to skip must be one the pipeline accepts"
+        )
+
+    def test_log_appends_and_stays_readonly(self, root):
+        from convlab.gui import App
+
+        app = App(root)
+        app._log("hello", "ok")
+        assert "hello" in app.log.get("1.0", "end")
+        assert str(app.log["state"]) == "disabled", "log must not be user-editable"
+
+    def test_session_message_enables_the_report_button(self, root):
+        from convlab.gui import App, Message
+
+        app = App(root)
+        app._handle(Message("session", payload={
+            "session_id": "d1", "verdict": "pass", "dashboard": "C:/x/dashboard.html"
+        }))
+        assert str(app.dashboard_button["state"]) == "normal"
+        assert app.dashboards["d1"].endswith("dashboard.html")
+
+    def test_running_session_message_does_not_enable_the_button(self, root):
+        from convlab.gui import App, Message
+
+        app = App(root)
+        app._handle(Message("session", payload={"session_id": "d1", "verdict": "running"}))
+        assert str(app.dashboard_button["state"]) == "disabled"
+
+    def test_progress_message_moves_the_bar(self, root):
+        from convlab.gui import App, Message
+
+        app = App(root)
+        app._handle(Message("progress", text="d1: face tracking", value=42.0))
+        assert app.progress["value"] == pytest.approx(42.0)
+        assert "face tracking" in app.status_var.get()
+
+    def test_done_message_restores_the_buttons(self, root):
+        from convlab.gui import App, Message
+
+        app = App(root)
+        app.run_button.configure(state="disabled")
+        app.stop_button.configure(state="normal")
+        app._handle(Message("done"))
+        assert str(app.run_button["state"]) == "normal"
+        assert str(app.stop_button["state"]) == "disabled"
+
+
+class TestWorker:
+    def test_stop_flag_is_observable(self):
+        from convlab.gui import Worker
+
+        worker = Worker("in", "out", (), "models", queue.Queue(), lenient=False)
+        assert not worker.stopping
+        worker.request_stop()
+        assert worker.stopping
+
+    def test_send_puts_a_typed_message(self):
+        from convlab.gui import Worker
+
+        outbox: queue.Queue = queue.Queue()
+        worker = Worker("in", "out", (), "models", outbox, lenient=False)
+        worker.send("log", "hi", "ok")
+        message = outbox.get_nowait()
+        assert (message.kind, message.text, message.level) == ("log", "hi", "ok")
+
+
+class TestPipelineHooks:
+    def test_cancel_raises_at_a_stage_boundary(self):
+        from convlab.pipeline import Cancelled, SessionResult, _StageTimer
+        from convlab.config import Config
+        from convlab.context import AnalysisContext
+
+        ctx = AnalysisContext("t", Config(), 10.0, 100.0)
+        result = SessionResult(session=None, context=ctx)  # type: ignore[arg-type]
+        with pytest.raises(Cancelled):
+            with _StageTimer(result, "probe", cancel=lambda: True):
+                pass  # pragma: no cover
+
+    def test_progress_is_called_with_stage_position(self):
+        from convlab.config import Config
+        from convlab.context import AnalysisContext
+        from convlab.pipeline import PIPELINE_STAGES, SessionResult, _StageTimer
+
+        seen = []
+        ctx = AnalysisContext("t", Config(), 10.0, 100.0)
+        result = SessionResult(session=None, context=ctx)  # type: ignore[arg-type]
+        with _StageTimer(result, "asr", progress=lambda *a: seen.append(a)):
+            pass
+        assert seen == [("asr", PIPELINE_STAGES.index("asr"), len(PIPELINE_STAGES))]
+
+    def test_a_failing_stage_is_still_suppressed(self):
+        from convlab.config import Config
+        from convlab.context import AnalysisContext
+        from convlab.pipeline import SessionResult, _StageTimer
+
+        ctx = AnalysisContext("t", Config(), 10.0, 100.0)
+        result = SessionResult(session=None, context=ctx)  # type: ignore[arg-type]
+        with _StageTimer(result, "prosody"):
+            raise RuntimeError("boom")
+        assert result.stages[0].status == "failed"
+        assert "boom" in result.stages[0].detail
+

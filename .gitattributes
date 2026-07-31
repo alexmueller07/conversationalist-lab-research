@@ -7,6 +7,12 @@
 *.toml text
 *.csv  text
 
+# Launchers must keep the line endings their interpreter expects. A shell
+# script checked out with CRLF fails on Linux with "bad interpreter", which
+# is a confusing way for a first install to break.
+*.sh   text eol=lf
+*.bat  text eol=crlf
+
 *.mp4 binary
 *.wav binary
 *.onnx binary

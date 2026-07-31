@@ -1,141 +1,172 @@
 # convlab
 
-**Multimodal measurement of what makes someone a good conversationalist.**
+**Measure what makes someone a good conversationalist, from video.**
 
-`convlab` turns three synchronised video recordings of a two-person
-conversation into a documented table of behavioural measures: who spoke when,
-how quickly each replied, what they looked at, when they nodded, smiled and
-laughed, how their speech and movement tracked one another, and how all of
-that changed over the course of the conversation.
+Point it at a folder of recorded two-person conversations. It works out who
+spoke when, how quickly each replied, what they looked at, when they nodded,
+smiled and laughed, how their speech and movement tracked one another, and
+how all of that changed as the conversation went on — **104 measures**, each
+defined and unit-labelled in a codebook, plus a visual report per pair.
 
-It reports **104 measures across 13 families**, every one of them defined,
-unit-labelled and referenced in a codebook generated from the code itself.
-
----
-
-## The problem this solves
-
-The recording setup gives three views of each dyad:
-
-| View | Picture | Audio |
-|---|---|---|
-| `close_a` | person A's face | **both voices** |
-| `close_b` | person B's face | **both voices** |
-| `wide` | both people | **both voices** |
-
-Every microphone hears both people. Nothing in the audio says whose voice it
-is, the cameras are started by hand so the files are offset by seconds, and
-their clocks drift over a ten-minute recording. Almost every measure worth
-having is a *time difference* — response latency, overlap, a nod relative to
-the partner's stressed syllable — so those two problems have to be solved
-before anything else is meaningful.
-
-**Alignment.** Full-length log-energy envelopes are cross-correlated to get a
-coarse offset that tolerates gaps of tens of seconds, then GCC-PHAT on
-several excerpts refines it to the sample. The spread across excerpts is
-reported as a confidence, and their slope against time as a clock-drift
-estimate. Measured recovery error on known offsets: **0.0 ms**.
-
-**Who is speaking.** Each close-up microphone sits near one participant, so
-the same voice arrives at the two microphones at different levels. That level
-difference gives a robust first pass — but it is blind to simultaneous
-speech, because two people talking at once looks exactly like one person
-talking ambiguously.
-
-So a second pass *unmixes* the channels. Given the leakage ratios estimated
-from the first pass, the two observed powers invert to each person's own
-source power, and those four states — silence, A, B, both — become genuinely
-distinguishable. Lip motion from each close-up is folded in as independent
-evidence, and the whole thing is decoded with an HMM so the result is
-temporally coherent rather than flickering mid-word.
-
-Measured against scripted conversations: **0.04 % speaker identity
-confusion**, **5.8 ms median turn-onset error**, overlap detection at
-**0.97 precision**.
+![The convlab desktop application](docs/images/app.png)
 
 ---
 
-## Quick start
+# Install it
+
+You need **Python 3.10 or newer**. Everything else the installer handles.
+About 2 GB of disk, no GPU required.
+
+## Windows
+
+1. **Install Python** if you don't have it — [python.org/downloads](https://www.python.org/downloads/).
+   On the first screen of the installer, **tick "Add python.exe to PATH"** before
+   clicking Install. This is the step people miss.
+
+2. **Download this project.** Either:
+   - click the green **Code** button above → **Download ZIP** → right-click the
+     downloaded file → **Extract All**, or
+   - if you have Git: `git clone https://github.com/alexmueller07/conversationalist-lab-research.git`
+
+3. **Open the folder** you just extracted or cloned.
+
+4. **Double-click `launch-convlab.bat`.**
+
+   The first run installs everything and takes 5–15 minutes depending on your
+   connection — you'll see a black window with progress text. Leave it alone
+   until the app appears. Every run after that opens in a couple of seconds.
+
+   > If Windows shows a blue "Windows protected your PC" box, click
+   > **More info** → **Run anyway**. That appears for any unsigned script.
+
+## macOS
+
+1. **Install Python with Tk support** (the version Apple ships is missing it):
+   ```bash
+   brew install python python-tk
+   ```
+   No Homebrew? Get it at [brew.sh](https://brew.sh), or install Python from
+   [python.org](https://www.python.org/downloads/) which includes Tk.
+
+2. **Download the project:**
+   ```bash
+   git clone https://github.com/alexmueller07/conversationalist-lab-research.git
+   cd conversationalist-lab-research
+   ```
+
+3. **Start it:**
+   ```bash
+   chmod +x launch-convlab.sh
+   ./launch-convlab.sh
+   ```
+   First run takes 5–15 minutes.
+
+## Linux
 
 ```bash
-python -m venv .venv && .venv/Scripts/activate      # Windows
-pip install -e ".[semantic,dev]"
-
-convlab models fetch          # ~27 MB of pinned model weights
-convlab analyse recordings/ -o workspace/
-```
-
-`recordings/` should contain files named so the session id is shared and a
-view token distinguishes the cameras:
-
-```
-dyad012_close_a.mp4   dyad012_close_b.mp4   dyad012_wide.mp4
-```
-
-For anything less regular, write a manifest instead — it is the authoritative
-route and also carries study variables straight into the output tables:
-
-```json
-[{"session_id": "dyad012",
-  "views": {"close_a": "...", "close_b": "...", "wide": "..."},
-  "metadata": {"condition": "control", "week": 3}}]
-```
-
-```bash
-convlab analyse sessions.json -o workspace/
-```
-
-Try it with no data at all — this synthesises a conversation with two system
-voices, writes three genuinely offset video files, and analyses them:
-
-```bash
-convlab demo -o workspace/
+sudo apt install python3 python3-venv python3-tk git    # Debian/Ubuntu
+git clone https://github.com/alexmueller07/conversationalist-lab-research.git
+cd conversationalist-lab-research
+chmod +x launch-convlab.sh
+./launch-convlab.sh
 ```
 
 ---
 
-## What comes out
+# Use it
+
+## Try it with no data at all
+
+Click **Use demo data**. It builds a synthetic two-person conversation using
+your computer's speech voices, writes three video files, and analyses them.
+Takes about four minutes start to finish. This is the fastest way to see what
+the tool produces. *(Windows only — it needs the system speech engine.)*
+
+## Analyse your own recordings
+
+**1. Name your files** so each session shares an id and each camera has a
+token in its name:
 
 ```
-workspace/
-├── measures_all.csv           every session, long format — analyse this
-├── measures_all_wide.csv      one row per person, for inspection
-├── codebook.csv               all 104 measures defined
-├── session_summary.csv        per-session QC verdict
-└── <session_id>/
-    ├── dashboard.html         self-contained visual report
-    ├── manifest.json          config, model digests, sync, stage timings
-    ├── qc.json                every quality check and its verdict
-    ├── timeline.parquet       frame-level signals for re-analysis
-    └── tables/
-        ├── measures.csv       long format
-        ├── turns.csv          one row per turn, with text and timing
-        └── events.csv         nods, smiles, laughs, interruptions, callbacks
+recordings/
+├── dyad012_close_a.mp4     person A's face
+├── dyad012_close_b.mp4     person B's face
+├── dyad012_wide.mp4        both people  (optional)
+├── dyad013_close_a.mp4
+└── ...
 ```
 
-The long table is the one to model. Dyadic data is non-independent, so it
-wants a random intercept for dyad:
+`close_a` / `close_b` / `wide` are the tokens it looks for — `cam_a`,
+`person_a`, `p1` and a few others also work. The two close-up views are
+required; the wide view is optional.
+
+**2. Click Browse** next to *Recordings* and choose that folder. The app
+immediately lists what it found, so you'll know at once if a filename didn't
+parse — not forty minutes later.
+
+**3. Choose where results go** (or accept the default).
+
+**4. Untick anything you don't need.** *Track body* is the slowest stage;
+turning it off roughly halves the runtime.
+
+**5. Click Analyse.** Progress and a running log appear as it works. **Stop**
+is safe at any point — it finishes the current step and leaves valid output.
+
+**6. Click Open report** when it finishes.
+
+> **First run downloads about 27 MB of model files.** It happens once,
+> automatically, and needs an internet connection. After that the app runs
+> entirely offline.
+
+## How long it takes
+
+Roughly **four times the length of the recording**, on a normal laptop with no
+graphics card. A 10-minute conversation takes about 35–40 minutes; a 118-pair
+study is an overnight job. Re-running after changing a setting takes seconds,
+because the slow steps are cached.
+
+---
+
+# What you get
+
+```
+results/
+├── measures_all.csv        every pair, every measure — this is the one to analyse
+├── codebook.csv            what all 104 measures mean
+├── session_summary.csv     pass / review / fail per pair
+└── dyad012/
+    ├── dashboard.html      the visual report
+    ├── tables/turns.csv    every turn, with its text and timing
+    ├── tables/events.csv   nods, smiles, laughs, interruptions, callbacks
+    ├── timeline.parquet    frame-level signals, for re-analysis
+    ├── qc.json             every quality check and its result
+    └── manifest.json       exact settings used, for reproducibility
+```
+
+![The generated report](docs/images/dashboard.png)
+
+`measures_all.csv` is long format — one row per pair, person and measure — so
+it goes straight into a mixed-effects model. Dyadic data is non-independent,
+so it wants a random intercept for the pair:
 
 ```r
 library(lme4)
-d <- read.csv("workspace/measures_all.csv")
+d <- read.csv("results/measures_all.csv")
 lat <- subset(d, measure == "response_latency_median" & available)
 summary(lmer(value ~ meta_condition + (1 | session_id), data = lat))
 ```
 
-Two conventions worth knowing before you analyse anything:
-
-- **A measure that could not be computed is a row with a null value and a
-  stated reason**, never a zero and never a dropped row. A session whose
-  camera failed and a session with no laughter must not look the same.
-- **Every session carries a QC verdict** (`pass` / `review` / `fail`) based on
-  inputs — sync confidence, attribution certainty, tracking coverage — not on
-  whether the results look plausible. Filtering on surprising *values* is how
-  a real effect gets thrown away.
+**Two conventions to know before analysing.** A measure that could not be
+computed is a row with an empty value and a stated reason — never a zero, and
+never a dropped row, because a failed camera and an absence of behaviour must
+not look the same. And every pair carries a quality verdict based on the
+*inputs* (sync confidence, tracking coverage, attribution certainty), not on
+whether the numbers look plausible — filtering on surprising values is how a
+real effect gets thrown away.
 
 ---
 
-## What it measures
+# What it measures
 
 | Family | n | Examples |
 |---|---|---|
@@ -143,7 +174,7 @@ Two conventions worth knowing before you analyse anything:
 | Interruption | 7 | interruption vs transition overlap, success rate, floor retention |
 | Backchannel | 6 | rate per minute of *partner* speech, coverage, placement within turn |
 | Lexical | 16 | question rate and openness, hedging, fillers, pronouns, politeness, style matching |
-| Prosody | 10 | pitch variability in semitones, jitter, shimmer, entrainment (proximity / synchrony / convergence) |
+| Prosody | 10 | pitch variability in semitones, jitter, shimmer, entrainment |
 | Semantic | 12 | response coherence, topic count and duration, **long-range callbacks** |
 | Gaze | 6 | gaze at partner while speaking vs listening, mutual gaze episodes |
 | Head | 3 | nod rate while listening, head shakes |
@@ -151,33 +182,67 @@ Two conventions worth knowing before you analyse anything:
 | Body | 3 | gesture rate, postural shifts, self-touch |
 | Laughter | 4 | laughter rate, **shared laughter**, reciprocity |
 | Synchrony | 7 | smile / head / expressivity / loudness coordination, **above chance** |
-| Dynamics | 8 | change from the first third to the last: latency, silence, gaze, smiling, coherence |
+| Dynamics | 8 | change from the first third to the last: latency, silence, gaze, smiling |
 
-Two of these deserve their own note.
+Full definitions: [`docs/measures.md`](docs/measures.md).
 
-**Long-range callbacks.** A turn that revives something dropped at least four
-turns earlier. Embedding similarity alone is useless here — any two turns
-about childhood are similar whether or not one *refers back* to the other. A
-callback is only counted when three conditions hold together: the turns are
-far apart, they share a rare content anchor, and **that anchor is absent from
-every intervening turn**, so the topic was genuinely dropped and then picked
-back up. Scored against planted callbacks: **precision 0.97, recall 1.00.**
+Two deserve their own note.
 
-**Synchrony above chance.** Two independent behavioural time series correlate
+**Long-range callbacks** — a turn that revives something dropped at least four
+turns earlier. Embedding similarity alone is useless here: any two turns about
+childhood look similar whether or not one *refers back* to the other. A
+callback is counted only when three things hold together — the turns are far
+apart, they share a rare content anchor, and **that anchor appears in no
+intervening turn**, so the topic was genuinely dropped and then picked back
+up. Scored against planted callbacks: **precision 0.97, recall 1.00**.
+
+**Synchrony above chance** — two independent behavioural time series correlate
 at around 0.3 simply because behaviour is autocorrelated. Reporting that as
-mimicry is not a weak result, it is an invalid one — the same number arises
-between two people who never met. Every synchrony measure here is reported as
-the *excess over a surrogate baseline* built by circularly shifting one
-partner's series, with a z score saying whether it clears that baseline at
-all. In validation, independent signals with a raw correlation of 0.32
-correctly come back as **not above chance**.
+mimicry isn't a weak result, it's an invalid one: the same number arises
+between two people who never met. Every synchrony measure here is the *excess
+over a surrogate baseline*, with a z score saying whether it clears that
+baseline at all.
 
 ---
 
-## Validation
+# The problem this solves
 
-`convlab validate` builds material whose answer is known by construction,
-runs the real detectors on it, and scores them. All 21 checks pass:
+Each pair is filmed three ways, and **every microphone picks up both people**:
+
+| View | Picture | Audio |
+|---|---|---|
+| `close_a` | person A's face | both voices |
+| `close_b` | person B's face | both voices |
+| `wide` | both people | both voices |
+
+Nothing in the audio says whose voice it is, the cameras are started by hand
+so files are offset by seconds, and their clocks drift. Nearly every measure
+worth having is a *time difference*, so both problems have to be solved before
+anything means anything.
+
+**Alignment.** Full-length energy envelopes give a coarse offset that tolerates
+gaps of tens of seconds; GCC-PHAT on several excerpts refines it to the
+sample. Excerpt scatter becomes a confidence score, their slope a clock-drift
+estimate. Recovery error on known offsets: **0.0 ms**.
+
+**Who is speaking.** Each close-up mic sits nearer one person, so the same
+voice reaches the two mics at different levels — a robust first pass, but
+blind to simultaneous speech, since two people talking at once looks exactly
+like one person talking ambiguously. A second pass therefore *unmixes* the two
+channels into each person's own source power, which makes silence, A, B and
+both genuinely distinguishable. Lip motion from each close-up joins as
+independent evidence, and the result is decoded with an HMM so it stays
+coherent instead of flickering mid-word.
+
+Measured: **0.04 % speaker identity confusion**, **5.8 ms median turn-onset
+error**, overlap detection at **0.97 precision**.
+
+---
+
+# Validation
+
+`convlab validate` builds material whose answer is known by construction, runs
+the real detectors on it, and scores them. All 21 checks pass:
 
 | Check | Result |
 |---|---|
@@ -193,25 +258,72 @@ runs the real detectors on it, and scores them. All 21 checks pass:
 | Nod detection | precision 1.00, recall 1.00 |
 | Nods vs single dips / shakes / drift | 0 false positives each |
 | Synchrony false positive | \|z\| 1.06 on independent signals (raw r was 0.32) |
-| Synchrony sensitivity | z 10.1, lag recovered to 0.00 s |
+| Synchrony sensitivity | z 10.1, lag recovered exactly |
 
 Validation audio is real speech rendered through the system voices and placed
-at exact known times, so the entire chain — voice activity detection,
-attribution, recognition, turn construction — runs on material every model
-accepts, while the answer stays known to the millisecond.
+at exact known times, so the whole chain runs on material every model accepts
+while the answer stays known to the millisecond.
 
-**What this does not establish.** Synthetic material cannot show that a
-detector works on human participants: it has no head turns, no accents, no
-overlapping laughter, no one leaning out of frame. What it does establish is
-that the path from a known event to a reported number is correct, which is
-where silent errors actually live — a sign flip, a boundary convention that
-shifts every latency by a frame, a threshold that suppresses a whole class of
-event. Accuracy on real dyads needs human-coded recordings, and the
-[roadmap](#next-steps) says so.
+**What this does not establish.** Synthetic material cannot show a detector
+works on human participants — it has no head turns, no accents, no overlapping
+laughter, nobody leaning out of frame. What it does establish is that the path
+from a known event to a reported number is correct, which is where silent
+errors live: a sign flip, a boundary convention that shifts every latency by a
+frame, a threshold that suppresses a whole class of event.
 
 ---
 
-## How it fits together
+# Limitations
+
+Stated plainly, because a measurement tool that oversells itself is worse than
+useless.
+
+- **Accuracy on real pairs is unmeasured.** Everything above is synthetic
+  ground truth. Hand-coded recordings are the next step.
+- **Laughter is under-detected** — quiet and breathy laughter is missed, so
+  those rates are lower bounds.
+- **Gaze is inferred, not calibrated.** Camera geometry isn't recorded, so "at
+  the partner" is estimated from the mode of each person's own gaze
+  distribution. It assumes people look at their partner more than anywhere
+  else — usually true, and it fails on someone who stared at the table.
+- **Duchenne classification is a proxy**, not a sincerity detector.
+- **Lexical measures are English-only.** Applied to another language they
+  would produce numbers that look valid and are not.
+- **Body measures need the torso in frame.** They come from the close-up
+  views, where attribution is certain; a tight head-and-shoulders shot yields
+  low coverage and withheld measures — the honest outcome, not a bug.
+- **These are proxies for behaviour, not scores of skill.** Almost none has a
+  defensible "higher is better", which is why the codebook marks direction as
+  unknown for most.
+
+---
+
+# For developers
+
+The app is a thin shell over a library and a CLI.
+
+```bash
+pip install -e ".[semantic,dev]"
+
+convlab gui                        # the desktop app
+convlab analyse recordings/ -o out/
+convlab analyse sessions.json -o out/     # explicit manifest
+convlab demo -o out/
+convlab validate                   # 21 ground-truth checks
+convlab codebook -o docs/measures.md
+pytest                             # 151 tests, no models or media needed
+```
+
+A manifest is the authoritative route when filenames aren't tidy, and it
+carries study variables straight into the output tables:
+
+```json
+[{"session_id": "dyad012",
+  "views": {"close_a": "MVI_0042.MP4", "close_b": "MVI_0117.MP4"},
+  "metadata": {"condition": "control", "week": 3}}]
+```
+
+Pipeline order, and why:
 
 ```
 probe → decode audio → align cameras → voice activity → face tracking
@@ -222,109 +334,29 @@ probe → decode audio → align cameras → voice activity → face tracking
 ```
 
 Attribution runs *after* face tracking so mouth movement can inform it. Turn
-construction runs *twice* because classifying backchannels needs the words,
-and transcribing needs the speech regions — a genuine circular dependency,
-resolved by doing the cheap pass first.
+construction runs *twice* because classifying backchannels needs the words and
+transcribing needs the speech regions — a real circular dependency, resolved
+by doing the cheap pass first.
 
-Design decisions that are load-bearing:
+Load-bearing design decisions:
 
 - **Every stage caches** on a fingerprint of its inputs, the relevant config
-  and its own code version. Change a turn threshold and face tracking is
-  reused; change the vision config and it recomputes. Nothing is ever
-  silently stale.
-- **A failing stage does not take the run down.** A corrupt wide camera still
-  leaves turn-taking and prosody. Failures are recorded in the manifest, the
-  QC report and the dashboard rather than swallowed.
-- **All thresholds live in one typed config**, dumped verbatim into every
-  run's `manifest.json`, so any number in a results table traces back to the
-  parameters that produced it.
-- **Model weights are pinned by SHA-256.** An upstream model that silently
-  changed would move every number, and a study spanning that change would
-  contain two incomparable halves with nothing in the output to say so.
+  and its code version. Change a turn threshold and face tracking is reused.
+- **A failing stage doesn't take the run down.** A corrupt wide camera still
+  leaves turn-taking and prosody; failures are recorded, not swallowed.
+- **All thresholds live in one typed config**, dumped into every run's
+  `manifest.json`, so any number traces back to what produced it.
+- **Model weights are pinned by SHA-256.** A silently changed upstream model
+  would move every number, and a study spanning that change would contain two
+  incomparable halves with nothing to say so.
 - **Backchannels are excluded from turn construction.** Counting "mhm" as a
   turn inflates turn counts by about a third and pulls latency medians toward
-  zero. This single convention changes the headline numbers more than any
-  other choice in the codebase.
+  zero — the single convention that most changes the headline numbers.
 
-Backends are pluggable and every heavy dependency is optional: no GPU is
-required, and no `ffmpeg` binary needs to be on `PATH` (PyAV links the
-libraries directly — a common silent failure on lab Windows machines).
+No GPU required, and no `ffmpeg` on `PATH` (PyAV links the libraries directly,
+a common silent failure on lab Windows machines).
 
----
-
-## Performance
-
-Measured on a 12th-gen i7 laptop, CPU only, no GPU:
-
-| Stage | Cost |
-|---|---|
-| Sync + VAD + attribution | ~0.1× realtime |
-| Face tracking (2 views, 25 fps) | ~0.8× realtime |
-| Body tracking (2 views) | ~1.1× realtime |
-| Transcription | ~0.4× realtime |
-| Semantics + measures | ~0.4× realtime |
-| **Total** | **~3.8× realtime** |
-
-A ten-minute dyad takes roughly 35–40 minutes end to end; a 118-dyad corpus is
-an overnight batch. Re-running after a threshold change is seconds, because
-the expensive stages are cached. Drop `--skip body` or lower `vision.fps` to
-12.5 to roughly halve it — nods live at 1–4 Hz, so 12.5 fps is still well
-inside Nyquist.
-
----
-
-## Limitations
-
-Stated plainly, because a measurement tool that oversells itself is worse
-than useless.
-
-- **Accuracy on real dyads is unmeasured.** Everything above is against
-  synthetic ground truth. Human-coded recordings are the next step.
-- **Laughter is under-detected.** The AudioSet tagger misses quiet and
-  breathy laughter, so those rates are lower bounds, not counts.
-- **Gaze is inferred, not calibrated.** Camera geometry is not recorded, so
-  "at the partner" is estimated from the mode of each person's own gaze
-  distribution. It assumes people look at their partner more than anywhere
-  else — usually true, and it fails on someone who spent the conversation
-  staring at the table.
-- **Duchenne classification is a proxy.** Eye involvement is a matter of
-  degree, not a sincerity detector.
-- **Lexical measures are English-only.** Applying the word lists to another
-  language would produce numbers that look valid and are not.
-- **Body measures need the torso in frame.** They come from the close-up
-  views, where attribution is certain; a tightly framed head-and-shoulders
-  shot yields low coverage and withheld measures — which is the honest
-  outcome, not a bug.
-- **These are proxies for behaviour, not scores of skill.** Almost none of
-  them has a defensible "higher is better", which is why the codebook marks
-  direction as unknown for most.
-
-## Next steps
-
-1. Hand-code a subset of real dyads and report detector agreement (Cohen's
-   κ for events, MAE for latencies) against human coders.
-2. Validate the proxies against the outcome measures that matter — partner
-   ratings, self-reported connection — rather than against each other.
-3. Add a corpus-level view: which measures actually predict those outcomes,
-   with dyad-level cross-validation.
-
----
-
-## Development
-
-```bash
-pytest                      # 138 tests, no models or media required
-convlab validate            # 21 ground-truth checks
-convlab codebook -o docs/measures.md
-```
-
-Tests deliberately need no downloads and no video: measures are pure
-functions of a finished context, so a latency measure is checked against a
-turn list written out by hand. Expected values are computed by hand, not
-pasted from a run — a golden test that learned its answer from the
-implementation cannot catch the implementation being wrong.
-
-- [`docs/METHODS.md`](docs/METHODS.md) — algorithms, thresholds and their justification
+- [`docs/METHODS.md`](docs/METHODS.md) — algorithms, thresholds, and their justification
 - [`docs/measures.md`](docs/measures.md) — the full catalogue
 
 ---

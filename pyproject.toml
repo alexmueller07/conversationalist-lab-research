@@ -34,6 +34,12 @@ dev = ["pytest>=7.4", "pytest-cov>=4.1"]
 [project.scripts]
 convlab = "convlab.cli:main"
 
+[project.gui-scripts]
+convlab-gui = "convlab.gui:main"
+# A gui-script rather than a console script: on Windows this produces a
+# launcher that opens no console window, so double-clicking the app does not
+# leave a black terminal sitting behind it.
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

@@ -192,6 +192,12 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return cmd_analyse(args)
 
 
+def cmd_gui(args: argparse.Namespace) -> int:
+    from convlab.gui import main as gui_main
+
+    return gui_main()
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     from convlab.validation import run_validation
 
@@ -247,6 +253,9 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--model-dir", default=None)
     demo.add_argument("--skip", nargs="*", default=[])
     demo.set_defaults(func=cmd_demo)
+
+    gui = sub.add_parser("gui", help="open the desktop application")
+    gui.set_defaults(func=cmd_gui)
 
     validate = sub.add_parser("validate", help="score detectors against known ground truth")
     validate.add_argument("-o", "--output", default="validation")
