@@ -23,6 +23,7 @@ import numpy as np
 
 from convlab.context import AnalysisContext
 from convlab.measures.base import MeasureValue, registry
+from convlab.report.player import build_player_data, player_css, render_player
 from convlab.report.qc import QCReport
 
 PALETTE = {
@@ -186,6 +187,16 @@ def _timeline_svg(context: AnalysisContext, width: int = 1120, row: int = 26) ->
                 )
         y += row
 
+    # Playhead, driven by the review player. It carries the plot geometry as
+    # data attributes so the script positions it in the same coordinate space
+    # the ribbon was drawn in and the two cannot drift apart.
+    parts.append(
+        f'<g id="playhead" data-left="{left}" data-plot="{plot}" '
+        f'transform="translate({left},0)" visibility="hidden">'
+        f'<line x1="0" y1="26" x2="0" y2="{height - 26}" stroke="var(--fail)" '
+        f'stroke-width="1.5"/>'
+        f'<circle cx="0" cy="24" r="3.5" fill="var(--fail)"/></g>'
+    )
     parts.append("</svg>")
     return "".join(parts)
 
@@ -380,16 +391,45 @@ def _stage_block(stages) -> str:
     )
 
 
+def _review_jumps(context: AnalysisContext) -> list[tuple[float, str]]:
+    """A few places worth watching first.
+
+    Chosen to expose the failures this report cannot show on its own: the
+    tightest turn transition, the longest overlap, and the first callback.
+    """
+    jumps: list[tuple[float, str]] = []
+    if context.turn_set is not None and context.turn_set.turns:
+        overlaps = [
+            t for t in context.turn_set.turns
+            if t.fto is not None and t.fto < 0
+        ]
+        if overlaps:
+            worst = min(overlaps, key=lambda t: t.fto or 0.0)
+            jumps.append((max(0.0, worst.start - 3.0), "Biggest overlap"))
+        gaps = [t for t in context.turn_set.turns if t.fto is not None and t.fto > 0]
+        if gaps:
+            longest = max(gaps, key=lambda t: t.fto or 0.0)
+            jumps.append((max(0.0, longest.start - 3.0), "Longest gap"))
+    if context.semantics is not None and context.semantics.callbacks:
+        first = context.semantics.callbacks[0]
+        jumps.append((max(0.0, first.time - 3.0), "First callback"))
+    return jumps[:3]
+
+
 def render_dashboard(
     context: AnalysisContext,
     values: Sequence[MeasureValue],
     qc: QCReport,
     stages: Sequence = (),
     sync=None,
+    video_paths: dict | None = None,
+    offsets: dict | None = None,
 ) -> str:
     """Build the complete HTML document as a string."""
     ftos = context.turn_set.all_ftos() if context.turn_set else np.zeros(0)
     available = sum(1 for v in values if v.available)
+    player_data = build_player_data(context, video_paths, offsets)
+    player_html = render_player(player_data, _review_jumps(context))
 
     legend = (
         f'<div class="legend">'
@@ -414,7 +454,7 @@ def render_dashboard(
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{_esc(context.session_id)} &mdash; conversation analysis</title>
-<style>{_CSS}</style></head><body><div class="wrap">
+<style>{_CSS}{player_css()}</style></head><body><div class="wrap">
 
 <h1>Session {_esc(context.session_id)}</h1>
 <p class="sub">
@@ -429,7 +469,10 @@ def render_dashboard(
 
 <h2>Timeline</h2>
 {legend}
-<div class="scroll" style="padding:8px">{_timeline_svg(context)}</div>
+<div class="scroll" id="timeline-strip" style="padding:8px">{_timeline_svg(context)}</div>
+
+<h2>Watch it</h2>
+{player_html}
 
 <h2>Response latency</h2>
 <p class="desc">Floor transfer offsets across the session. Negative values are
@@ -463,10 +506,13 @@ def write_dashboard(
     qc: QCReport,
     stages: Sequence = (),
     sync=None,
+    video_paths: dict | None = None,
+    offsets: dict | None = None,
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        render_dashboard(context, values, qc, stages, sync), encoding="utf-8"
+        render_dashboard(context, values, qc, stages, sync, video_paths, offsets),
+        encoding="utf-8",
     )
     return path

@@ -333,6 +333,16 @@ class SemanticConfig:
     callback_min_lag_turns: int = 4
     """How far back a reference must reach to count as a long-range callback."""
 
+    callback_max_lag_turns: int = 40
+    """How far back one can plausibly reach.
+
+    Without an upper bound the detector linked turns 150 apart -- ten minutes
+    of conversation -- which is not recall of a dropped topic but a
+    coincidence of vocabulary, made likely by recognition errors across a
+    long session. Forty turns is roughly three to five minutes of talk, well
+    beyond what anyone would call an immediate reference and still within
+    plausible memory. Set to 0 to remove the limit."""
+
     callback_min_similarity: float = 0.35
     """Embedding similarity is the *weakest* of the three callback conditions
     and is set permissively on purpose. Nearly all of the detector's

@@ -223,6 +223,9 @@ class Worker(threading.Thread):
             dashboard = write_dashboard(
                 result.workspace.file("dashboard.html"),
                 result.context, result.measures, qc, result.stages, result.sync,
+                video_paths=dict(session.views),
+                offsets={r: result.sync.offset(r) for r in session.views}
+                if result.sync else None,
             )
 
             available = sum(1 for m in result.measures if m.available)

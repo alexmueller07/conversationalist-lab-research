@@ -218,12 +218,25 @@ def find_callbacks(
     df = _document_frequency(term_sets)
     max_df = max(1, int(np.floor(cfg.callback_anchor_max_df * n)))
 
+    # Where each term last appeared before turn j. Maintained incrementally as
+    # j advances, which replaces re-scanning every intervening turn for every
+    # candidate pair -- that was cubic in the number of turns and dominated
+    # the runtime on a real session (407 s for 241 turns).
+    last_seen: dict[str, int] = {}
+
     sims = cosine_matrix(embeddings)
     callbacks: list[Callback] = []
+    max_lag = cfg.callback_max_lag_turns
+
+    # Seed with every turn that precedes the first admissible callback.
+    for k in range(cfg.callback_min_lag_turns):
+        for term in term_sets[k]:
+            last_seen[term] = k
 
     for j in range(cfg.callback_min_lag_turns, n):
         best: Callback | None = None
-        for i in range(0, j - cfg.callback_min_lag_turns + 1):
+        earliest = 0 if max_lag <= 0 else max(0, j - max_lag)
+        for i in range(earliest, j - cfg.callback_min_lag_turns + 1):
             similarity = float(sims[j, i])
             if similarity < cfg.callback_min_similarity:
                 continue
@@ -235,11 +248,14 @@ def find_callbacks(
                 continue
 
             # The anchor must have been absent in between: a topic that never
-            # went away is being continued, not called back to.
-            intervening: set[str] = set()
-            for k in range(i + 1, j):
-                intervening |= term_sets[k]
-            anchors -= intervening
+            # went away is being continued, not called back to. `last_seen`
+            # holds, for each term, the most recent turn before j that used
+            # it, so a term reappearing in between disqualifies the link
+            # without scanning the range.
+            anchors = {
+                term for term in anchors
+                if last_seen.get(term, i) <= i
+            }
             if not anchors:
                 continue
 
@@ -262,6 +278,10 @@ def find_callbacks(
 
         if best is not None:
             callbacks.append(best)
+
+        # Turn j now belongs to the past for every later candidate.
+        for term in term_sets[j]:
+            last_seen[term] = j
 
     return callbacks
 
