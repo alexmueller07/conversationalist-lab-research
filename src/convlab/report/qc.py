@@ -104,8 +104,41 @@ def assess_quality(context: AnalysisContext, sync=None) -> QCReport:
                 f"person {person} speaks in only {share:.1%} of frames",
             )
 
+    # Is the speaker track stable enough to define turn boundaries?
+    #
+    # A decoder working from weak evidence can flicker between speakers
+    # several times a second while reporting high confidence, because the
+    # posterior is computed from the same weak evidence that produced the
+    # path. The result looks like a conversation with hundreds of turns and
+    # a median floor-transfer offset of zero. Nothing downstream detects
+    # this -- the numbers are all finite and superficially plausible -- so it
+    # has to be checked directly against how real turn-taking behaves.
+    if context.attribution is not None and context.duration > 0:
+        state = context.attribution.state
+        if state.size > 1:
+            edges = np.flatnonzero(np.diff(state) != 0)
+            runs = np.diff(np.concatenate(([0], edges + 1, [state.size])))
+            short = float(np.mean(runs < 0.3 * context.frame_hz)) if runs.size else 0.0
+            check(
+                "speaker_track_stability", short, cfg.max_short_state_fraction,
+                short <= cfg.max_short_state_fraction, "fatal",
+                f"{short:.0%} of speaker-state runs are shorter than 300 ms; the "
+                "speaker track is flickering rather than tracking turns, so every "
+                "timing measure is unreliable",
+            )
+
     if context.turn_set is not None:
         n_turns = len(context.turn_set.turns)
+        ftos = context.turn_set.all_ftos()
+        if ftos.size >= 20:
+            negative = float(np.mean(ftos < 0))
+            check(
+                "overlapping_onset_rate", negative, cfg.max_overlapping_onsets,
+                negative <= cfg.max_overlapping_onsets, "fatal",
+                f"{negative:.0%} of turns begin before the previous speaker "
+                "finished; in natural conversation this is 10-20%, so the turn "
+                "boundaries are probably wrong",
+            )
         # Two separate questions, and an absolute count conflates them.
         # Whether a conversation happened at all is a matter of *rate*: 18
         # turns in one minute is a lively exchange, 18 turns in ten minutes is

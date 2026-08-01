@@ -23,6 +23,7 @@ backchannels needs the words, while transcription needs the speech regions.
 
 from __future__ import annotations
 
+import gc
 import logging
 import time
 from dataclasses import dataclass, field
@@ -169,6 +170,11 @@ def analyse_session(
     result = SessionResult(session=session, context=context, workspace=workspace)
 
     def stage_ctx(name: str) -> _StageTimer:
+        # Collect between stages. Each heavy stage loads its own model, and
+        # on a memory-constrained machine the previous one's arena must be
+        # returned before the next allocates or the run is killed. Commit,
+        # not resident size, is what runs out first.
+        gc.collect()
         return _StageTimer(result, name, progress, cancel)
 
     sample_rate = cfg.audio.sample_rate
@@ -235,11 +241,15 @@ def analyse_session(
             )
 
     # Shift every track onto the session clock once, so no later stage has
-    # to remember to apply an offset.
+    # to remember to apply an offset. The unaligned originals are dropped
+    # immediately: holding two full copies of every track doubles the audio
+    # footprint for the whole run and nothing reads them again.
     aligned = {
         role: _shift(signal, offsets.get(role, 0.0), sample_rate, n_frames, frame_hz)
         for role, signal in tracks.items()
     }
+    tracks.clear()
+    gc.collect()
 
     # ---- 4. voice activity --------------------------------------------
     speech_prob = np.zeros(n_frames)
@@ -273,25 +283,32 @@ def analyse_session(
     face_tracks: dict[str, Any] = {}
     if "face" not in skip:
         with stage_ctx("face_tracking") as stage:
-            from convlab.vision.tracker import track_face
+            keys = {
+                person: make_key(
+                    fingerprints[session.close_view(person)], cfg.vision.__dict__, "face"
+                )
+                for person in PERSONS
+                if session.close_view(person) is not None
+            }
+            isolated = _tracking_in_subprocess(
+                "face_tracking", session, cfg, workspace, output_root,
+                [(f"face_{p}", k) for p, k in keys.items()], context,
+            )
 
-            face_model = models.ensure("face_landmarker", model_dir)
-            for person in PERSONS:
+            for person, key in keys.items():
                 role = session.close_view(person)
-                if role is None:
-                    continue
-                key = make_key(fingerprints[role], cfg.vision.__dict__, "face")
                 data = workspace.cached_npz(
                     f"face_{person}", key,
-                    lambda role=role, person=person: _face_to_arrays(
-                        track_face(session.path(role), face_model, cfg.vision, view=role)
+                    lambda role=role: _face_to_arrays(
+                        _track_face_lazily(session.path(role), model_dir, cfg, role)
                     ),
                 )
                 face_tracks[person] = _arrays_to_face(data, role)
                 for warning in face_tracks[person].warnings:
                     context.note(warning)
-            stage.report.detail = ", ".join(
-                f"{p}:{t.coverage:.0%}" for p, t in face_tracks.items()
+            stage.report.detail = (
+                ("isolated; " if isolated else "")
+                + ", ".join(f"{p}:{t.coverage:.0%}" for p, t in face_tracks.items())
             )
 
     # ---- 6. speaker attribution ---------------------------------------
@@ -436,7 +453,6 @@ def analyse_session(
     if "body" not in skip:
         with stage_ctx("body_tracking") as stage:
             from convlab.vision.signals import derive_body_signals
-            from convlab.vision.tracker import track_body
 
             # Pose is tracked from the close-up views rather than the wide
             # one. The wide view frames both participants, so its pose tracks
@@ -447,17 +463,25 @@ def analyse_session(
             # a tightly framed close-up may not show the torso at all, which
             # shows up honestly as low coverage and withheld measures rather
             # than as confident numbers about an unseen body.
-            pose_model = models.ensure("pose_landmarker", model_dir)
+            keys = {
+                person: make_key(
+                    fingerprints[session.close_view(person)], cfg.vision.__dict__, "body"
+                )
+                for person in PERSONS
+                if session.close_view(person) is not None
+            }
+            _tracking_in_subprocess(
+                "body_tracking", session, cfg, workspace, output_root,
+                [(f"body_{p}", k) for p, k in keys.items()], context,
+            )
+
             body_signals = {}
-            for person in PERSONS:
+            for person, key in keys.items():
                 role = session.close_view(person)
-                if role is None:
-                    continue
-                key = make_key(fingerprints[role], cfg.vision.__dict__, "body")
                 data = workspace.cached_npz(
                     f"body_{person}", key,
                     lambda role=role: _body_to_arrays(
-                        track_body(session.path(role), pose_model, cfg.vision, view=role)
+                        _track_body_lazily(session.path(role), model_dir, cfg, role)
                     ),
                 )
                 track = _arrays_to_body(data, role)
@@ -564,6 +588,69 @@ def _arrays_to_face(data: dict[str, np.ndarray], role: str):
         detected=data["detected"].astype(bool),
         view=role,
     )
+
+
+def _should_isolate(cfg: Config) -> bool:
+    if cfg.isolate_tracking is not None:
+        return bool(cfg.isolate_tracking)
+    from convlab.system import available_memory_mb
+
+    available = available_memory_mb()
+    return available is not None and available < cfg.isolate_below_mb
+
+
+def _tracking_in_subprocess(
+    stage: str,
+    session: Session,
+    cfg: Config,
+    workspace: Workspace,
+    output_root: str | Path,
+    wanted: list[tuple[str, str]],
+    context: AnalysisContext,
+) -> bool:
+    """Populate this stage's caches from a child process when memory is tight.
+
+    Returns True if a child ran. Doing nothing is always safe: the caller
+    falls through to computing in-process, which is what happens when the
+    caches are already warm or when memory is plentiful.
+    """
+    if not cfg.cache or not _should_isolate(cfg):
+        return False
+    # Nothing to do if every cache entry this stage would write already exists.
+    if all(
+        any(workspace.cache_dir.glob(f"{name}__{key}*")) for name, key in wanted
+    ):
+        return False
+
+    from convlab.isolate import run_isolated
+
+    log.info("running %s in a separate process to limit memory use", stage)
+    ok = run_isolated(stage, session, cfg, output_root)
+    if not ok:
+        context.note(
+            f"could not run {stage} in a separate process; running in-process, "
+            "which uses more memory"
+        )
+    return ok
+
+
+def _track_face_lazily(path: Path, model_dir: str, cfg: Config, role: str):
+    """Import MediaPipe only when a face actually has to be tracked.
+
+    On a cache hit the import is skipped entirely, which keeps 790 MB of
+    unreleasable module memory out of the process for the rest of the run.
+    """
+    from convlab.vision.tracker import track_face
+
+    return track_face(path, models.ensure("face_landmarker", model_dir),
+                      cfg.vision, view=role)
+
+
+def _track_body_lazily(path: Path, model_dir: str, cfg: Config, role: str):
+    from convlab.vision.tracker import track_body
+
+    return track_body(path, models.ensure("pose_landmarker", model_dir),
+                      cfg.vision, view=role)
 
 
 def _body_to_arrays(track) -> dict[str, np.ndarray]:

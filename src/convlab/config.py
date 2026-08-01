@@ -226,6 +226,15 @@ class ASRConfig:
     cpu_threads: int = 0
     """0 means (cores - 2), leaving headroom for the video stages."""
 
+    auto_downscale: bool = True
+    """Step down to a smaller recogniser when memory is short.
+
+    CTranslate2 reserves a working arena several times the size of the
+    weights: ``small.en`` commits about 2.3 GB, ``base.en`` 1.0 GB and
+    ``tiny.en`` 0.8 GB. On an 8 GB machine that is the difference between
+    completing a batch and being killed part-way through it. A slightly
+    higher word error rate, reported in the warnings, is the better trade."""
+
 
 @dataclass
 class ProsodyConfig:
@@ -409,6 +418,21 @@ class QCConfig:
     min_asr_confidence: float = 0.45
     min_face_coverage: float = 0.60
 
+    max_short_state_fraction: float = 0.30
+    """Fraction of speaker-state runs shorter than 300 ms, above which the
+    speaker track is judged to be flickering rather than tracking turns.
+
+    Real conversation does contain brief states -- backchannels, quick
+    interjections -- but not as a plurality. When weak evidence makes the
+    decoder alternate roughly twice a second it still reports high
+    confidence, because the posterior comes from the same weak evidence, so
+    confidence cannot be used to detect it."""
+
+    max_overlapping_onsets: float = 0.35
+    """Share of turns beginning before the previous speaker finished. The
+    turn-taking literature puts this near 10-20%; a value approaching half
+    means the boundaries are wrong rather than the conversation unusual."""
+
 
 @dataclass
 class Config:
@@ -430,6 +454,23 @@ class Config:
     n_jobs: int = 1
     cache: bool = True
     model_dir: str = "models"
+
+    isolate_tracking: bool | None = None
+    """Run face and body tracking in a separate process.
+
+    Importing MediaPipe commits about 790 MB that garbage collection cannot
+    return, because it belongs to the module rather than to any object. On a
+    machine with little free memory that is enough to get the process killed
+    once the recogniser loads on top of it. A child process gives all of it
+    back on exit.
+
+    ``None`` decides automatically from available memory; True or False
+    forces it. The cost is a couple of seconds of interpreter startup per
+    session, so it is not worth forcing on a machine with room to spare."""
+
+    isolate_below_mb: float = 3000.0
+    """Available-memory threshold under which tracking is isolated
+    automatically."""
 
     # ------------------------------------------------------------------
     @classmethod

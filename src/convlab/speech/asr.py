@@ -17,6 +17,7 @@ supplied here are better: they already know which of the two voices matters.
 
 from __future__ import annotations
 
+import gc
 import logging
 import os
 from dataclasses import dataclass, field
@@ -25,6 +26,7 @@ from pathlib import Path
 import numpy as np
 
 from convlab.config import ASRConfig
+from convlab.system import fit_asr_model
 from convlab.timeline import Segments
 
 log = logging.getLogger(__name__)
@@ -216,10 +218,25 @@ def transcribe(
         else cfg.compute_type
     )
     threads = cfg.cpu_threads or max(1, (os.cpu_count() or 4) - 2)
+
+    transcript = Transcript(model=cfg.model, language=cfg.language)
+
+    # The recogniser reserves far more than its weights: small.en commits
+    # about 2.3 GB. On a constrained machine, loading it on top of the
+    # tracking runtime gets the process killed, so pick a size that fits and
+    # say so rather than dying halfway through a batch.
+    model_name = cfg.model
+    if cfg.auto_downscale:
+        model_name, note = fit_asr_model(cfg.model)
+        if note:
+            log.warning("%s", note)
+            transcript.warnings.append(note)
+            transcript.model = model_name
+
     log.info("loading Whisper model %s (%s/%s, %d threads)",
-             cfg.model, device, compute_type, threads)
+             model_name, device, compute_type, threads)
     model = WhisperModel(
-        cfg.model,
+        model_name,
         device=device,
         compute_type=compute_type,
         cpu_threads=threads,
@@ -235,7 +252,6 @@ def transcribe(
             log.debug("BatchedInferencePipeline unavailable; using sequential decode")
 
     offsets = offsets or {}
-    transcript = Transcript(model=cfg.model, language=cfg.language)
     all_probs: list[float] = []
 
     for person, signal in audio.items():
@@ -287,6 +303,15 @@ def transcribe(
             except Exception as exc:  # noqa: BLE001
                 log.warning("transcription failed for %s block: %s", person, exc)
                 transcript.warnings.append(f"{person}: {type(exc).__name__}: {exc}")
+
+    # Release the recogniser before returning. It commits roughly 2.3 GB, and
+    # holding it through the prosody, semantics and body stages is what makes
+    # the pipeline fail on an 8 GB machine -- those stages then have to load
+    # their own models on top of a model nothing will use again. Dropping it
+    # here reclaims the whole 2.3 GB.
+    del runner
+    del model
+    gc.collect()
 
     transcript.words.sort(key=lambda w: (w.start, w.person))
     transcript.mean_confidence = float(np.mean(all_probs)) if all_probs else float("nan")

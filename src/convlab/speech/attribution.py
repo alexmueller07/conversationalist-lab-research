@@ -697,6 +697,7 @@ def attribute_speakers(
 
     log_transition = _transition_matrix(cfg)
     min_frames = max(1, int(round(cfg.min_state_s * frame_hz)))
+    first_pass_method = "visual-only" if shared_audio else "level-difference"
 
     # ---- pass 1: level difference -----------------------------------
     z = (delta - calib.offset_db) / max(cfg.ratio_scale_db, _EPS)
@@ -708,7 +709,7 @@ def attribute_speakers(
     # ---- pass 2: unmixed source model -------------------------------
     level_model = fit_level_model(energy_a, energy_b, state)
     source_model: SourceModel | None = None
-    method = "difference-only"
+    method = first_pass_method
 
     # Unmixing inverts a two-microphone mixing matrix. With one shared feed
     # there is no matrix to invert, and the fit can still look identifiable
