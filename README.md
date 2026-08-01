@@ -402,8 +402,9 @@ Load-bearing design decisions:
 No GPU required, and no `ffmpeg` on `PATH` (PyAV links the libraries directly,
 a common silent failure on lab Windows machines).
 
+- [`docs/HOW-IT-WORKS.md`](docs/HOW-IT-WORKS.md) — **start here**: full walkthrough of every stage and how each measure is defined
 - [`docs/METHODS.md`](docs/METHODS.md) — algorithms, thresholds, and their justification
-- [`docs/measures.md`](docs/measures.md) — the full catalogue
+- [`docs/measures.md`](docs/measures.md) — the generated catalogue of all 104 measures
 
 ---
 
