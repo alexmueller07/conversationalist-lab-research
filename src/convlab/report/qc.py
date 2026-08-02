@@ -127,6 +127,25 @@ def assess_quality(context: AnalysisContext, sync=None) -> QCReport:
                 "timing measure is unreliable",
             )
 
+    # Both files carrying one shared audio feed does not merely weaken
+    # overlap detection, it removes the evidence for it, and it distorts a
+    # measure that looks unaffected. Reported here rather than left to the
+    # per-measure "unavailable" reasons, because response latency is still
+    # computed and still looks fine.
+    if context.attribution is not None:
+        identifiable = float(
+            context.attribution.diagnostics.get("overlap_identifiable", 1.0)
+        )
+        check(
+            "overlap_measurable", identifiable, 1.0, identifiable > 0.5, "warning",
+            "the two files carry the same mixed audio, so simultaneous speech "
+            "cannot be detected (measured recall never exceeds 0.26). Overlap "
+            "and interruption measures are withheld, and response latencies "
+            "are right-censored at zero because an unresolved overlap collapses "
+            "into a hard speaker switch. Recording a separate audio file per "
+            "participant removes the limitation entirely",
+        )
+
     if context.turn_set is not None:
         n_turns = len(context.turn_set.turns)
         ftos = context.turn_set.all_ftos()
@@ -182,6 +201,14 @@ def assess_quality(context: AnalysisContext, sync=None) -> QCReport:
                 f"{quality.freeze_rate:.0%} of sampled frame pairs in {role} are "
                 "identical; the picture is freezing, which suppresses nods and "
                 "head movement without reducing tracking confidence",
+            )
+        if np.isfinite(quality.motion):
+            check(
+                f"video_motion_{role}", quality.motion, cfg.min_motion,
+                quality.motion >= cfg.min_motion, "warning",
+                f"only {quality.motion:.1%} of pixels change between frames in "
+                f"{role}; there is very little movement in this picture, so "
+                "nods, gaze shifts and expression changes will be under-detected",
             )
         if quality.height:
             check(

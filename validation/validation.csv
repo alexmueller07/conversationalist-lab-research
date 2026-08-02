@@ -17,14 +17,14 @@ speaker identity confusion,error rate,0.0011777229013587875,0.03,max,True,"wrong
 speaker attribution,strict state accuracy,0.9053608418273349,0.86,min,True,single-speaker frames; also counts frames labeled as overlap
 overlap precision,precision,0.9691075534125907,0.75,min,True,simultaneous speech
 overlap recall,recall,0.5775416131885982,0.5,min,True,under-detection is the safer failure here
-turn detection precision,precision,0.9545454545454546,0.85,min,True,
-turn detection recall,recall,1.0,0.88,min,True,
-turn onset accuracy,median error (ms),5.80748070455428,60.0,max,True,against exact scripted onsets
-response latency accuracy,median error (ms),30.923738778468433,80.0,max,True,session median floor transfer offset
+turn detection precision,precision,0.9295454545454546,0.85,min,True,
+turn detection recall,recall,0.975,0.88,min,True,
+turn onset accuracy,median error (ms),5.943396225550401,60.0,max,True,against exact scripted onsets
+response latency accuracy,median error (ms),25.92373877846765,80.0,max,True,session median floor transfer offset
 backchannel precision,precision,0.9642857142857143,0.85,min,True,
 backchannel recall,recall,0.7420634920634921,0.7,min,True,
-shared-audio identity,error rate,0.013657979489035712,0.05,max,True,same audio in both files; speakers separated by voice model
-shared-audio track stability,short speaking runs,0.14032595693779903,0.25,max,True,the flickering failure; ground truth is 0.09
-shared-audio turn boundaries,overlapping onsets,0.09538587848932675,0.3,max,True,ground truth for the same sessions is 0.17
+shared-audio identity,error rate,0.025195751992803835,0.05,max,True,same audio in both files; speakers separated by voice model
+shared-audio track stability,short speaking runs,0.09813289916348428,0.25,max,True,the flickering failure; ground truth is 0.09
+shared-audio turn boundaries,overlapping onsets,0.025207373271889398,0.3,max,True,ground truth 0.17; under-detected here because overlap is not identifiable from one feed
 filled pause precision,precision,1.0,0.9,min,True,0 spurious across 4 sessions
 filled pause recall,recall,0.8688524590163934,0.8,min,True,61 held vowels planted at known positions

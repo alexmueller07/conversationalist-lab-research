@@ -668,6 +668,7 @@ def _difference_emission(
     av_b: np.ndarray | None = None,
     av_weight: float = 0.0,
     both_acoustic: str = "sum",
+    visual_activity_weight: float | None = None,
 ) -> np.ndarray:
     """Emissions from a per-frame log-odds cue plus the visual terms.
 
@@ -694,20 +695,43 @@ def _difference_emission(
 
     acoustic_both = ll_a + ll_b if both_acoustic == "sum" else 0.5 * (ll_a + ll_b)
 
+    # The visual cue is decomposed along two axes because it is trustworthy on
+    # one and not the other.
+    #
+    #   difference  s_a - s_b   -> *who* is speaking
+    #   sum         s_a + s_b   -> *how many* are speaking
+    #
+    # The difference compares the two faces at the same instant, so whatever
+    # makes one person's score run high -- a still resting face, a large
+    # crop, an expressive mouth -- largely cancels. The sum does not cancel
+    # anything: each score is standardized against that person's own
+    # not-speaking baseline, so its absolute size says how unusual their
+    # mouth movement is for them, not how much speech is present. An
+    # animated listener and a talker can produce the same value.
+    #
+    # Weighting both axes together is what put half of one real corpus into
+    # the simultaneous-speech state. At every turn transition both mouths are
+    # moving -- one finishing a word, one starting -- so the sum peaks exactly
+    # where the difference is least informative, and "both" won. Downstream
+    # that produced turns overlapping by half a second at nearly every
+    # transition and a median floor transfer offset of exactly zero.
+    identity_weight = visual_weight
+    activity_weight = visual_weight if visual_activity_weight is None else visual_activity_weight
+
     emission = np.empty((n, N_STATES))
     emission[:, STATE_SILENCE] = (
-        log_1mp + visual_weight * (-s_a - s_b) + av_weight * (-c_a - c_b)
+        log_1mp + activity_weight * (-s_a - s_b) + av_weight * (-c_a - c_b)
     )
     emission[:, STATE_A] = (
-        log_p + energy_weight * ll_a + visual_weight * (s_a - s_b) + av_weight * (c_a - c_b)
+        log_p + energy_weight * ll_a + identity_weight * (s_a - s_b) + av_weight * (c_a - c_b)
     )
     emission[:, STATE_B] = (
-        log_p + energy_weight * ll_b + visual_weight * (s_b - s_a) + av_weight * (c_b - c_a)
+        log_p + energy_weight * ll_b + identity_weight * (s_b - s_a) + av_weight * (c_b - c_a)
     )
     emission[:, STATE_BOTH] = (
         log_p
         + energy_weight * acoustic_both
-        + visual_weight * (s_a + s_b)
+        + activity_weight * (s_a + s_b)
         + av_weight * (c_a + c_b)
         - both_penalty
     )
@@ -832,6 +856,7 @@ def attribute_speakers(
     av_b = _coherence(lip_b, loudness, n, frame_hz, cfg)
     has_visual = bool(np.any(s_a) or np.any(s_b))
     w_av = cfg.av_weight if has_visual else 0.0
+    w_act = cfg.visual_activity_weight if has_visual else 0.0
 
     # Do the two files actually carry different audio? Some setups mix one
     # shared microphone feed into every camera, in which case the level
@@ -894,7 +919,7 @@ def attribute_speakers(
     z = (delta - calib.offset_db) / max(cfg.ratio_scale_db, _EPS)
     emission = _difference_emission(
         z, log_p, log_1mp, s_a, s_b, w_energy, w_vis, cfg.both_penalty,
-        av_a, av_b, w_av,
+        av_a, av_b, w_av, visual_activity_weight=w_act,
     )
     state = decode(emission)
 
@@ -920,6 +945,7 @@ def attribute_speakers(
                 voice_cue.log_odds, log_p, log_1mp, s_a, s_b,
                 cfg.voice_weight, w_vis, cfg.both_penalty,
                 av_a, av_b, w_av, both_acoustic="mean",
+                visual_activity_weight=w_act,
             )
             state = decode(emission)
             first_pass_method = "voice-model"
@@ -1004,6 +1030,7 @@ def attribute_speakers(
             source_model.contrast_db[1] if source_model else float("nan")
         ),
         "visual_cue_used": float(has_visual),
+        "overlap_identifiable": float(not shared_audio),
         "voice_model_used": float(bool(voice_cue and voice_cue.ok)),
         "voice_model_accuracy": (
             float(voice_cue.accuracy) if voice_cue else float("nan")

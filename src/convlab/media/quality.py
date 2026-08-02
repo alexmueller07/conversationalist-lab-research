@@ -6,7 +6,7 @@ A 1080p file recorded over a weak connection can be softer, and freeze more,
 than a 720p one recorded locally; conferencing tools hold the last frame
 when packets stop arriving and the container never mentions it.
 
-So four properties are measured from the pixels, each chosen because a
+So five properties are measured from the pixels, each chosen because a
 specific measure fails when it degrades:
 
 **Sharpness.** Facial action units are estimated from small displacements of
@@ -22,6 +22,11 @@ reports full frame rate throughout.
 **Exposure.** A very dark or blown-out face is tracked less reliably, and
 the failure is silent: tracking confidence stays high on a face it has
 partly guessed.
+
+**Motion.** How much of the picture is actually changing. Distinct from
+freezing and worth both: a still person on a good connection freezes not at
+all and moves very little, and the head-movement measures are weak for the
+second reason rather than the first.
 
 **Timing regularity.** Frames arriving at uneven intervals mean the
 timestamps are approximate, and every cross-modal measure is built on
@@ -45,11 +50,30 @@ log = logging.getLogger(__name__)
 
 N_BURSTS = 16
 BURST_FRAMES = 6
-FREEZE_TOLERANCE = 0.002
+FREEZE_TOLERANCE = 1e-5
 """Mean absolute luma difference below which two consecutive frames are
-treated as the same image. Not zero: re-encoding a held frame produces
-slightly different pixels each time, so exact equality would report no
-freezing at all on exactly the files most likely to freeze."""
+treated as the same image.
+
+Effectively bit-identity, allowing only for float round-trip. That is the
+right definition and a looser one is not, which took real recordings to
+discover. An earlier version used 0.002 -- a plausible-looking "near
+identical" -- and reported 38-95 % freezing on eight genuine conversations.
+The frames were not frozen. A mean over the whole picture is dominated by
+whatever is *not* moving, and in a 720p conferencing frame the moving face
+occupies a small fraction of it, so ordinary head movement lands well under
+0.002. Measured on those files, 0.002 flagged 33-98 % of frame pairs while
+true duplicates were 0-15 % for fifteen of sixteen files and 60 % for the one
+that was genuinely freezing.
+
+The lesson generalises: a threshold on a whole-frame average measures frame
+composition at least as much as it measures motion. Freezing is a claim about
+the decoder emitting the same picture twice, so the test should be exactly
+that, and how much motion there is is a separate question -- see
+``motion`` below."""
+
+MOTION_THRESHOLD = 2.0 / 255.0
+"""Per-pixel luma change counted as that pixel having moved. Just above the
+noise floor of an 8-bit encode."""
 
 
 @dataclass
@@ -68,7 +92,12 @@ class VideoQuality:
     brightness: float = float("nan")
     """Median luma, 0-1."""
     freeze_rate: float = float("nan")
-    """Share of consecutive frame pairs that are the same image."""
+    """Share of consecutive frame pairs the decoder emitted identically."""
+    motion: float = float("nan")
+    """Median share of pixels changing by more than 2/255 between consecutive
+    frames. How much is actually happening in the picture, as distinct from
+    whether it froze -- a very still person on a good connection has a low
+    value here and a freeze rate of zero, and those mean different things."""
     timing_jitter: float = float("nan")
     """Robust spread of frame intervals as a fraction of the nominal one."""
     n_sampled: int = 0
@@ -77,7 +106,8 @@ class VideoQuality:
     def summary(self) -> str:
         return (
             f"{self.width}x{self.height}@{self.fps:.3g}fps, "
-            f"sharpness {self.sharpness:.1f}, frozen {self.freeze_rate:.0%}"
+            f"sharpness {self.sharpness:.1f}, frozen {self.freeze_rate:.0%}, "
+            f"motion {self.motion:.1%}"
         )
 
 
@@ -134,6 +164,7 @@ def measure_video_quality(
 
     sharpness: list[float] = []
     brightness: list[float] = []
+    motion: list[float] = []
     freezes = comparisons = 0
     intervals: list[float] = []
 
@@ -175,9 +206,11 @@ def measure_video_quality(
                 brightness.append(float(np.mean(gray)))
 
                 if previous is not None and previous.shape == gray.shape:
+                    difference = np.abs(gray - previous)
                     comparisons += 1
-                    if float(np.mean(np.abs(gray - previous))) < FREEZE_TOLERANCE:
+                    if float(np.mean(difference)) <= FREEZE_TOLERANCE:
                         freezes += 1
+                    motion.append(float(np.mean(difference > MOTION_THRESHOLD)))
                 stamp = float(frame.time) if frame.time is not None else None
                 if previous_time is not None and stamp is not None:
                     gap = stamp - previous_time
@@ -197,6 +230,8 @@ def measure_video_quality(
         result.brightness = float(np.median(brightness))
     if comparisons:
         result.freeze_rate = freezes / comparisons
+    if motion:
+        result.motion = float(np.median(motion))
     if len(intervals) >= 8:
         median = float(np.median(intervals))
         spread = 1.4826 * float(np.median(np.abs(np.array(intervals) - median)))

@@ -382,7 +382,7 @@ def within_turn_pause_rate(ctx: AnalysisContext) -> dict[str, float]:
     unit="proportion",
     level=DYAD_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "overlap_evidence"),
     interpretation=(
         "Includes both competitive interruption and collaborative overlap, "
         "which the interruption measures separate."
@@ -405,7 +405,7 @@ def overlap_proportion(ctx: AnalysisContext) -> float:
     unit="per minute",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "overlap_evidence"),
 )
 def turn_transition_overlap_rate(ctx: AnalysisContext) -> dict[str, float]:
     out = {}

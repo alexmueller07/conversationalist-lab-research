@@ -104,6 +104,30 @@ class AnalysisContext:
         are not themselves speaking."""
         return self.turn_segments(self.other(person)).subtract(self.speech(person))
 
+    @property
+    def overlap_evidence(self) -> "AttributionResult | None":
+        """The attribution, but only when simultaneous speech was measurable.
+
+        Measures about overlap and interruption declare this rather than
+        ``attribution`` as their requirement, so that on a recording which
+        cannot support them they come out as unavailable with a reason
+        instead of as confident numbers.
+
+        Both files carrying one shared feed is such a recording. Scored
+        against known overlap, recall there never exceeds 0.26 at any
+        setting, and raising it costs precision one-for-one -- there is no
+        operating point, because a single mixed channel carries no evidence
+        that two voices are present rather than one ambiguous one. The
+        boundary itself is affected too: an unresolved half-second overlap
+        collapses into a hard speaker switch, which is why response latencies
+        on these recordings pile up at exactly zero and should be read as
+        right-censored there.
+        """
+        if self.attribution is None:
+            return None
+        identifiable = self.attribution.diagnostics.get("overlap_identifiable", 1.0)
+        return self.attribution if float(identifiable) > 0.5 else None
+
     def note(self, message: str) -> None:
         self.warnings.append(message)
 

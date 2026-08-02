@@ -360,6 +360,21 @@ def takes_the_floor(
     if unit.containment < 0.5:
         return True
 
+    # Failing to take the floor is something *short* utterances do. A person
+    # who talks for several seconds has the floor whatever the other person
+    # is doing, so length alone settles it.
+    #
+    # Without this the rule inverts on real recordings. Attribution is never
+    # perfect, so the incumbent retains a little speech almost everywhere,
+    # and a test that compares what follows will then reject genuine turns
+    # that happen to have overlapped. Measured on eight real conversations
+    # the earlier version returned 44 turns where there were far more, a
+    # median turn of 13.5 s, and twice as many "failed interruptions" as
+    # turns -- a conversation reported as two people monologuing at each
+    # other.
+    if unit.duration >= cfg.max_incursion_s:
+        return True
+
     window = cfg.interruption_success_s
     probe = Segments.from_pairs([(unit.end, unit.end + window)])
     challenger = probe.overlap_duration(speech.get(unit.person, Segments.empty()))
@@ -369,9 +384,9 @@ def takes_the_floor(
     # incursion succeeded and this is a turn.
     if incumbent <= 0.15 * window:
         return True
-    # The incumbent is still going. The floor only changed hands if the
-    # challenger is now clearly the one carrying the conversation.
-    return challenger > 2.0 * incumbent
+    # The incumbent is still going. The floor changed hands only if the
+    # challenger is now the one carrying the conversation.
+    return challenger > incumbent
 
 
 def build_turns(

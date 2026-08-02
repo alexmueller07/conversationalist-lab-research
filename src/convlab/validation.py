@@ -450,8 +450,8 @@ def validate_shared_audio(
               "the flickering failure; ground truth is 0.09"),
         Check("shared-audio turn boundaries", "overlapping onsets",
               float(np.mean(overlapping)), 0.30, "max",
-              f"ground truth for the same sessions is "
-              f"{float(np.mean(truth_overlapping)):.2f}"),
+              f"ground truth {float(np.mean(truth_overlapping)):.2f}; under-"
+              "detected here because overlap is not identifiable from one feed"),
     )
 
 

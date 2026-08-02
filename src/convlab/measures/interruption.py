@@ -43,7 +43,7 @@ def _by(ctx: AnalysisContext, person: str, kind: str) -> list:
     unit="per minute",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "overlap_evidence"),
     interpretation=(
         "High rates can reflect either dominance or high involvement; the "
         "success rate and the partner's reaction distinguish the two."
@@ -67,7 +67,7 @@ def interruption_rate(ctx: AnalysisContext) -> dict[str, float]:
     unit="per minute",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "overlap_evidence"),
     interpretation=(
         "Often read as a marker of engagement and shared rhythm, in contrast "
         "to mid-turn interruption."
@@ -91,7 +91,7 @@ def transition_overlap_rate(ctx: AnalysisContext) -> dict[str, float]:
     unit="proportion",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "overlap_evidence"),
     interpretation=(
         "Success is judged from whether the interrupted speaker actually "
         "stopped, so it measures the outcome of the attempt rather than the "
@@ -116,7 +116,7 @@ def interruption_success_rate(ctx: AnalysisContext) -> dict[str, float]:
     unit="per minute",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "overlap_evidence"),
 )
 def interrupted_rate(ctx: AnalysisContext) -> dict[str, float]:
     out = {}
@@ -140,7 +140,7 @@ def interrupted_rate(ctx: AnalysisContext) -> dict[str, float]:
     unit="proportion",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "overlap_evidence"),
 )
 def floor_hold_rate(ctx: AnalysisContext) -> dict[str, float]:
     out = {}
@@ -166,7 +166,7 @@ def floor_hold_rate(ctx: AnalysisContext) -> dict[str, float]:
     unit="per minute",
     level=DYAD_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "overlap_evidence"),
     interpretation=(
         "A dyad-level index of who was competing for the floor. Sign is fixed "
         "as A minus B for cross-session comparability."
@@ -189,7 +189,7 @@ def interruption_asymmetry(ctx: AnalysisContext) -> float:
     unit="s",
     level=DYAD_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "overlap_evidence"),
 )
 def mean_overlap_duration(ctx: AnalysisContext) -> float:
     both = ctx.speech("A").intersect(ctx.speech("B"))

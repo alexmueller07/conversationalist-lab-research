@@ -112,6 +112,24 @@ class AttributionConfig:
     carry the decision on its own, so it is weighted to compete with the
     HMM's transition prior rather than merely nudge it."""
 
+    visual_activity_weight: float = 0.3
+    """Weight of lip motion on the *how many people are speaking* axis, as
+    opposed to the *which of them* axis.
+
+    Much lower than the identity weight, and the asymmetry is the point. The
+    difference between the two lip scores compares two faces at the same
+    instant, so whatever makes one person's score run high -- a still resting
+    face, a tighter crop, a more mobile mouth -- largely cancels. Their sum
+    cancels nothing: each score is standardized against that person's own
+    not-speaking baseline, so its size says how unusual their mouth movement
+    is for them, not how much speech is in the room.
+
+    Weighting both axes equally is what put a third to a half of a real
+    corpus into the simultaneous-speech state. At a turn transition both
+    mouths are moving -- one finishing, one starting -- so the sum peaks
+    exactly where the difference carries least information, and "both" won
+    at nearly every transition."""
+
     identical_channel_db: float = 0.5
     """Robust spread of the inter-channel level difference, in dB, below
     which the two tracks are treated as the same audio. A genuine pair of
@@ -247,6 +265,20 @@ class TurnConfig:
     overlap_min_s: float = 0.10
     """Minimum simultaneous speech to count as a real overlap rather than a
     boundary artifact."""
+
+    max_incursion_s: float = 3.0
+    """Longest stretch of speech that can still count as *not* taking the floor.
+
+    Beyond this, a person is holding the floor whatever their partner is
+    doing, and the question of who yielded does not arise. Someone who starts
+    to speak, is talked over and gives up has produced a second or two of
+    speech; if they are still going after three, both people are holding
+    forth and both have a turn.
+
+    Set well above ``backchannel_max_s`` because failing to take the floor is
+    something short utterances do. Treating a multi-second stretch as a failed
+    interruption merges two turns into one, which on real recordings produced
+    conversations that looked like alternating monologues."""
 
     interruption_success_s: float = 1.0
     """After an interruption onset, the person still speaking this long
@@ -562,16 +594,29 @@ class QCConfig:
     min_asr_confidence: float = 0.45
     min_face_coverage: float = 0.60
 
-    max_freeze_rate: float = 0.05
-    """Share of consecutive sampled frames that are the same image.
+    max_freeze_rate: float = 0.20
+    """Share of consecutive sampled frames the decoder emitted identically.
 
     Conferencing tools hold the last frame when packets stop arriving, and
     nothing in the file says so: the container still reports full frame rate.
     A held frame is worse than a missing one, because head position stops
     changing and the result is a confident measurement of a face that is not
-    moving -- nods disappear, gaze looks perfectly steady. A few percent is
-    normal for a static shot of someone sitting still; more than that means
-    the connection, not the person."""
+    moving -- nods disappear, gaze looks perfectly steady.
+
+    Calibrated against sixteen real recordings: fifteen sit at 0-15 % and one
+    at 60 %, so the limit separates the population rather than splitting it.
+    An earlier value of 5 % was set before there was anything real to
+    calibrate against."""
+
+    min_motion: float = 0.005
+    """Median share of pixels changing between consecutive frames.
+
+    Separate from freezing and answering a different question: a recording
+    can freeze not at all and still show almost nothing happening, either
+    because the person sits very still or because the encoder has smoothed
+    the picture into stillness. Head-movement and expression measures are
+    weak in that case, and the value says which recordings to distrust. Real
+    recordings here run 1-25 %."""
 
     min_video_height: int = 480
     """Below this a face occupies too few pixels for the small landmark
