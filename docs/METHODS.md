@@ -117,16 +117,18 @@ talks louder than the other, producing confident and meaningless output.
 
 The pipeline therefore measures the robust spread of the inter-channel level
 difference over speech frames. Below `identical_channel_db` (0.5 dB) it
-declares the tracks a shared feed, sets the acoustic weight to zero, skips
-unmixing entirely, and raises the lip-motion weight so that visual evidence
-carries the decision alone. If no face is tracked either, it says there is no
-evidence of who is speaking rather than emitting numbers. A genuine
-microphone pair separates speakers by 15–25 dB, so half a decibel is a wide
-margin.
+declares the tracks a shared feed and switches off both the level cue and the
+unmixing pass. A genuine microphone pair separates speakers by 15–25 dB, so
+half a decibel is a wide margin.
 
-On real Zoom recordings this works: face coverage 99.7 %, and 60 % of speech
-frames show an unambiguous lip-motion leader, splitting 52.7 % / 47.3 %
-between the two participants.
+**Lip motion alone is not enough to replace it.** That was the first design,
+and on real lab recordings it produced a speaker track that changed several
+times a second — 44 % of speaking runs under 300 ms, and half of all turns
+apparently beginning before the previous one ended. Every timing measure
+derived from such a track is wrong, and the quality checks of §11 exist
+partly to catch it.
+
+So the missing cue is rebuilt from the audio: see §4.6.
 
 ### 4.1 Cues
 
@@ -139,8 +141,25 @@ differ between cameras for reasons unrelated to who is speaking.
 **Lip motion.** Mouth aperture, normalized by inter-ocular distance so it does
 not change when a participant leans toward the camera, band-passed to
 1.5–8 Hz and enveloped via Hilbert transform. Untracked frames score 0 —
-neutral evidence, not evidence of silence. This is a supporting cue when
-microphones differ and the *only* cue when they do not.
+neutral evidence, not evidence of silence.
+
+The reference point matters more than the filter. The envelope is
+standardized against the person's own distribution **during frames where the
+voice detector reports no speech at all** — frames where this person is
+definitely not talking, so their movement there is a genuine zero.
+Standardizing against the whole session instead places the zero at *typical*
+movement, which makes roughly half of every session score positive whether or
+not anyone spoke; the difference of two such scores is then a difference of
+two noise signals, and the decoder alternates indefinitely. That is a
+missing fixed point, not a tuning problem, and no weight setting repairs it.
+
+**Audio–visual coherence.** Pearson correlation between the lip-motion
+envelope and the frame-energy envelope of the audio, in a one-second sliding
+window. Magnitude says the mouth moved; coherence says it moved *with the
+sound*. Chewing, laughing and a broad smile all occupy the articulation band
+and none of them correlates with what the microphone picks up. Both
+participants are compared against the same loudness envelope, so this cue
+needs no difference between the channels and survives a shared feed intact.
 
 ### 4.2 Pass 1 — level difference
 
@@ -201,15 +220,97 @@ overlap benefit, so that is the default.
 
 ### 4.5 Decoding
 
-Four states — silence, A, B, both — decoded with an HMM (`self_transition_logit`
-4.0) so the result is temporally coherent rather than a per-frame argmax that
-flickers several times inside a word. A mild extra penalty on direct A→B
-transitions stops the decoder using a clean switch to explain a moment of
-acoustic ambiguity. Forward–backward posteriors give a calibrated per-frame
-confidence; runs shorter than 80 ms are absorbed into their neighbors.
+Four states — silence, A, B, both — decoded with an HMM so the result is
+temporally coherent rather than a per-frame argmax that flickers several
+times inside a word. A mild extra penalty on direct A→B transitions stops the
+decoder using a clean switch to explain a moment of acoustic ambiguity.
+Forward–backward posteriors give a calibrated per-frame confidence.
+
+`self_transition_logit` is best read as an expected dwell time: with four
+states the implied probability of staying is `e^L / (e^L + 3)`, so the value
+of 6.0 corresponds to roughly 1.4 s of speech before a change becomes more
+likely than not. That is the right order for turns and still admits
+backchannels. The previous value of 4.0 implied **190 ms** — it asked the
+decoder to expect a speaker change five times a second, which is a large part
+of why weak evidence produced a track that flickered rather than one that
+tracked turns.
+
+Runs shorter than 150 ms are then absorbed into their neighbours, and
+simultaneous speech has its own longer minimum of 200 ms — but **only where
+overlap is inferred rather than observed**. The unmixed-source pass of §4.3
+measures two voices directly, so there a brief overlap is as real as a long
+one; the guard applies to the level-difference and voice-model passes, where
+brief overlap is what weak evidence decays into. Applying it everywhere costs
+half the backchannels, which are overlap by definition — a regression that is
+silent, because the sessions merely look tidier.
 
 Downstream measures use that confidence to *exclude* uncertain regions rather
 than quietly averaging over them.
+
+---
+
+### 4.6 Learning the voices when there is no level difference
+
+Two vocal tracts occupy different regions of cepstral space, so a frame can
+be assigned to one of two people with no spatial cue whatsoever. What a mixed
+recording lacks is not the *signal* but the *labels*: nothing in it says which
+region belongs to whom. The labels are therefore borrowed from vision and the
+mapping learned per session.
+
+**Features.** 12 mel-frequency cepstral coefficients (c0 dropped — it is
+loudness, which in a shared mix says nothing), plus log F0 and a voicing
+strength taken from the same log power spectrum via its real cepstrum, so
+pitch costs one extra inverse transform rather than a second pass. Pitch is
+included deliberately: it is the single most discriminative feature for a
+two-speaker problem and the one MFCCs are designed to discard.
+
+Each frame is then described by the **weighted mean and spread of those
+features over a 0.5 s neighbourhood**, weighted by speech probability. A
+single 32 ms frame is dominated by which phoneme is being produced, not by
+who is producing it; averaging over half a second suppresses the phonetic
+variation and leaves the speaker-dependent part. The spread is kept alongside
+the mean because two voices can share an average spectrum while differing in
+how much they move around it.
+
+**Labels.** Frames from the provisional visual decode, filtered three ways:
+only frames committed to a single speaker; only those inside runs of at least
+300 ms, since a flickering track's short runs are precisely its errors; and
+among those, only the upper 60 % by evidence strength. A discriminant fitted
+to confident examples still classifies ambiguous ones, whereas one fitted to
+ambiguous examples learns the ambiguity.
+
+**Model.** A linear discriminant with the pooled covariance shrunk 25 %
+toward a scaled identity before inversion. Neighbouring descriptors overlap in
+time, so the empirical covariance is near-singular in some directions and
+inverting it unshrunk puts enormous weight on exactly those — which is how a
+discriminant ends up fitting the recording's noise and reporting it as a
+speaker difference. The projection is calibrated to a log-likelihood ratio by
+fitting one-dimensional Gaussians per class, and clipped to ±6.
+
+**Scoring, and why the split must be blocked in time.** Accuracy is estimated
+on contiguous held-out stretches of the recording, never on held-out frames.
+A random frame-level split leaks badly here: frames 10 ms apart are nearly
+the same descriptor, so almost every test frame has a near-duplicate in
+training and the score approaches 1.0 for a model that has learned nothing
+generalizable. Below `voice_min_accuracy` (0.68) the cue is discarded and
+reported unavailable rather than fed forward as confident noise.
+
+The cue identifies *who*, not *how many*. In a single mixed channel the
+log-odds of a genuine mixture collapse toward zero — and so do the log-odds
+of any frame the model is merely unsure about. Summing the two single-speaker
+likelihoods for the overlap state would therefore reward uncertainty with an
+overlap label and fill the session with overlaps that never happened, so
+under this cue the mixture is scored as neutral between the two speakers and
+lip motion decides whether two mouths were actually moving.
+
+Measured on scripted sessions with the same audio copied into both files and
+synthetic lip tracking that drops out:
+
+| | lip motion only | with voice model | ground truth |
+|---|---|---|---|
+| short speaking runs | 65.5 % | **12.6 %** | 9.0 % |
+| overlapping onsets | 55.9 % | **15.5 %** | 17.1 % |
+| speaker identity error | 4.7 % | **0.3 %** | — |
 
 ---
 
@@ -225,14 +326,47 @@ with published ones.
   (≥ 50 % contained), *and the partner keeps going afterwards*. That last
   condition is what separates an acknowledgment from a successful
   interruption. When a transcript exists the text must also look like one.
-- **Turn** — a maximal run of one person's non-backchannel IPUs with no
-  intervening non-backchannel speech from the other.
+- **Turn** — a stretch of *holding the floor*, not merely of speaking. See
+  below.
 - **FTO** — next turn's start minus previous turn's end. Positive is a gap,
   negative an overlap. Lapses beyond 10 s are excluded from latency
   statistics: they are not responses, and one 20 s silence would dominate a
   median computed over a few dozen turns.
 
-**Backchannel classification is the highest-leverage step in the module.**
+### Holding the floor, not merely speaking
+
+Sorting speech by start time and treating every change of speaker as a turn
+boundary is the obvious implementation, and it fails in a specific way.
+
+Take A speaking 0–30 s while B says eight words at 12–14 s without stopping
+them. By start time that is three turns. B's turn then "begins before the
+previous speaker finished" by 18 s, entering the overlap statistics as an
+enormous negative FTO; and when A's own words resume at 31 s they appear to
+be a reply arriving 17 s late. One misplaced unit corrupts two response
+latencies and inflates the overlap rate, and with a noisy speaker track this
+happens throughout — which is how a session reports that half its turns began
+before the previous one ended.
+
+The test is therefore whether the floor changed hands:
+
+1. A unit **less than 50 % contained** in the partner's speech takes the
+   floor outright; the floor was free, so it cannot have failed to take it.
+   This covers ordinary transitions, gaps, and onsets that clip a turn ending.
+2. A unit produced **over** the incumbent takes the floor only if the
+   incumbent then falls silent (≤ 15 % of the following second), or if the
+   challenger clearly dominates what follows (more than twice the incumbent's
+   speech).
+3. Otherwise it is kept as a **failed interruption** — real speech, recorded
+   as an event, but not a turn, and it does not split the incumbent's.
+
+Rule 3 also fixes the sign of the interruption family. Counting only
+interruptions that *succeed* scores a person as less interrupting the more
+often they are talked over.
+
+Measured on scripted sessions: turn precision 0.89 → **0.95**, turn recall
+0.99 → **1.00**, median response-latency error 56 ms → **31 ms**.
+
+**Backchannel classification is the other highest-leverage step.**
 Treated as ordinary speech, every "mhm" ends the partner's turn and starts
 two new ones. Measured effect: turn counts inflate by about a third and
 latency medians are pulled toward zero.
@@ -271,6 +405,95 @@ Conditioning on previous text is **disabled**: it propagates hallucinated
 phrases across segments, far more damaging to per-turn measures than the
 small fluency gain is worth. Known hallucination phrases ("thanks for
 watching", "subtitles by…") are dropped.
+
+---
+
+## 6b. Hesitations
+
+Counting "um" and "uh" from the transcript does not work, and the failure is
+quantifiable. Recognizers are trained to produce clean text, so disfluencies
+are removed. On scripted material with every filler's position known:
+
+| | kept |
+|---|---|
+| hesitation markers (`um`, `uh`) | 4 / 9 |
+| of which `uh` | 0 / 4 |
+| discourse markers (`well`, `like`, `you know`) | 10 / 11 |
+
+Two different measurement problems, so two measures. Discourse markers are
+ordinary words the transcript retains, and stay lexical. Hesitations are
+found acoustically.
+
+**Definition.** A filled pause is a vowel held without changing: the
+articulators stop while phonation continues. Three conditions together:
+
+- **voiced** — a pitch is detectable at all;
+- **spectrally steady** — rate of MFCC change in the lowest
+  `flux_percentile` (15 %) of this speaker's own speech;
+- **flat in pitch** — |d log F0 / dt| in semitones per second below
+  `pitch_flatness_percentile` (45 %).
+
+Both thresholds are per-speaker percentiles rather than absolute values: how
+fast a spectrum moves depends on speaking rate, microphone bandwidth and the
+voice, so a fixed cut would read one participant's normal speech as
+continuous hesitation and never fire on another's.
+
+Runs are merged across 60 ms gaps and kept at 0.16–1.20 s.
+
+**Validation needed its own fixture, and that is the finding.** A speech
+engine asked to say "Um, I went there" produces the *word* fluently, at
+ordinary length with ordinary intonation — not a hesitation. Scored against
+that material the detector reported recall 0.11, with the fault entirely in
+the test set. `render_filled_pause` therefore synthesizes a genuine held
+vowel (one formant configuration, constant F0, steady amplitude) and splices
+it mid-turn, replacing that speaker's own audio so no timing changes.
+
+Against 61 planted pauses across four sessions: **precision 1.00, recall
+0.89**. Recall is bounded near 0.85 by how many planted spans reach the
+detected speech mask at all.
+
+**A rejected condition.** Hesitations mark planning, so requiring candidates
+near the edge of a speech run looked like a cheap precision gain. Measured,
+it cost 51 points of recall (0.89 → 0.38) and gained nothing, because the
+steadiness conditions already give precision 1.00 on their own. Ordinary
+speech does not hold a spectrum still for a sixth of a second, wherever in
+the utterance it occurs. The condition was removed.
+
+---
+
+## 6c. Recording quality
+
+Whether video quality matters cannot be answered from the container, so four
+properties are measured from decoded pixels, sampled in **short bursts**
+spread across the file. Bursts rather than scattered single frames because
+freezing is only visible between *consecutive* frames, and freezing is the
+artifact most likely to be present.
+
+- **Freeze rate** — share of consecutive sampled pairs whose mean absolute
+  luma difference is under 0.002. Not exact equality: re-encoding a held
+  frame produces slightly different pixels, so a zero tolerance reports no
+  freezing on exactly the files most likely to freeze. A held frame is worse
+  than a dropped one — head position stops changing, so nods vanish and gaze
+  appears perfectly steady, with tracking confidence high throughout and the
+  container still reporting full frame rate.
+- **Sharpness** — variance of a discrete Laplacian, normalized by pixel
+  count so two resolutions are comparable. Blur does not move landmarks, it
+  makes their position uncertain, adding noise to every facial measure and to
+  the lip motion attribution depends on.
+- **Brightness** — median luma. Very dark or blown-out faces track less
+  reliably, and the failure is silent.
+- **Timing jitter** — robust spread of frame intervals relative to nominal.
+
+Audio contributes a **signal-to-noise** estimate — 75th percentile of frame
+level during detected speech minus the median during detected silence — and a
+clipping fraction. The voice detector is used to locate the floor because a
+blanket low percentile of the whole track sits inside quiet speech on exactly
+the recordings whose SNR matters most; with no detected silence, no SNR is
+reported rather than a wrong one.
+
+All of these raise **warnings, never failures**. A soft or occasionally
+frozen recording still yields good turn-taking and prosody, and the useful
+response is knowing which measures to discount.
 
 ---
 
@@ -422,15 +645,55 @@ above chance. Coupled signals give z ≈ 10 with the lag recovered exactly.
 The minimum shift is capped at a quarter of the recording, so short sessions
 get a usable baseline rather than a silently withheld measure.
 
+### Directional versions
+
+Synchrony as computed above is undirected: it says two people are coordinated,
+not who followed whom. For the reactivity measures the peak is restricted to
+lags at which one partner's pattern *precedes* the other's, and **lag zero is
+excluded rather than merely deprecated** — two people reacting to the same
+joke align at zero, and admitting that lag would let a shared cause count as
+one person following the other.
+
+The event-based version of the same idea (did you start smiling shortly after
+your partner did?) also needs a chance level, and the obvious one is wrong. A
+closed-form Poisson baseline assumes events arrive independently, so it
+under-corrects for regular behavior: someone smiling once a second every
+second scored 0.14 — apparently responsive — because evenly spaced events
+fall inside a two-second window more reliably than randomly spaced ones of
+the same rate. Circularly shifting the observed onset series preserves
+whatever spacing it has and scores that person at zero.
+
 ---
 
 ## 11. Quality control
 
 Every session gets `pass` / `review` / `fail` from checks on **inputs**:
-duration, sync confidence, speech proportion, attribution certainty, turn
-count and rate, ASR confidence, face coverage. Deliberately *not* on whether
-results look plausible — screening out surprising values is how a real effect
-gets discarded.
+duration, sync confidence, speech proportion, attribution certainty, speaker
+track stability, overlapping-onset rate, turn count and rate, ASR confidence,
+face coverage, and the recording-quality measures of §6c. Deliberately *not*
+on whether results look plausible — screening out surprising values is how a
+real effect gets discarded.
+
+**Two structural checks catch a confidently wrong speaker track.** A decoder
+working from weak evidence produces a weak-evidence posterior, so it is
+confidently wrong and its own confidence cannot detect it. `speaker_track_
+stability` is the share of *speaking* runs under 300 ms; `overlapping_onset_
+rate` is the share of turns beginning before the previous ended.
+
+Silence runs are excluded from the first, and that exclusion is what makes it
+diagnostic. Brief silences are ordinary — stop closures, breaths, the pause
+inside a hesitation — so counting them puts a floor of roughly 20 % under
+every session and leaves no room between healthy and broken. Brief *speaking*
+runs have no innocent explanation: against scripted ground truth they are
+3–15 % of runs, against a track driven by lip motion alone 50–60 %.
+
+Both thresholds are calibrated against ground truth rather than chosen: on
+scripted sessions the true short-run rate is 3–15 % and the true overlapping-
+onset rate 11–21 %, so the limits sit at 25 % and 30 %. A detector reporting
+*zero* of either would be as wrong as one reporting only them.
+
+Recording-quality checks are warnings rather than failures throughout, for
+the reason given in §6c.
 
 **Turn count and turn rate answer different questions**, and an absolute
 count conflates them. Whether a conversation happened at all is a matter of

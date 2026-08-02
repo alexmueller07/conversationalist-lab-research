@@ -1,6 +1,151 @@
 # Measure catalogue
 
-104 measures across 13 families. Generated from the registry; do not edit by hand.
+132 measures across 14 families. Generated from the registry; do not edit by hand.
+
+## Affect (11)
+
+### `facial_valence_mean` -- Facial valence
+
+- **Level:** person &nbsp; **Unit:** index
+- **Requires:** face
+
+Mean pleasantness of facial expression across tracked frames: smiling and cheek raising minus frowning, brow lowering and nose wrinkling.
+
+*Interpretation.* Higher values indicate a more positive-looking face. This describes visible muscle action, not felt emotion, and speaking moves the mouth for reasons unrelated to affect -- compare with the listening figure before interpreting.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `facial_valence_variability` -- Facial valence variability
+
+- **Level:** person &nbsp; **Unit:** index
+- **Requires:** face
+
+Standard deviation of facial valence across tracked frames.
+
+*Interpretation.* Higher values indicate a face that changes between pleasant and unpleasant more, rather than holding one expression.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `negative_affect_proportion` -- Time looking negative
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** face
+
+Proportion of tracked frames whose facial valence is in the lower part of the range observed across both participants in this session.
+
+*Interpretation.* Higher values indicate more of the conversation spent looking displeased, unimpressed or concentrating. The last of those is a genuine confound: brow lowering does not distinguish them.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `partner_laughter_uptake` -- Laughing back
+
+- **Level:** person &nbsp; **Unit:** probability above chance
+- **Requires:** laughter
+
+How much more often this person starts laughing within two seconds of their partner starting to laugh than their own laughter rate would produce by chance.
+
+*Interpretation.* Higher values indicate laughter that follows the partner's rather than occurring independently.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `partner_smile_uptake` -- Smiling back
+
+- **Level:** person &nbsp; **Unit:** probability above chance
+- **Requires:** face
+
+How much more often this person starts smiling within two seconds of their partner starting to smile than their own overall smiling rate would produce by chance.
+
+*Interpretation.* Higher values indicate a person whose smiling follows their partner's. Zero means their partner's smiles made no difference; a person who simply smiles a great deal scores zero, not high, which is the point of subtracting the base rate.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `positive_affect_proportion` -- Time looking positive
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** face
+
+Proportion of tracked frames whose facial valence is in the upper part of the range observed across both participants in this session.
+
+*Interpretation.* Higher values indicate more of the conversation spent looking pleased. The threshold is set within the session, so this compares the two partners with each other and not with other sessions.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `valence_reactivity` -- Expression follows partner
+
+- **Level:** person &nbsp; **Unit:** correlation above chance
+- **Requires:** face
+
+Correlation between this person's facial valence and their partner's a moment earlier, above the level produced by circularly shifted surrogates of the same two signals.
+
+*Interpretation.* Higher values indicate expression that tracks the partner's with this person lagging behind. Directional: both partners reacting to the same joke raises both figures equally, so only a difference between them says who was following whom.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `valence_synchrony` -- Valence synchrony (above chance)
+
+- **Level:** dyad &nbsp; **Unit:** correlation above chance
+- **Requires:** face
+
+How much the two partners' facial valence tracks each other, over and above the level produced by shuffled surrogates.
+
+*Interpretation.* Higher values indicate two faces that brighten and darken together. Undirected -- it does not say who led.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `valence_synchrony_z` -- Valence synchrony reliability
+
+- **Level:** dyad &nbsp; **Unit:** z
+- **Requires:** face
+
+Standard deviations by which the observed valence synchrony exceeds its surrogate distribution.
+
+*Interpretation.* Above 1.96 the synchrony is beyond what independent signals with the same autocorrelation would produce. Below that the value above should be read as no evidence of coordination, whatever its size.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `valence_while_listening` -- Valence while listening
+
+- **Level:** person &nbsp; **Unit:** index
+- **Requires:** face, turn_set
+
+Mean facial valence during frames where the partner holds the floor and this person is not speaking.
+
+*Interpretation.* The cleaner of the two valence figures: with the mouth not articulating, a raised smile channel is far more likely to be a smile. Higher values indicate a more positive listener.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
+
+### `valence_while_speaking` -- Valence while speaking
+
+- **Level:** person &nbsp; **Unit:** index
+- **Requires:** face, turn_set
+
+Mean facial valence during this person's own speech.
+
+*Interpretation.* Read alongside the listening figure rather than on its own: articulation moves the same muscles the index is built from, so a speaker's valence is partly a measure of which vowels they used.
+
+- Ekman & Friesen (1978) Facial Action Coding System
+- Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
+- Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
 
 ## Backchannel (6)
 
@@ -161,7 +306,7 @@ Mean turn duration in the final third minus the first third. Positive means cont
 
 *Interpretation.* Lengthening turns often accompany deeper disclosure; shortening ones can indicate the conversation running out of material.
 
-## Facial Expression (5)
+## Facial Expression (8)
 
 ### `brow_raise_rate` -- Eyebrow raise rate
 
@@ -201,6 +346,22 @@ Proportion of the conversation with both people smiling at once.
 
 *Interpretation.* Simultaneous smiling is a dyadic marker of shared positive affect and tracks self-reported enjoyment more closely than either person's smiling alone.
 
+### `smile_count` -- Number of smiles
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face
+
+Count of distinct smile episodes: stretches above the smile threshold, merged across gaps shorter than 0.2 s.
+
+*Interpretation.* Episodes rather than frames, so a single long smile counts once. The merging matters: without it, one smile that dips briefly below threshold would be reported as several.
+
+### `smile_mean_duration` -- Mean smile length
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** face
+
+Mean duration of a smile episode.
+
 ### `smile_proportion` -- Time smiling
 
 - **Level:** person &nbsp; **Unit:** proportion
@@ -208,7 +369,14 @@ Proportion of the conversation with both people smiling at once.
 
 Proportion of tracked frames with a smile above threshold sustained for at least 300 ms.
 
-## Gaze (6)
+### `smile_total_duration` -- Time spent smiling
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** face
+
+Total seconds occupied by detected smile episodes.
+
+## Gaze (7)
 
 ### `gaze_partner_proportion` -- Time looking at partner
 
@@ -221,6 +389,15 @@ Proportion of tracked frames in which this person's gaze was within tolerance of
 
 - Kendon (1967) Acta Psychologica 26:22 -- gaze direction in conversation
 - Argyle & Dean (1965) Sociometry 28:289 -- eye contact and intimacy equilibrium
+
+### `gaze_partner_time` -- Time looking at partner
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** face
+
+Seconds spent with gaze within tolerance of the estimated partner direction, counting only frames where the face was tracked.
+
+*Interpretation.* The quantity behind the gaze proportion. Because untracked frames are excluded rather than assumed, this under-counts by however much tracking was lost -- check face coverage before comparing two people.
 
 ### `gaze_speaker_listener_gap` -- Speaking-listening gaze difference
 
@@ -277,7 +454,7 @@ Proportion of the conversation in which both people were looking at each other a
 - Kendon (1967) Acta Psychologica 26:22 -- gaze direction in conversation
 - Argyle & Dean (1965) Sociometry 28:289 -- eye contact and intimacy equilibrium
 
-## Head (3)
+## Head (6)
 
 ### `head_shake_rate` -- Head shake rate
 
@@ -287,6 +464,22 @@ Proportion of the conversation in which both people were looking at each other a
 Rhythmic side-to-side head movements per minute.
 
 *Interpretation.* Often disagreement or disbelief, but also used as an intensifier while telling a story, so it should not be read as negative alone.
+
+### `nod_count` -- Number of nods
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face
+
+Count of head-pitch oscillations of at least 1.2 cycles.
+
+*Interpretation.* The raw count behind the nod rate. A nod here is an oscillation, not a single downward movement -- that distinction is what keeps postural adjustments out of the count.
+
+### `nod_mean_duration` -- Mean nod length
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** face
+
+Mean duration of a detected nod.
 
 ### `nod_rate` -- Overall nod rate
 
@@ -305,6 +498,15 @@ Head nods per minute of the partner's speaking time. A nod is a rhythmic pitch o
 *Interpretation.* The visual counterpart of a vocal backchannel, and a direct index of active listening. Normalized by the partner's talk time so that having a quiet partner does not read as inattention.
 
 - Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- listener responses as a collaborative process
+
+### `nod_total_duration` -- Time spent nodding
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** face
+
+Total seconds occupied by detected nods.
+
+*Interpretation.* Read with the count: the same total can be a few long agreements or many short ones, and those are different listening styles.
 
 ## Interruption (7)
 
@@ -419,7 +621,7 @@ Episodes per minute in which both people laughed within 1.5 seconds of one anoth
 - Provine (1993) Ethology 95:291 -- laughter as a social, largely involuntary vocalisation
 - Smoski & Bachorowski (2003) Cognition & Emotion 17:327 -- antiphonal laughter between friends and strangers
 
-## Lexical (17)
+## Lexical (20)
 
 ### `agreement_rate` -- Explicit agreement rate
 
@@ -428,6 +630,18 @@ Episodes per minute in which both people laughed within 1.5 seconds of one anoth
 
 Agreement tokens ('exactly', 'absolutely', 'of course') per 100 words, counted only inside floor-holding turns so that backchannels are not double-counted here.
 
+### `discourse_marker_rate` -- Discourse marker rate
+
+- **Level:** person &nbsp; **Unit:** per 100 words
+- **Requires:** transcript
+
+'like', 'you know', 'I mean', 'sort of', 'well' and similar per 100 words, counting multi-word forms as single events.
+
+*Interpretation.* These are ordinary words, so the transcript keeps them -- 10 of 11 survived in scripted material, against 4 of 9 hesitations. Kept separate from hesitation for that reason and one other: their frequency varies strongly with dialect and age, so pooling the two produces a 'filler rate' that mostly measures which kind a speaker favors.
+
+- Schiffrin (1987) Discourse Markers
+- Fox Tree (2010) Lang. Linguist. Compass 4:269
+
 ### `emotion_word_rate` -- Emotion word rate
 
 - **Level:** person &nbsp; **Unit:** per 100 words
@@ -435,14 +649,14 @@ Agreement tokens ('exactly', 'absolutely', 'of course') per 100 words, counted o
 
 Explicit emotion terms per 100 words.
 
-### `filler_rate` -- Filled pause rate
+### `filler_rate` -- Filled pauses written down (lower bound)
 
 - **Level:** person &nbsp; **Unit:** per 100 words
 - **Requires:** transcript
 
-Filled pauses ('um', 'uh') per 100 words. Discourse markers such as 'like' and 'you know' are deliberately excluded.
+Filled pauses ('um', 'uh') per 100 words, counted in the transcript. A lower bound only: recognizers are trained to produce clean text and delete most hesitations.
 
-*Interpretation.* Filled pauses mark planning load. They are not simply a defect: they reliably signal that the speaker intends to continue, and listeners use them to avoid taking the floor prematurely.
+*Interpretation.* Not to be compared across sessions on its own. Measured against scripted material the recognizer kept 4 of 9 hesitations and 0 of 4 instances of 'uh', so this counts whichever ones happened to survive. Use the acoustic hesitation rate instead, and this one only to see how much the transcript lost.
 
 ### `first_person_plural_rate` -- First-person plural rate
 
@@ -470,6 +684,27 @@ Filled pauses ('um', 'uh') per 100 words. Discourse markers such as 'like' and '
 Hedges ('maybe', 'I think', 'sort of') per 100 words, counting multi-word forms as single events.
 
 *Interpretation.* Hedging softens claims. It reads as tentative in some contexts and as politeness in others, so direction is not assumed.
+
+### `hesitation_duration_mean` -- Mean hesitation length
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** filled_pauses
+
+Mean duration of the held vowels detected in this person's speech.
+
+*Interpretation.* Longer hesitations indicate more time spent planning while holding the floor. Read with the rate: many short ones and few long ones are different habits.
+
+### `hesitation_rate` -- Hesitation rate
+
+- **Level:** person &nbsp; **Unit:** per minute of speech
+- **Requires:** filled_pauses
+
+Held, unchanging vowels per minute of this person's own speech, found in the audio rather than the transcript.
+
+*Interpretation.* Higher values indicate more audible planning. This is the measure to use for hesitation: it does not depend on the recognizer, which deletes most of them. Rate is per minute of the speaker's own speech, not per minute of session, so it does not simply track how much they talked.
+
+- Clark & Fox Tree (2002) Cognition 84:73 -- 'um' and 'uh' as words
+- Shriberg (2001) J. Int. Phon. Assoc. 31:153 -- disfluency in spontaneous speech
 
 ### `lexical_diversity` -- Lexical diversity
 
@@ -662,7 +897,7 @@ Local cycle-to-cycle variation in pitch period, a standard measure of vocal stab
 
 Local cycle-to-cycle variation in amplitude.
 
-## Semantic (11)
+## Semantic (13)
 
 ### `callback_max_lag` -- Longest callback reach
 
@@ -704,6 +939,15 @@ How evenly the two partners revived each other's earlier material, as 1 minus th
 Average time spent on a topic before the conversation moved on.
 
 *Interpretation.* Long topics indicate sustained joint attention; very short ones suggest the pair struggled to develop any subject.
+
+### `median_topic_duration` -- Median topic length
+
+- **Level:** dyad &nbsp; **Unit:** seconds
+- **Requires:** semantics
+
+Median duration of the detected topic segments.
+
+*Interpretation.* Longer topics indicate a conversation that stays with a subject; shorter ones a conversation that ranges. Median rather than mean, because one long stretch at the end would otherwise dominate.
 
 ### `other_directed_callback_rate` -- Callbacks to the partner's material
 
@@ -754,6 +998,15 @@ Proportion of topic segments this person opened.
 - **Requires:** semantics
 
 Number of topic changes per minute.
+
+### `topics_initiated` -- Topics introduced
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** semantics
+
+Number of topic segments whose first turn belongs to this person.
+
+*Interpretation.* Who moved the conversation on. Boundaries come from a drop in lexical cohesion between neighboring blocks of turns, so a 'topic' here is a stretch that hangs together, not a subject a human coder would name -- and the person credited is whoever spoke first after the boundary, which is usually but not always the one who introduced it.
 
 ## Synchrony (7)
 
@@ -837,7 +1090,7 @@ Standard deviations by which the observed smile synchrony exceeds its surrogate 
 - Boker, Xu, Rotondo & King (2002) Psychol. Methods 7:338 -- windowed cross-correlation for irregular coupled series
 - Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
 
-## Turn Taking (17)
+## Turn Taking (22)
 
 ### `fast_response_proportion` -- Proportion of fast responses
 
@@ -850,6 +1103,15 @@ Share of this person's responses that begin within 200 ms of the partner finishi
 
 - Stivers et al. (2009) PNAS 106:10587 -- universality of ~200 ms turn transitions
 - Heldner & Edlund (2010) J. Phonetics 38:555 -- pauses, gaps and overlaps
+
+### `listening_time` -- Time spent listening
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** turn_set
+
+Seconds during which the partner held the floor and this person was not speaking.
+
+*Interpretation.* Silence with the partner talking, as opposed to silence with nobody talking. This is the denominator the listening behaviors -- nodding, gaze, backchannels -- should be read against.
 
 ### `longest_silence` -- Longest mutual silence
 
@@ -873,6 +1135,15 @@ Average length of mutual silences longer than 500 ms.
 - **Requires:** turn_set
 
 Average length of this person's floor-holding turns.
+
+### `median_turn_duration` -- Median turn length
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** turn_set
+
+Median duration of this person's floor-holding turns.
+
+*Interpretation.* Median rather than mean: turn lengths are strongly skewed, and one long story would move a mean by more than the rest of the conversation combined.
 
 ### `overlap_proportion` -- Proportion of simultaneous speech
 
@@ -931,6 +1202,33 @@ Share of the conversation in which neither person was speaking.
 - **Requires:** turn_set
 
 Number of mutual silences longer than 500 ms per minute. Brief articulatory gaps are excluded.
+
+### `silent_time` -- Time spent not speaking
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** turn_set
+
+Total seconds this person was not speaking, whether the partner was talking or nobody was.
+
+*Interpretation.* The complement of speaking time. Most of it is ordinary listening rather than reticence -- in a two-person conversation each person is silent for most of it by construction.
+
+### `speaking_time` -- Time spent speaking
+
+- **Level:** person &nbsp; **Unit:** seconds
+- **Requires:** turn_set
+
+Total seconds this person was speaking, including their speech during overlap and their backchannels.
+
+*Interpretation.* The raw quantity behind talk-time share. Reported alongside it because a 60/40 split means something different in a three-minute conversation than in a twenty-minute one.
+
+### `spoke_first` -- Opened the conversation
+
+- **Level:** person &nbsp; **Unit:** indicator
+- **Requires:** turn_set
+
+1 for the participant whose turn came first, 0 for the other.
+
+*Interpretation.* Who began. Not a skill measure on its own -- seating, the experimenter's last words and simple chance all bear on it -- but it conditions everything that follows, since the opener sets the first topic and the other person's first turn is a response.
 
 ### `talk_time_balance` -- Talk time balance
 

@@ -5,8 +5,9 @@
 Point it at a folder of recorded conversations — **two videos per pair, one
 per person**. It works out who
 spoke when, how quickly each replied, what they looked at, when they nodded,
-smiled and laughed, how their speech and movement tracked one another, and
-how all of that changed as the conversation went on — **104 measures**, each
+smiled and laughed, how pleasant they looked and how much that followed
+their partner, how their speech and movement tracked one another, and how all
+of that changed as the conversation went on — **132 measures**, each
 defined and unit-labeled in a codebook, plus a visual report per pair.
 
 ![The convlab desktop application](docs/images/app.png)
@@ -170,7 +171,7 @@ because the slow steps are cached.
 ```
 results/
 ├── measures_all.csv        every pair, every measure — this is the one to analyze
-├── codebook.csv            what all 104 measures mean
+├── codebook.csv            what all 132 measures mean
 ├── session_summary.csv     pass / review / fail per pair
 └── dyad012/
     ├── dashboard.html      the visual report
@@ -281,18 +282,22 @@ error**, overlap detection at **0.97 precision**.
 # Validation
 
 `convlab validate` builds material whose answer is known by construction, runs
-the real detectors on it, and scores them. All 21 checks pass:
+the real detectors on it, and scores them. All 29 checks pass:
 
 | Check | Result |
 |---|---|
 | Camera sync recovery | 0.0 ms max error, offsets 0–11 s |
-| Speech detection | F1 0.939 per person |
-| Speaker identity confusion | 0.04 % |
-| Overlap detection | precision 0.971, recall 0.606 |
-| Turn detection | precision 0.894, recall 0.950 |
-| **Turn onset accuracy** | **5.8 ms** median error |
-| **Response latency accuracy** | **56 ms** median error |
-| Backchannel detection | precision 0.964, recall 0.773 |
+| Speech detection | F1 0.940 per person |
+| Speaker identity confusion | 0.12 % |
+| Overlap detection | precision 0.969, recall 0.578 |
+| Turn detection | precision 0.955, recall 1.000 |
+| **Turn onset accuracy** | **5.7 ms** median error |
+| **Response latency accuracy** | **31 ms** median error |
+| Backchannel detection | precision 0.964, recall 0.742 |
+| Hesitation detection | precision 1.00, recall 0.87 |
+| **Same audio in both files** — identity | **1.4 %** error |
+| **Same audio in both files** — track stability | 14 % short runs (truth 9 %) |
+| **Same audio in both files** — turn boundaries | 10 % overlapping onsets (truth 17 %) |
 | Long-range callbacks | precision 0.967, recall 1.000 |
 | Nod detection | precision 1.00, recall 1.00 |
 | Nods vs single dips / shakes / drift | 0 false positives each |
@@ -372,11 +377,13 @@ Save it as `sessions.json` next to the videos and point the app or
 Pipeline order, and why:
 
 ```
-probe → decode audio → align cameras → voice activity → face tracking
-      → speaker attribution  (level unmixing + lip motion, HMM decoded)
+probe → decode audio → align cameras → voice activity → recording quality
+      → face tracking
+      → speaker attribution  (level unmixing · lip motion · audio-visual
+                              coherence · learned voice model, HMM decoded)
       → turns → transcription → turns again
-      → prosody · semantics · body · laughter
-      → 104 measures → tables · codebook · QC · dashboard
+      → prosody · semantics · body · hesitations · laughter
+      → 132 measures → tables · codebook · QC · dashboard
 ```
 
 Attribution runs *after* face tracking so mouth movement can inform it. Turn
@@ -398,13 +405,21 @@ Load-bearing design decisions:
 - **Backchannels are excluded from turn construction.** Counting "mhm" as a
   turn inflates turn counts by about a third and pulls latency medians toward
   zero — the single convention that most changes the headline numbers.
+- **A turn is a stretch of holding the floor**, not of speaking. Sorting
+  speech by start time and calling every speaker change a boundary makes one
+  mid-turn interjection produce both a twenty-second "overlap" and a
+  twenty-second "reply", corrupting two response latencies apiece.
+- **Speakers are separated even when both files carry the same audio.** A
+  voice model is learned per session from labels the visual cues supply, and
+  discarded if it fails held-out cross-validation. Without it, conferencing
+  exports leave only lip motion and the speaker track flickers.
 
 No GPU required, and no `ffmpeg` on `PATH` (PyAV links the libraries directly,
 a common silent failure on lab Windows machines).
 
 - [`docs/HOW-IT-WORKS.md`](docs/HOW-IT-WORKS.md) — **start here**: full walkthrough of every stage and how each measure is defined
 - [`docs/METHODS.md`](docs/METHODS.md) — algorithms, thresholds, and their justification
-- [`docs/measures.md`](docs/measures.md) — the generated catalogue of all 104 measures
+- [`docs/measures.md`](docs/measures.md) — the generated catalogue of all 132 measures
 
 ---
 
