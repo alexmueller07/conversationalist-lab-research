@@ -195,3 +195,70 @@ class TestAggregates:
         turn_set = build_turn_set(speech, cfg, duration=6.0)
         # Silent from 2-3 and 5-6.
         assert turn_set.mutual_silence().total == pytest.approx(2.0)
+
+
+class TestFloorHolding:
+    """A turn is a stretch of holding the floor, not merely of speaking.
+
+    Ordering speech by start time and calling every speaker change a boundary
+    is the obvious implementation and it is wrong in a specific, damaging
+    way: one interjection inside a long turn produces both an onset that
+    "precedes" the previous turn's end by the whole length of that turn, and
+    a reply that appears to arrive seconds late. Both land in the response
+    latency distribution, which is the measure this project exists to report.
+    """
+
+    def _speech(self, a, b):
+        return {"A": Segments.from_pairs(a), "B": Segments.from_pairs(b)}
+
+    def test_interjection_does_not_split_the_holder(self, cfg):
+        speech = self._speech([(0.0, 30.0), (40.0, 45.0)], [(12.0, 14.0), (31.0, 39.0)])
+        turns = build_turn_set(speech, cfg, duration=50.0).turns
+        assert [t.person for t in turns] == ["A", "B", "A"]
+        assert turns[0].start == 0.0 and turns[0].end == 30.0
+
+    def test_interjection_does_not_inflate_any_latency(self, cfg):
+        speech = self._speech([(0.0, 30.0), (40.0, 45.0)], [(12.0, 14.0), (31.0, 39.0)])
+        ftos = build_turn_set(speech, cfg, duration=50.0).all_ftos()
+        assert all(abs(f) <= 2.0 for f in ftos), ftos.tolist()
+
+    def test_interjection_is_still_reported_as_an_event(self, cfg):
+        speech = self._speech([(0.0, 30.0), (40.0, 45.0)], [(12.0, 14.0), (31.0, 39.0)])
+        turn_set = build_turn_set(speech, cfg, duration=50.0)
+        assert len(turn_set.non_floor) == 1
+        failed = [i for i in turn_set.interruptions if not i.successful]
+        assert len(failed) == 1 and failed[0].interrupter == "B"
+
+    def test_a_successful_interruption_does_take_the_floor(self, cfg):
+        # B comes in at 10 and A gives up at 12: the floor changed hands.
+        speech = self._speech([(0.0, 12.0)], [(10.0, 25.0)])
+        turn_set = build_turn_set(speech, cfg, duration=30.0)
+        assert [t.person for t in turn_set.turns] == ["A", "B"]
+        assert turn_set.turns[1].fto == pytest.approx(-2.0)
+
+    def test_ordinary_alternation_is_unaffected(self, cfg):
+        speech = self._speech([(0.0, 2.0), (5.0, 7.0)], [(2.5, 4.5), (7.5, 9.5)])
+        turn_set = build_turn_set(speech, cfg, duration=11.0)
+        assert [t.person for t in turn_set.turns] == ["A", "B", "A", "B"]
+        assert turn_set.all_ftos().tolist() == pytest.approx([0.5, 0.5, 0.5])
+
+    def test_overlapping_onset_rate_stays_in_the_plausible_range(self, cfg):
+        """Alternation with a few overlaps must not read as mostly overlap."""
+        pairs_a, pairs_b, t = [], [], 0.0
+        for k in range(12):
+            pairs_a.append((t, t + 3.0))
+            start_b = t + 3.0 - (0.4 if k % 4 == 0 else -0.3)
+            pairs_b.append((start_b, start_b + 3.0))
+            t = start_b + 3.0 + 0.3
+        turn_set = build_turn_set(self._speech(pairs_a, pairs_b), cfg, duration=t + 5)
+        assert turn_set.overlapping_onset_rate() <= 0.30
+
+    def test_first_speaker_is_reported(self, cfg):
+        speech = self._speech([(5.0, 8.0)], [(0.0, 3.0)])
+        assert build_turn_set(speech, cfg, duration=10.0).first_speaker() == "B"
+
+    def test_dropped_short_turn_does_not_fragment_its_neighbour(self, cfg):
+        # B's 0.1 s blip is below min_turn_s; A's talk must stay one turn.
+        speech = self._speech([(0.0, 10.0), (10.4, 20.0)], [(10.15, 10.25)])
+        turns = build_turn_set(speech, cfg, duration=25.0).turns
+        assert [t.person for t in turns] == ["A"]

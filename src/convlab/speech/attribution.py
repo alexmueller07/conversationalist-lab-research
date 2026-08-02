@@ -1,16 +1,33 @@
 """Deciding who is speaking.
 
 Every camera records both voices, so voice activity alone cannot say whose
-voice it is. Two independent cues are available and neither suffices alone:
+voice it is. Four cues are available and none suffices alone:
 
 **Channel levels.** Each close-up camera sits near one participant, so a
-given voice reaches the two microphones at different levels. Strong
-evidence, but it degrades when someone turns away, leans back, or drops to a
-murmur.
+given voice reaches the two microphones at different levels. The strongest
+evidence there is -- when it exists. It degrades when someone turns away,
+leans back or drops to a murmur, and it vanishes entirely when the recording
+setup mixes one shared feed into every file, which is what conferencing
+tools that export per-participant video do.
 
 **Lip motion.** Mouth aperture in the 1.5-8 Hz band tracks articulation.
 Unaffected by acoustics, but it disappears whenever face tracking drops out,
-and chewing or laughing imitate it.
+and chewing or laughing imitate it. Measured as departure from the person's
+own resting face during frames where nobody is speaking, so that the scale
+has a fixed point rather than floating with the session.
+
+**Audio-visual coherence.** Whether a mouth gets busier at the moments the
+microphone gets louder. Narrower than lip motion magnitude and immune to its
+main confound, because chewing and smiling move the mouth without tracking
+the sound. Needs no difference between the channels, so it survives a shared
+feed.
+
+**A learned voice model.** Two vocal tracts occupy different regions of
+cepstral space. Nothing in a recording says which region belongs to whom, so
+the labels are borrowed from the visual cues and the mapping is fitted per
+session; the result then labels every frame, including those with no face
+tracked. This is what makes shared-feed recordings usable at all. See
+:mod:`convlab.speech.voiceprint`.
 
 Attribution runs in two passes.
 
@@ -306,6 +323,11 @@ def calibrate_channels(
     values = delta_db[speech_mask & np.isfinite(delta_db)]
     if values.size < 100:
         return Calibration(0.0, 0.0, "insufficient-data", ok=False)
+    if float(np.std(values)) < 1e-6:
+        # One shared feed mixed into both files: the difference is a constant,
+        # so there are no modes to find. Fitting a mixture to it would spend
+        # real time to return a fitting artefact.
+        return Calibration(float(np.mean(values)), 0.0, "identical-channels", ok=False)
 
     try:
         from sklearn.mixture import GaussianMixture
@@ -389,25 +411,20 @@ def fit_level_model(
     )
 
 
-def lip_motion_score(
-    aperture: np.ndarray,
-    frame_hz: float,
-    band: tuple[float, float] = (1.5, 8.0),
-    clip: float = 3.0,
-) -> np.ndarray:
-    """Speech-band mouth movement, robustly standardised.
+def lip_motion_envelope(
+    aperture: np.ndarray, frame_hz: float, band: tuple[float, float] = (1.5, 8.0)
+) -> tuple[np.ndarray, np.ndarray]:
+    """Speech-band mouth movement envelope, and which frames were tracked.
 
     The band-pass keeps articulation and removes both slow expression
     changes (a held smile) and tracking jitter. The envelope is taken with a
-    Hilbert transform so the score reflects *how much* the mouth is moving
-    rather than its instantaneous position. Untracked frames score 0, which
-    is neutral evidence rather than evidence of silence.
+    Hilbert transform so the result reflects *how much* the mouth is moving
+    rather than its instantaneous position.
     """
     aperture = np.asarray(aperture, dtype=np.float64).ravel()
-    out = np.zeros(aperture.size, dtype=np.float64)
     valid = np.isfinite(aperture)
     if valid.sum() < 8:
-        return out
+        return np.zeros(aperture.size), valid
 
     filled = aperture.copy()
     idx = np.arange(aperture.size)
@@ -416,17 +433,102 @@ def lip_motion_score(
     nyquist = frame_hz / 2.0
     lo, hi = max(1e-3, band[0] / nyquist), min(0.99, band[1] / nyquist)
     if lo >= hi:
-        return out
+        return np.zeros(aperture.size), valid
     sos = sps.butter(4, [lo, hi], btype="bandpass", output="sos")
-    envelope = np.abs(sps.hilbert(sps.sosfiltfilt(sos, filled)))
+    return np.abs(sps.hilbert(sps.sosfiltfilt(sos, filled))), valid
 
-    med = float(np.median(envelope))
-    scale = 1.4826 * float(np.median(np.abs(envelope - med)))
+
+def lip_motion_score(
+    aperture: np.ndarray,
+    frame_hz: float,
+    band: tuple[float, float] = (1.5, 8.0),
+    clip: float = 6.0,
+    quiet: np.ndarray | None = None,
+) -> np.ndarray:
+    """Mouth movement, standardised against the person's own resting face.
+
+    The reference point is the subtle part. Standardising against the median
+    of the whole session puts the zero at *typical* movement, which makes
+    roughly half of every session score positive whether or not the person
+    said anything -- so the difference between two such scores is a
+    difference of two noise signals, and a decoder driven by it alternates
+    between speakers indefinitely. That is not a tuning problem; the scale
+    has no fixed point.
+
+    ``quiet`` supplies one. Frames where the voice detector says nobody at
+    all is speaking are frames where this person is definitely not speaking,
+    so their movement distribution is a genuine zero: whatever the face does
+    while listening. Movement is then measured as departure from that, which
+    is the quantity the decision actually needs.
+
+    Untracked frames score 0 -- neutral evidence, not evidence of silence.
+    """
+    envelope, valid = lip_motion_envelope(aperture, frame_hz, band)
+    out = np.zeros(envelope.size, dtype=np.float64)
+    if valid.sum() < 8:
+        return out
+
+    reference = envelope
+    if quiet is not None:
+        quiet = np.asarray(quiet, dtype=bool).ravel()[: envelope.size]
+        usable = quiet & valid[: quiet.size]
+        if usable.sum() >= max(50, int(0.02 * envelope.size)):
+            reference = envelope[: usable.size][usable]
+
+    med = float(np.median(reference))
+    scale = 1.4826 * float(np.median(np.abs(reference - med)))
     if scale < _EPS:
         return out
     score = np.clip((envelope - med) / scale, -clip, clip)
     score[~valid] = 0.0
     return score
+
+
+def audiovisual_coherence(
+    aperture: np.ndarray,
+    loudness: np.ndarray,
+    frame_hz: float,
+    window_s: float = 1.0,
+    band: tuple[float, float] = (1.5, 8.0),
+) -> np.ndarray:
+    """Sliding correlation between mouth movement and how loud the room is.
+
+    Magnitude of mouth movement says the mouth moved; it does not say why.
+    Chewing, laughing and a broad smile all put energy in the same band as
+    articulation, and a cue built on magnitude alone reads all three as
+    speech. Coherence asks a narrower question -- does this mouth get busier
+    at the moments the microphone gets louder -- and only speech answers yes.
+
+    This is the cue that survives a shared audio feed, because it needs no
+    difference between the two channels: both people are compared against
+    the *same* loudness envelope, and only the one producing it correlates.
+
+    Returns a correlation in [-1, 1] per frame; 0 where nothing is tracked.
+    """
+    envelope, valid = lip_motion_envelope(aperture, frame_hz, band)
+    n = envelope.size
+    out = np.zeros(n, dtype=np.float64)
+    if valid.sum() < 32:
+        return out
+
+    loudness = np.asarray(loudness, dtype=np.float64).ravel()[:n]
+    if loudness.size < n:
+        loudness = np.pad(loudness, (0, n - loudness.size), mode="edge")
+
+    from scipy import ndimage
+
+    width = max(5, int(round(window_s * frame_hz)))
+
+    def local_mean(x: np.ndarray) -> np.ndarray:
+        return ndimage.uniform_filter1d(x, size=width, mode="nearest")
+
+    x = envelope - local_mean(envelope)
+    y = loudness - local_mean(loudness)
+    numerator = local_mean(x * y)
+    denominator = np.sqrt(np.maximum(local_mean(x * x), 0.0) * np.maximum(local_mean(y * y), 0.0))
+    corr = np.divide(numerator, denominator, out=np.zeros(n), where=denominator > _EPS)
+    corr[~valid] = 0.0
+    return np.clip(corr, -1.0, 1.0)
 
 
 # ----------------------------------------------------------------------
@@ -492,9 +594,31 @@ def forward_backward(log_emission: np.ndarray, log_transition: np.ndarray) -> np
     return np.exp(posterior)
 
 
-def _absorb_short_states(state: np.ndarray, min_frames: int) -> np.ndarray:
+def _clean_states(
+    state: np.ndarray, min_frames: int, min_overlap_frames: int = 0
+) -> np.ndarray:
+    """Apply the minimum-duration rules, overlap first.
+
+    Order matters. Simultaneous speech has the longer minimum, and it is the
+    state that weak evidence collapses into, so leaving it until after the
+    general pass would let a burst of spurious overlap survive by being
+    merged into longer spurious overlap. Removing it first turns each burst
+    back into whichever single speaker surrounds it, and the general pass
+    then tidies what remains.
+    """
+    out = _absorb_short_states(state, min_overlap_frames, only=STATE_BOTH)
+    return _absorb_short_states(out, min_frames)
+
+
+def _absorb_short_states(
+    state: np.ndarray, min_frames: int, only: int | None = None
+) -> np.ndarray:
     """Remove runs shorter than ``min_frames`` by extending their neighbours,
-    so a single stray frame inside a long turn cannot create a boundary."""
+    so a single stray frame inside a long turn cannot create a boundary.
+
+    ``only`` restricts the rule to runs of one particular state, which is how
+    simultaneous speech gets a longer minimum than the rest.
+    """
     if min_frames <= 1 or state.size == 0:
         return state
     out = state.copy()
@@ -504,6 +628,8 @@ def _absorb_short_states(state: np.ndarray, min_frames: int) -> np.ndarray:
         ends = np.concatenate((edges, [out.size]))
         lengths = ends - starts
         short = np.flatnonzero(lengths < min_frames)
+        if only is not None:
+            short = short[out[starts[short]] == only]
         if short.size == 0 or starts.size == 1:
             return out
         # Handle the shortest run first so ties resolve deterministically.
@@ -538,16 +664,52 @@ def _difference_emission(
     energy_weight: float,
     visual_weight: float,
     both_penalty: float,
+    av_a: np.ndarray | None = None,
+    av_b: np.ndarray | None = None,
+    av_weight: float = 0.0,
+    both_acoustic: str = "sum",
 ) -> np.ndarray:
-    """First-pass emissions from the channel-level difference alone."""
+    """Emissions from a per-frame log-odds cue plus the visual terms.
+
+    ``z`` is evidence in favour of A over B on a log-odds scale, whatever
+    produced it: the calibrated channel-level difference, or the learned
+    voice model when there is no level difference to calibrate.
+
+    ``both_acoustic`` decides how simultaneous speech is scored, and the two
+    modes are not interchangeable. With two microphones, both voices really
+    do appear in both channels, so summing the two single-speaker
+    likelihoods is the correct model and it is what the overlap validation
+    was measured against. With one shared feed the log-odds of a mixture
+    simply collapse toward zero -- and so do the log-odds of any frame the
+    model is unsure about. Summing there would reward uncertainty with an
+    overlap label and fill the session with overlaps that never happened, so
+    the mixture is scored as neutral between the two instead, leaving lip
+    motion to say whether two mouths were actually moving.
+    """
     ll_a, ll_b = _log_sigmoid(z), _log_sigmoid(-z)
     n = z.size
+    zeros = np.zeros(n)
+    c_a = zeros if av_a is None else np.asarray(av_a, dtype=np.float64)[:n]
+    c_b = zeros if av_b is None else np.asarray(av_b, dtype=np.float64)[:n]
+
+    acoustic_both = ll_a + ll_b if both_acoustic == "sum" else 0.5 * (ll_a + ll_b)
+
     emission = np.empty((n, N_STATES))
-    emission[:, STATE_SILENCE] = log_1mp + visual_weight * (-s_a - s_b)
-    emission[:, STATE_A] = log_p + energy_weight * ll_a + visual_weight * (s_a - s_b)
-    emission[:, STATE_B] = log_p + energy_weight * ll_b + visual_weight * (s_b - s_a)
+    emission[:, STATE_SILENCE] = (
+        log_1mp + visual_weight * (-s_a - s_b) + av_weight * (-c_a - c_b)
+    )
+    emission[:, STATE_A] = (
+        log_p + energy_weight * ll_a + visual_weight * (s_a - s_b) + av_weight * (c_a - c_b)
+    )
+    emission[:, STATE_B] = (
+        log_p + energy_weight * ll_b + visual_weight * (s_b - s_a) + av_weight * (c_b - c_a)
+    )
     emission[:, STATE_BOTH] = (
-        log_p + energy_weight * (ll_a + ll_b) + visual_weight * (s_a + s_b) - both_penalty
+        log_p
+        + energy_weight * acoustic_both
+        + visual_weight * (s_a + s_b)
+        + av_weight * (c_a + c_b)
+        - both_penalty
     )
     return emission
 
@@ -619,6 +781,8 @@ def attribute_speakers(
     lip_a: np.ndarray | None = None,
     lip_b: np.ndarray | None = None,
     refine: bool = True,
+    audio: np.ndarray | None = None,
+    sample_rate: int | None = None,
 ) -> AttributionResult:
     """Decode a four-state speaker timeline from acoustic and visual cues.
 
@@ -635,6 +799,10 @@ def attribute_speakers(
     refine:
         Run the second pass. Disabling it leaves a difference-only decode,
         which is useful for comparing the two and for tests.
+    audio, sample_rate:
+        The mixed audio and its rate. Needed only to learn a voice model
+        when the two tracks turn out to carry the same recording; without
+        them such a session falls back to lip motion alone.
     """
     energy_a = np.asarray(energy_a, dtype=np.float64).ravel()
     energy_b = np.asarray(energy_b, dtype=np.float64).ravel()
@@ -652,9 +820,18 @@ def attribute_speakers(
 
     calib = calibrate_channels(delta, p >= 0.5, cfg)
 
-    s_a = _visual(lip_a, n, frame_hz, cfg)
-    s_b = _visual(lip_b, n, frame_hz, cfg)
+    # Frames where the voice detector says nobody is speaking. They are the
+    # reference point for every visual cue below: whatever a face does then
+    # is that person's not-speaking baseline.
+    quiet = speech_prob < 0.25
+    loudness = 0.5 * (energy_a + energy_b)
+
+    s_a = _visual(lip_a, n, frame_hz, cfg, quiet)
+    s_b = _visual(lip_b, n, frame_hz, cfg, quiet)
+    av_a = _coherence(lip_a, loudness, n, frame_hz, cfg)
+    av_b = _coherence(lip_b, loudness, n, frame_hz, cfg)
     has_visual = bool(np.any(s_a) or np.any(s_b))
+    w_av = cfg.av_weight if has_visual else 0.0
 
     # Do the two files actually carry different audio? Some setups mix one
     # shared microphone feed into every camera, in which case the level
@@ -673,14 +850,7 @@ def attribute_speakers(
     if shared_audio:
         w_energy = 0.0
         w_vis = cfg.visual_weight_solo if has_visual else 0.0
-        if has_visual:
-            warnings.append(
-                f"the two audio tracks are the same recording (level difference "
-                f"varies by only {spread:.2f} dB), so speakers cannot be told "
-                "apart acoustically; attribution is based entirely on which "
-                "person's mouth is moving"
-            )
-        else:
+        if not has_visual and not (cfg.voiceprint and audio is not None):
             warnings.append(
                 f"the two audio tracks are the same recording ({spread:.2f} dB "
                 "spread) and no face was tracked, so there is no evidence of "
@@ -697,14 +867,77 @@ def attribute_speakers(
 
     log_transition = _transition_matrix(cfg)
     min_frames = max(1, int(round(cfg.min_state_s * frame_hz)))
+    min_overlap_frames = max(1, int(round(cfg.min_overlap_state_s * frame_hz)))
+
+    def decode(emission: np.ndarray, guard_overlap: bool = True) -> np.ndarray:
+        """Viterbi plus the minimum-duration rules.
+
+        ``guard_overlap`` is off for the unmixed-source pass alone, and the
+        distinction is not a tuning choice. That pass *observes* simultaneous
+        speech: unmixing recovers each voice's own power, so two voices at
+        once is something the model measures directly and a brief overlap is
+        as real as a long one. Every other pass *infers* overlap from
+        ambiguity or from two moving mouths, where brief overlap is what
+        weak evidence decays into. Applying the guard everywhere costs the
+        thing it is meant to protect -- backchannels are overlap by
+        definition, so a blanket minimum deletes half of them.
+        """
+        return _clean_states(
+            viterbi(emission, log_transition),
+            min_frames,
+            min_overlap_frames if guard_overlap else 0,
+        )
+
     first_pass_method = "visual-only" if shared_audio else "level-difference"
 
     # ---- pass 1: level difference -----------------------------------
     z = (delta - calib.offset_db) / max(cfg.ratio_scale_db, _EPS)
     emission = _difference_emission(
-        z, log_p, log_1mp, s_a, s_b, w_energy, w_vis, cfg.both_penalty
+        z, log_p, log_1mp, s_a, s_b, w_energy, w_vis, cfg.both_penalty,
+        av_a, av_b, w_av,
     )
-    state = _absorb_short_states(viterbi(emission, log_transition), min_frames)
+    state = decode(emission)
+
+    # ---- pass 1b: learned voice model, when there is no level cue ----
+    #
+    # With one shared feed the first pass has run on lip motion alone, which
+    # is enough to say roughly who is speaking but not stably enough to
+    # define turn boundaries. Those rough labels are the training set for an
+    # acoustic model of the two voices, which then labels every frame --
+    # including the ones where no face was tracked at all.
+    voice_cue = None
+    if shared_audio and cfg.voiceprint and audio is not None and sample_rate:
+        from convlab.speech.voiceprint import speaker_log_odds
+
+        voice_cue = speaker_log_odds(
+            audio, int(sample_rate), p, state, s_a - s_b + av_a - av_b,
+            frame_hz, n,
+            min_accuracy=cfg.voice_min_accuracy,
+            window_s=cfg.voice_context_s,
+        )
+        if voice_cue.ok:
+            emission = _difference_emission(
+                voice_cue.log_odds, log_p, log_1mp, s_a, s_b,
+                cfg.voice_weight, w_vis, cfg.both_penalty,
+                av_a, av_b, w_av, both_acoustic="mean",
+            )
+            state = decode(emission)
+            first_pass_method = "voice-model"
+            warnings.append(
+                "the two audio tracks are the same recording, so the speakers "
+                "were separated by a voice model learned from this session "
+                f"({voice_cue.note})"
+            )
+        else:
+            warnings.append(f"voice model unavailable: {voice_cue.note}")
+
+    if shared_audio and first_pass_method == "visual-only" and has_visual:
+        warnings.append(
+            f"the two audio tracks are the same recording (level difference "
+            f"varies by only {spread:.2f} dB), so speakers cannot be told "
+            "apart acoustically; attribution rests entirely on which person's "
+            "mouth is moving, which is rarely stable enough for turn timing"
+        )
 
     # ---- pass 2: unmixed source model -------------------------------
     level_model = fit_level_model(energy_a, energy_b, state)
@@ -718,7 +951,8 @@ def attribute_speakers(
     if refine and shared_audio:
         warnings.append(
             "source unmixing skipped: it requires two genuinely different "
-            "microphone feeds"
+            "microphone feeds, so simultaneous speech is detected from lip "
+            "motion rather than from the audio"
         )
     elif refine and level_model.ok:
         alpha_db, beta_db = unmix_sources(energy_a, energy_b, level_model)
@@ -732,7 +966,7 @@ def attribute_speakers(
                 visual_weight=w_vis,
                 both_penalty=cfg.both_penalty,
             )
-            state = _absorb_short_states(viterbi(emission, log_transition), min_frames)
+            state = decode(emission, guard_overlap=False)
             method = "unmixed-source"
         else:
             warnings.append(
@@ -770,6 +1004,11 @@ def attribute_speakers(
             source_model.contrast_db[1] if source_model else float("nan")
         ),
         "visual_cue_used": float(has_visual),
+        "voice_model_used": float(bool(voice_cue and voice_cue.ok)),
+        "voice_model_accuracy": (
+            float(voice_cue.accuracy) if voice_cue else float("nan")
+        ),
+        "short_state_fraction": short_state_fraction(state, frame_hz),
         "speech_proportion": float(np.mean(state != STATE_SILENCE)),
         "overlap_proportion": float(np.mean(state == STATE_BOTH)),
         "talk_proportion_A": float(np.mean(_SPEAKS_A[state])),
@@ -824,12 +1063,62 @@ def _smooth_source(x: np.ndarray, frame_hz: float, cfg: AttributionConfig) -> np
     )
 
 
+def short_state_fraction(
+    state: np.ndarray, frame_hz: float, threshold_s: float = 0.30
+) -> float:
+    """Share of *speaking* runs shorter than ``threshold_s``.
+
+    The direct measure of whether the track is tracking turns or flickering.
+    Confidence cannot substitute for it: a decoder working from weak evidence
+    produces a weak-evidence posterior, so it is confidently wrong.
+
+    Silence runs are excluded, and that exclusion is what makes the number
+    diagnostic. Brief silences are ordinary -- stop closures, breaths, the
+    pause inside a hesitation -- so counting them puts a floor of roughly 20%
+    under every session and leaves no room between healthy and broken. Brief
+    *speaking* runs have no such innocent explanation: measured against
+    scripted ground truth they are 3-15% of runs, against a track driven by
+    lip motion alone 50-60%.
+    """
+    state = np.asarray(state)
+    if state.size < 2:
+        return 0.0
+    edges = np.flatnonzero(np.diff(state) != 0)
+    starts = np.concatenate(([0], edges + 1))
+    ends = np.concatenate((edges + 1, [state.size]))
+    runs = (ends - starts)[state[starts] != STATE_SILENCE]
+    if runs.size == 0:
+        return 0.0
+    return float(np.mean(runs < threshold_s * frame_hz))
+
+
 def _visual(
-    lip: np.ndarray | None, n: int, frame_hz: float, cfg: AttributionConfig
+    lip: np.ndarray | None,
+    n: int,
+    frame_hz: float,
+    cfg: AttributionConfig,
+    quiet: np.ndarray | None = None,
 ) -> np.ndarray:
     if lip is None:
         return np.zeros(n)
-    score = lip_motion_score(lip, frame_hz, cfg.lip_motion_band)
-    if score.size >= n:
-        return score[:n]
-    return np.pad(score, (0, n - score.size))
+    score = lip_motion_score(lip, frame_hz, cfg.lip_motion_band, quiet=quiet)
+    return _fit(score, n)
+
+
+def _coherence(
+    lip: np.ndarray | None,
+    loudness: np.ndarray,
+    n: int,
+    frame_hz: float,
+    cfg: AttributionConfig,
+) -> np.ndarray:
+    if lip is None:
+        return np.zeros(n)
+    corr = audiovisual_coherence(
+        lip, loudness, frame_hz, cfg.av_window_s, cfg.lip_motion_band
+    )
+    return _fit(corr, n)
+
+
+def _fit(x: np.ndarray, n: int) -> np.ndarray:
+    return x[:n] if x.size >= n else np.pad(x, (0, n - x.size))

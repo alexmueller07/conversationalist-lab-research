@@ -31,7 +31,12 @@ from convlab.synth.audio import (
     synthesize_dyad_audio,
 )
 from convlab.synth.script import ScriptPlan, ScriptedUtterance, build_script
-from convlab.synth.session import RenderedUtterance, SynthSession, render_session
+from convlab.synth.session import (
+    RenderedUtterance,
+    SynthSession,
+    render_session,
+    synthetic_lip_aperture,
+)
 from convlab.synth.tts import TTSRenderer, available_voices, tts_available
 
 __all__ = [
@@ -45,6 +50,7 @@ __all__ = [
     "SynthSession",
     "RenderedUtterance",
     "render_session",
+    "synthetic_lip_aperture",
     "TTSRenderer",
     "tts_available",
     "available_voices",

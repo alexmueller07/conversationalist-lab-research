@@ -7,14 +7,22 @@ nod vs head shakes,false positives,0.0,0.0,max,True,yaw oscillation must not rea
 nod vs postural drift,false positives,0.0,0.0,max,True,slow drift only
 synchrony false positive,max |z| on independent signals,1.0563788472209044,1.96,max,True,raw correlation was 0.32 -- why the baseline matters
 synchrony sensitivity,z on coupled signals,10.07142349893146,3.0,min,True,lag recovered -1.20s (true -1.20s)
-speech detection,F1 per person,0.9341005670780227,0.88,min,True,2 scripted sessions
-speaker identity confusion,error rate,0.0002655296085308299,0.03,max,True,"wrong person named, among committed single-speaker frames"
-speaker attribution,strict state accuracy,0.8895628495581722,0.86,min,True,single-speaker frames; also counts frames labelled as overlap
-overlap precision,precision,0.9771266658363433,0.75,min,True,simultaneous speech
-overlap recall,recall,0.6072510822510822,0.5,min,True,under-detection is the safer failure here
-turn detection precision,precision,0.8568181818181818,0.85,min,True,
-turn detection recall,recall,0.8999999999999999,0.88,min,True,
-turn onset accuracy,median error (ms),7.473103235104084,60.0,max,True,against exact scripted onsets
-response latency accuracy,median error (ms),72.70186322738459,80.0,max,True,session median floor transfer offset
-backchannel precision,precision,1.0,0.85,min,True,
-backchannel recall,recall,0.7013888888888888,0.7,min,True,
+interjection is not a turn,turns found,3.0,3.0,max,True,A(0-30) B(12-14) B(31-39) A(40-45): the interjection must not split A's turn
+interjection latency,worst |offset| (s),1.0,2.0,max,True,no response latency may be inflated by a mid-turn incursion
+interjection is recorded,failed interruptions,1.0,1.0,min,True,speech that loses the floor is still an event
+callback precision,precision,0.9666666666666667,0.8,min,True,"29 true positives, 1 false"
+callback recall,recall,1.0,0.8,min,True,0 missed across 7 scripts
+speech detection,F1 per person,0.9398398238053663,0.88,min,True,4 scripted sessions
+speaker identity confusion,error rate,0.0012214516206370133,0.03,max,True,"wrong person named, among committed single-speaker frames"
+speaker attribution,strict state accuracy,0.905425843031318,0.86,min,True,single-speaker frames; also counts frames labelled as overlap
+overlap precision,precision,0.9691075534125907,0.75,min,True,simultaneous speech
+overlap recall,recall,0.5775416131885982,0.5,min,True,under-detection is the safer failure here
+turn detection precision,precision,0.9545454545454546,0.85,min,True,
+turn detection recall,recall,1.0,0.88,min,True,
+turn onset accuracy,median error (ms),5.653629210378597,60.0,max,True,against exact scripted onsets
+response latency accuracy,median error (ms),30.923738778468433,80.0,max,True,session median floor transfer offset
+backchannel precision,precision,0.9642857142857143,0.85,min,True,
+backchannel recall,recall,0.7420634920634921,0.7,min,True,
+shared-audio identity,error rate,0.013565638006766224,0.05,max,True,same audio in both files; speakers separated by voice model
+shared-audio track stability,short speaking runs,0.11580270719903206,0.25,max,True,the flickering failure; ground truth is 0.09
+shared-audio turn boundaries,overlapping onsets,0.08435068180195615,0.3,max,True,ground truth for the same sessions is 0.17

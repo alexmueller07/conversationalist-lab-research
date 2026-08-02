@@ -147,16 +147,79 @@ class AttributionConfig:
     onset error of 20 ms with a +9 ms bias, while raising overlap detection
     precision from 0.70 to 0.98. See ``docs/METHODS.md``."""
 
-    self_transition_logit: float = 4.0
-    """HMM self-transition preference; higher values give smoother,
-    less flickery speaker tracks."""
+    self_transition_logit: float = 6.0
+    """HMM self-transition preference; higher values give smoother, less
+    flickery speaker tracks.
 
-    min_state_s: float = 0.08
-    """Post-Viterbi cleanup: states held for less than this are absorbed."""
+    Read it as an expected dwell time: with four states the implied
+    probability of staying is ``e^L / (e^L + 3)``, so 6.0 corresponds to
+    roughly 1.4 s of speech before a change becomes more likely than not.
+    That is the right order for turns and still admits backchannels. The
+    previous value of 4.0 implied 190 ms, which asks the decoder to expect a
+    speaker change five times a second and is why weak evidence produced a
+    track that flickered rather than one that tracked turns."""
+
+    min_state_s: float = 0.15
+    """Post-Viterbi cleanup: states held for less than this are absorbed.
+
+    150 ms is below the shortest real backchannel and above the longest
+    stretch a single misread syllable can produce."""
+
+    min_overlap_state_s: float = 0.20
+    """Minimum duration for the simultaneous-speech state specifically.
+
+    Overlap is the state weak evidence collapses into, because a frame that
+    matches neither speaker cleanly looks like both. Genuine simultaneous
+    speech lasts long enough to be heard as such; anything briefer is a
+    boundary artefact and is absorbed into whichever neighbour is longer."""
 
     lip_motion_band: tuple[float, float] = (1.5, 8.0)
     """Band-pass (Hz) applied to mouth aperture. Speech-related jaw motion
     lives in roughly this range; slower motion is expression, faster is noise."""
+
+    av_weight: float = 0.8
+    """Weight of the audio-visual coherence cue: how well a person's mouth
+    movement tracks the loudness envelope of the audio.
+
+    Distinct from lip motion magnitude, and more specific. Chewing, laughing
+    and smiling all move the mouth in the speech band, so magnitude alone
+    mistakes them for speech; none of them is *synchronised* with what the
+    microphone is picking up, so coherence separates them. It matters most
+    when the two files share one audio feed, where mouth movement is
+    otherwise the only evidence there is."""
+
+    av_window_s: float = 1.0
+    """Window over which mouth movement and audio loudness are correlated.
+    Long enough for a correlation to mean something, short enough to change
+    within a turn."""
+
+    voiceprint: bool = True
+    """Learn a per-session acoustic model of the two voices when the level
+    difference is unusable.
+
+    See :mod:`convlab.speech.voiceprint`. This is what makes shared-audio
+    recordings analysable at all: without it the only cue is lip motion, and
+    a speaker track built from lip motion alone flickers badly enough that
+    every turn-level measure derived from it is wrong."""
+
+    voice_weight: float = 1.2
+    """Weight of the learned voice cue, relative to the visual terms. Higher
+    than the lip-motion weight because the cue is available on every frame
+    and is validated by held-out accuracy before it is used at all."""
+
+    voice_min_accuracy: float = 0.68
+    """Held-out frame accuracy the learned voice model must beat.
+
+    Below this the two participants cannot be told apart from the audio --
+    similar voices, heavy compression, or a provisional track too noisy to
+    learn from -- and using the model anyway would add confident noise. The
+    session then falls back to lip motion and, if that is also weak, fails
+    quality control rather than reporting numbers."""
+
+    voice_context_s: float = 0.5
+    """Neighbourhood averaged into each frame's voice descriptor. Shorter
+    windows are dominated by which phoneme is being said rather than by who
+    is saying it; longer ones blur across speaker changes."""
 
 
 @dataclass
@@ -428,20 +491,26 @@ class QCConfig:
     min_asr_confidence: float = 0.45
     min_face_coverage: float = 0.60
 
-    max_short_state_fraction: float = 0.30
-    """Fraction of speaker-state runs shorter than 300 ms, above which the
+    max_short_state_fraction: float = 0.25
+    """Fraction of *speaking* runs shorter than 300 ms, above which the
     speaker track is judged to be flickering rather than tracking turns.
 
-    Real conversation does contain brief states -- backchannels, quick
-    interjections -- but not as a plurality. When weak evidence makes the
-    decoder alternate roughly twice a second it still reports high
+    Real conversation does contain brief speaking states -- backchannels,
+    quick interjections -- but not as a plurality. When weak evidence makes
+    the decoder alternate roughly twice a second it still reports high
     confidence, because the posterior comes from the same weak evidence, so
-    confidence cannot be used to detect it."""
+    confidence cannot be used to detect it.
 
-    max_overlapping_onsets: float = 0.35
-    """Share of turns beginning before the previous speaker finished. The
-    turn-taking literature puts this near 10-20%; a value approaching half
-    means the boundaries are wrong rather than the conversation unusual."""
+    Calibrated against scripted sessions with known boundaries: ground truth
+    runs 3-15%, a correct decode of the same audio 4-16%, and a track driven
+    by lip motion alone 50-60%."""
+
+    max_overlapping_onsets: float = 0.30
+    """Share of turns beginning before the previous speaker finished.
+
+    The turn-taking literature puts this near 10-20%, and scripted sessions
+    with known boundaries land at 11-21%, so a value approaching half means
+    the boundaries are wrong rather than the conversation unusual."""
 
 
 @dataclass

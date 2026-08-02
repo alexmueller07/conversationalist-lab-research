@@ -95,6 +95,51 @@ class SynthSession:
         )
 
 
+def synthetic_lip_aperture(
+    state: np.ndarray,
+    frame_hz: float,
+    person: str,
+    seed: int = 0,
+    dropout_rate: float = 0.004,
+    noise: float = 0.55,
+) -> np.ndarray:
+    """Mouth aperture for one participant, given the true speaker sequence.
+
+    Needed to test the shared-audio path, which is the setup a conferencing
+    tool produces: every file carries the same mixed feed, so lip motion is
+    the only thing distinguishing the two people and it has to be part of the
+    fixture rather than assumed perfect.
+
+    The nuisance terms are the point. A resting face is not still -- it nods,
+    swallows and smiles -- so the listener's aperture carries noise in the
+    same band as articulation, and face tracking drops out for seconds at a
+    time. A detector that only works on a clean square wave would pass a test
+    without those and fail on a recording.
+
+    NaN marks frames where the face was not tracked.
+    """
+    rng = np.random.default_rng(seed)
+    code = 1 if person == "A" else 2
+    n = int(np.asarray(state).size)
+    t = np.arange(n) / frame_hz
+
+    speaking = (state == code) | (state == 3)
+    aperture = speaking * (1.0 + 0.6 * np.sin(2 * np.pi * 3.1 * t))
+    aperture = aperture + noise * rng.normal(0, 1, n)
+    aperture = aperture + 0.9 * np.sin(2 * np.pi * 0.15 * t + code)
+
+    lost = np.zeros(n, dtype=bool)
+    k = 0
+    while k < n:
+        if rng.random() < dropout_rate:
+            span = int(rng.uniform(0.5, 4.0) * frame_hz)
+            lost[k : k + span] = True
+            k += span
+        k += 1
+    aperture[lost] = np.nan
+    return aperture
+
+
 def render_session(
     plan: ScriptPlan | None = None,
     seed: int = 0,

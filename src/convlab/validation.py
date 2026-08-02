@@ -30,6 +30,7 @@ from convlab.config import SyncConfig
 from convlab.models import ensure
 from convlab.speech.attribution import attribute_speakers
 from convlab.speech.vad import SileroVAD, probability_to_grid
+from convlab.timeline import Segments
 from convlab.synchrony import windowed_lagged_correlation
 from convlab.synth import build_script, render_session, tts_available
 from convlab.turns import build_turn_set
@@ -375,6 +376,119 @@ def validate_speech_chain(
     )
 
 
+def validate_shared_audio(
+    report: ValidationReport, seeds=(3, 7, 11, 17), model_dir: str = "models"
+) -> None:
+    """The conferencing-export case: one mixed feed copied into both files.
+
+    This is not a hypothetical. Tools that record a separate video per
+    participant usually put the *same* mixed audio in each of them, so the
+    level difference -- the pipeline's strongest cue -- is identically zero.
+    The first version of this system handled that by falling back on lip
+    motion, which produced a speaker track that changed several times a
+    second: on real lab recordings 44% of speaking runs were under 300 ms and
+    half of all turns appeared to begin before the previous one ended.
+
+    The three numbers below are what that failure looked like, so they are
+    what has to be watched. Ground truth for the same material is 3-15% short
+    runs and 11-21% overlapping onsets, which is what a correct decode should
+    reproduce -- not zero.
+    """
+    if not tts_available():
+        report.notes.append(
+            "shared-audio checks skipped: system speech synthesis unavailable"
+        )
+        return
+
+    from convlab.speech.attribution import short_state_fraction
+    from convlab.synth import synthetic_lip_aperture
+
+    acfg, atcfg, tcfg = AudioConfig(), AttributionConfig(), TurnConfig()
+    fs, hz = acfg.sample_rate, acfg.frame_hz
+    vad = SileroVAD(ensure("silero_vad", model_dir), fs)
+
+    identity, short_runs, overlapping, truth_overlapping = [], [], [], []
+    for seed in seeds:
+        session = render_session(
+            plan=build_script(n_turns=20, seed=seed), seed=seed, sample_rate=fs
+        )
+        n_frames = frame_count(session.tracks["wide"].size, fs, hz)
+        truth_state = session.state_sequence(hz)[:n_frames]
+
+        shared = session.tracks["wide"]
+        probability = probability_to_grid(
+            vad.probabilities([shared])[0], vad.chunk_hz, n_frames, hz
+        )
+        energy = frame_energy(shared, fs, hz, band=acfg.speech_band, n_frames=n_frames)
+
+        attribution = attribute_speakers(
+            energy, energy.copy(), probability, hz, atcfg,
+            lip_a=synthetic_lip_aperture(truth_state, hz, "A", seed=seed + 900),
+            lip_b=synthetic_lip_aperture(truth_state, hz, "B", seed=seed + 901),
+            audio=shared, sample_rate=fs,
+        )
+        predicted = attribution.state[:n_frames]
+
+        single = (truth_state == 1) | (truth_state == 2)
+        committed = single & ((predicted == 1) | (predicted == 2))
+        if committed.any():
+            identity.append(
+                float(np.mean(predicted[committed] != truth_state[committed]))
+            )
+        short_runs.append(short_state_fraction(predicted, hz))
+
+        turn_set = build_turn_set(attribution.speech, tcfg, session.duration)
+        overlapping.append(turn_set.overlapping_onset_rate())
+        true_ftos = np.array(session.floor_transfer_offsets())
+        truth_overlapping.append(float(np.mean(true_ftos < 0)))
+
+    report.add(
+        Check("shared-audio identity", "error rate", float(np.mean(identity)), 0.05,
+              "max", "same audio in both files; speakers separated by voice model"),
+        Check("shared-audio track stability", "short speaking runs",
+              float(np.mean(short_runs)), 0.25, "max",
+              "the flickering failure; ground truth is 0.09"),
+        Check("shared-audio turn boundaries", "overlapping onsets",
+              float(np.mean(overlapping)), 0.30, "max",
+              f"ground truth for the same sessions is "
+              f"{float(np.mean(truth_overlapping)):.2f}"),
+    )
+
+
+def validate_turn_boundaries(report: ValidationReport, seed: int = 0) -> None:
+    """A unit spoken inside someone else's turn must not become a turn.
+
+    Ordering speech by start time and calling every speaker change a turn
+    boundary produces two artefacts from a single interjection: an onset that
+    precedes the previous turn's end by the whole length of that turn, and a
+    reply that appears to arrive many seconds late. Both land in the response
+    latency distribution. This check pins the behaviour with no audio in the
+    loop at all, so a regression is unambiguous.
+    """
+    cfg = TurnConfig()
+    speech = {
+        # A holds the floor for 30 s; B says eight words in the middle and A
+        # talks straight through it, then they alternate normally.
+        "A": Segments.from_pairs([(0.0, 30.0), (40.0, 45.0)]),
+        "B": Segments.from_pairs([(12.0, 14.0), (31.0, 39.0)]),
+    }
+    turn_set = build_turn_set(speech, cfg, duration=50.0)
+    ftos = turn_set.all_ftos()
+
+    report.add(
+        Check("interjection is not a turn", "turns found",
+              float(len(turn_set.turns)), 3.0, "max",
+              "A(0-30) B(12-14) B(31-39) A(40-45): the interjection must not "
+              "split A's turn"),
+        Check("interjection latency", "worst |offset| (s)",
+              float(np.max(np.abs(ftos))) if ftos.size else float("nan"), 2.0, "max",
+              "no response latency may be inflated by a mid-turn incursion"),
+        Check("interjection is recorded", "failed interruptions",
+              float(sum(1 for i in turn_set.interruptions if not i.successful)),
+              1.0, "min", "speech that loses the floor is still an event"),
+    )
+
+
 def _match(truth, detected, tolerance: float):
     """Greedy onset matching within a tolerance; returns hits and onset errors."""
     used: set[int] = set()
@@ -412,9 +526,13 @@ def run_validation(
     validate_sync(report)
     validate_nods(report)
     validate_synchrony(report)
+    validate_turn_boundaries(report)
     if not quick:
         validate_callbacks(report)
     validate_speech_chain(
+        report, seeds=seeds[:2] if quick else seeds, model_dir=model_dir
+    )
+    validate_shared_audio(
         report, seeds=seeds[:2] if quick else seeds, model_dir=model_dir
     )
 

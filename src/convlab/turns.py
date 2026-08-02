@@ -161,12 +161,29 @@ class TurnSet:
     ipus: list[IPU] = field(default_factory=list)
     backchannels: list[IPU] = field(default_factory=list)
     interruptions: list[Interruption] = field(default_factory=list)
+    non_floor: list[IPU] = field(default_factory=list)
+    """Speech that never took the floor and is not an acknowledgement:
+    attempts to come in that the other person talked through."""
     duration: float = 0.0
     speech: dict[str, Segments] = field(default_factory=dict)
 
     # -- convenience views ---------------------------------------------
     def turns_of(self, person: str) -> list[Turn]:
         return [t for t in self.turns if t.person == person]
+
+    def first_speaker(self) -> str | None:
+        """Who opened the conversation."""
+        return self.turns[0].person if self.turns else None
+
+    def overlapping_onset_rate(self) -> float:
+        """Share of floor transfers that began before the previous turn ended.
+
+        The diagnostic that catches broken turn boundaries. Reported around
+        10-20% in the turn-taking literature; a value near half means the
+        boundaries are wrong rather than the conversation unusual.
+        """
+        ftos = self.all_ftos()
+        return float(np.mean(ftos < 0)) if ftos.size else float("nan")
 
     def backchannels_of(self, person: str) -> list[IPU]:
         return [u for u in self.backchannels if u.person == person]
@@ -309,24 +326,95 @@ def _partner_continues(partner: Segments, after: float, cfg: TurnConfig) -> bool
     return window.overlap_duration(partner) > 0.25 * cfg.interruption_success_s
 
 
-def build_turns(ipus: Sequence[IPU], cfg: TurnConfig, duration: float) -> list[Turn]:
-    """Group non-backchannel IPUs into floor-holding turns."""
+def takes_the_floor(
+    unit: IPU, holder: str, speech: dict[str, Segments], cfg: TurnConfig
+) -> bool:
+    """Does this unit actually take the floor from the current holder?
+
+    This is the question that decides where turn boundaries go, and answering
+    it structurally rather than by mere ordering is what keeps the boundaries
+    right.
+
+    Sorting speech by start time and calling every change of speaker a new
+    turn seems obvious and is wrong. Consider one person talking for thirty
+    seconds while the other says eight words in the middle without stopping
+    them. By start time that is three turns, and it produces two artefacts,
+    both severe. The interjection "begins before the previous speaker
+    finished" by twenty seconds, so it lands in the overlap statistics as an
+    enormous negative latency. And when the first speaker's own words resume,
+    they look like a reply arriving twenty seconds late. One misplaced unit
+    corrupts two response latencies and inflates the overlap rate, and if the
+    speaker track is at all noisy this happens constantly -- which is exactly
+    how a session ends up reporting that half its turns began before the
+    previous one ended.
+
+    A turn is a stretch of *holding the floor*, so the test is whether the
+    floor changed hands: after this unit, does the challenger carry on while
+    the incumbent gives way? Speech that does not pass this test is real
+    speech and is kept -- as a backchannel or a failed interruption -- but it
+    is not a turn, and it does not interrupt the incumbent's.
+    """
+    # Speech that was not produced over the incumbent cannot have failed to
+    # take the floor: the floor was already free. This covers ordinary
+    # turn-taking, gaps, and onsets that merely clip the end of a turn.
+    if unit.containment < 0.5:
+        return True
+
+    window = cfg.interruption_success_s
+    probe = Segments.from_pairs([(unit.end, unit.end + window)])
+    challenger = probe.overlap_duration(speech.get(unit.person, Segments.empty()))
+    incumbent = probe.overlap_duration(speech.get(holder, Segments.empty()))
+
+    # The incumbent stopped and stayed stopped: they gave way, so the
+    # incursion succeeded and this is a turn.
+    if incumbent <= 0.15 * window:
+        return True
+    # The incumbent is still going. The floor only changed hands if the
+    # challenger is now clearly the one carrying the conversation.
+    return challenger > 2.0 * incumbent
+
+
+def build_turns(
+    ipus: Sequence[IPU],
+    cfg: TurnConfig,
+    duration: float,
+    speech: dict[str, Segments] | None = None,
+) -> tuple[list[Turn], list[IPU]]:
+    """Group non-backchannel IPUs into floor-holding turns.
+
+    Returns the turns and the units that spoke without taking the floor --
+    failed interruptions and acknowledgements the lexical test did not catch.
+    They are events in their own right and are reported as such.
+    """
     floor = [u for u in ipus if not u.is_backchannel]
     floor.sort(key=lambda u: (u.start, u.person))
     if not floor:
-        return []
+        return [], []
+    if speech is None:
+        speech = {
+            person: Segments.from_pairs(
+                [(u.start, u.end) for u in ipus if u.person == person]
+            )
+            for person in PERSONS
+        }
 
     groups: list[list[IPU]] = [[floor[0]]]
+    non_floor: list[IPU] = []
     for unit in floor[1:]:
         current = groups[-1]
-        same_person = unit.person == current[-1].person
-        gap = unit.start - current[-1].end
-        # The same speaker keeps the floor across a pause unless the pause is
-        # long enough to count as a lapse, in which case resuming is a new turn.
-        if same_person and gap <= cfg.max_gap_s:
-            current.append(unit)
-        else:
+        holder = current[-1].person
+        if unit.person == holder:
+            # The same speaker keeps the floor across a pause unless the pause
+            # is long enough to count as a lapse, in which case resuming is a
+            # new turn.
+            if unit.start - current[-1].end <= cfg.max_gap_s:
+                current.append(unit)
+            else:
+                groups.append([unit])
+        elif takes_the_floor(unit, holder, speech, cfg):
             groups.append([unit])
+        else:
+            non_floor.append(unit)
 
     turns: list[Turn] = []
     for index, group in enumerate(groups):
@@ -345,7 +433,34 @@ def build_turns(ipus: Sequence[IPU], cfg: TurnConfig, duration: float) -> list[T
         )
 
     turns = [t for t in turns if t.duration >= cfg.min_turn_s]
-    return _attach_offsets(turns, cfg)
+    return _attach_offsets(_merge_adjacent(turns, cfg), cfg), non_floor
+
+
+def _merge_adjacent(turns: Sequence[Turn], cfg: TurnConfig) -> list[Turn]:
+    """Rejoin consecutive turns by the same speaker.
+
+    Dropping sub-threshold turns can leave one speaker's talk split across
+    two entries with nothing between them. Left alone that counts as two
+    turns and inserts a floor transfer that never happened.
+    """
+    out: list[Turn] = []
+    for turn in turns:
+        if out and out[-1].person == turn.person and turn.start - out[-1].end <= cfg.max_gap_s:
+            previous = out.pop()
+            ipus = previous.ipus + turn.ipus
+            out.append(
+                Turn(
+                    index=previous.index,
+                    person=previous.person,
+                    start=previous.start,
+                    end=max(previous.end, turn.end),
+                    ipus=ipus,
+                    text=" ".join(u.text for u in ipus if u.text).strip(),
+                )
+            )
+        else:
+            out.append(turn)
+    return out
 
 
 def _attach_offsets(turns: Sequence[Turn], cfg: TurnConfig) -> list[Turn]:
@@ -381,15 +496,25 @@ def _attach_offsets(turns: Sequence[Turn], cfg: TurnConfig) -> list[Turn]:
 
 
 def find_interruptions(
-    turns: Sequence[Turn], speech: dict[str, Segments], cfg: TurnConfig
+    turns: Sequence[Turn],
+    speech: dict[str, Segments],
+    cfg: TurnConfig,
+    non_floor: Sequence[IPU] = (),
 ) -> list[Interruption]:
-    """Classify overlapping turn onsets as interruptions or transition overlaps.
+    """Classify overlapping speech onsets as interruptions or transition overlaps.
 
-    An onset that lands within ``interruption_success_s`` of the current
-    turn's end is ordinary turn-taking: the listener misjudged the end by a
-    fraction of a second. An onset well before the end is an interruption,
-    and it counts as successful when the interrupted speaker stops soon
-    afterwards while the interrupter carries on.
+    Two things count. A turn that begins while the previous speaker is still
+    talking is an interruption *attempt that worked* -- the interrupter ended
+    up with the floor by definition, since they hold a turn. And a unit from
+    ``non_floor`` that overlapped the incumbent is an attempt that did not:
+    they started talking, the other person carried on, and they gave way.
+    Reporting only the first kind would score the trait backwards, counting
+    people as less interrupting the more often they were talked over.
+
+    An onset landing within ``interruption_success_s`` of the current turn's
+    end is not an interruption at all: the listener misjudged the ending by a
+    fraction of a second, which is ordinary turn-taking and is labelled a
+    transition overlap so the two are never pooled.
     """
     out: list[Interruption] = []
     for i in range(1, len(turns)):
@@ -400,14 +525,13 @@ def find_interruptions(
         if overlap < cfg.overlap_min_s:
             continue
 
-        remaining = prev.end - turn.start
         kind = (
             "transition_overlap"
-            if remaining <= cfg.interruption_success_s
+            if overlap <= cfg.interruption_success_s
             else "interruption"
         )
-
-        # Did the interrupted speaker actually stop?
+        # Did the interrupted speaker actually stop? They hold no further
+        # floor here, but they may have finished their sentence first.
         interrupted_speech = speech.get(prev.person, Segments.empty())
         probe = Segments.from_pairs(
             [(turn.start + cfg.interruption_success_s,
@@ -424,10 +548,37 @@ def find_interruptions(
                 turn_index=prev.index,
                 successful=not interrupted_continues,
                 overlap_duration=float(overlap),
-                remaining_after=float(remaining),
+                remaining_after=float(overlap),
                 kind=kind,
             )
         )
+
+    other_of = {"A": "B", "B": "A"}
+    for unit in non_floor:
+        partner = other_of[unit.person]
+        overlap = unit.containment * unit.duration
+        if overlap < cfg.overlap_min_s:
+            continue
+        holding = [t for t in turns if t.person == partner and t.start <= unit.start <= t.end]
+        if not holding:
+            continue
+        held = holding[-1]
+        if held.end - unit.start <= cfg.interruption_success_s:
+            continue  # near the end of the turn: ordinary turn-taking
+        out.append(
+            Interruption(
+                time=unit.start,
+                interrupter=unit.person,
+                interrupted=partner,
+                turn_index=held.index,
+                successful=False,
+                overlap_duration=float(overlap),
+                remaining_after=float(held.end - unit.start),
+                kind="interruption",
+            )
+        )
+
+    out.sort(key=lambda i: i.time)
     return out
 
 
@@ -440,14 +591,15 @@ def build_turn_set(
     """Full pipeline from per-person speech intervals to turns and events."""
     ipus = build_ipus(speech, cfg, words)
     ipus = classify_backchannels(ipus, speech, cfg)
-    turns = build_turns(ipus, cfg, duration)
-    interruptions = find_interruptions(turns, speech, cfg)
+    turns, non_floor = build_turns(ipus, cfg, duration, speech)
+    interruptions = find_interruptions(turns, speech, cfg, non_floor)
 
     return TurnSet(
         turns=turns,
         ipus=ipus,
         backchannels=[u for u in ipus if u.is_backchannel],
         interruptions=interruptions,
+        non_floor=non_floor,
         duration=duration,
         speech=dict(speech),
     )

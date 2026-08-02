@@ -340,6 +340,7 @@ def analyse_session(
         attribution = attribute_speakers(
             energies["A"], energies["B"], speech_prob, frame_hz, cfg.attribution,
             lip_a=lips.get("A"), lip_b=lips.get("B"),
+            audio=aligned[CLOSE_VIEW["A"]], sample_rate=sample_rate,
         )
         context.attribution = attribution
         for warning in attribution.warnings:
@@ -347,7 +348,8 @@ def analyse_session(
         stage.report.detail = (
             f"{attribution.diagnostics['method']}, "
             f"A {attribution.diagnostics['talk_proportion_A']:.0%} / "
-            f"B {attribution.diagnostics['talk_proportion_B']:.0%}"
+            f"B {attribution.diagnostics['talk_proportion_B']:.0%}, "
+            f"{attribution.diagnostics['short_state_fraction']:.0%} short runs"
         )
 
     if context.attribution is None:
@@ -392,7 +394,8 @@ def analyse_session(
         stage.report.detail = (
             f"{len(context.turn_set.turns)} turns, "
             f"{len(context.turn_set.backchannels)} backchannels, "
-            f"{len(context.turn_set.interruptions)} overlapping onsets"
+            f"{len(context.turn_set.interruptions)} interruptions, "
+            f"{context.turn_set.overlapping_onset_rate():.0%} overlapping onsets"
         )
 
     # ---- 10. prosody ---------------------------------------------------
