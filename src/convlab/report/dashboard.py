@@ -481,6 +481,64 @@ def _scorecard(context: AnalysisContext, values: Sequence[MeasureValue]) -> str:
     return f'<div class="cards">{"".join(cards)}</div>'
 
 
+def _withheld_banner(values: Sequence[MeasureValue]) -> str:
+    """What this recording cannot support, said once and said early.
+
+    Every withheld measure already carries its reason in the tables below,
+    but a reader who scrolls to "Interruption" and finds it empty has to
+    reconstruct why from a row of dashes. When a whole family is missing for
+    one structural reason -- almost always something about how the session
+    was recorded -- that belongs at the top, next to the verdict.
+
+    Reasons that affect a single measure are left to the tables. They are
+    usually about that measure rather than about the recording.
+    """
+    reasons: dict[str, list[str]] = {}
+    for value in values:
+        if value.available or not value.unavailable_reason:
+            continue
+        if value.id not in registry:
+            continue
+        reasons.setdefault(value.unavailable_reason, [])
+        if value.id not in reasons[value.unavailable_reason]:
+            reasons[value.unavailable_reason].append(value.id)
+
+    structural = {r: ids for r, ids in reasons.items() if len(ids) >= 3}
+    if not structural:
+        return ""
+
+    blocks = []
+    for reason, ids in sorted(structural.items(), key=lambda kv: -len(kv[1])):
+        labels = sorted(registry.spec(m).label for m in ids)
+        shown = ", ".join(labels[:6])
+        if len(labels) > 6:
+            shown += f", and {len(labels) - 6} more"
+        explanation = _EXPLAIN.get(
+            "overlap" if "overlap_evidence" in reason else "",
+            f"Reported as missing rather than estimated. Reason: {_esc(reason)}.",
+        )
+        blocks.append(
+            f'<div class="note"><strong>{len(ids)} measures were not '
+            f"computed for this session.</strong> {explanation}"
+            f'<div class="desc" style="margin:6px 0 0">{_esc(shown)}</div></div>'
+        )
+    return "".join(blocks)
+
+
+_EXPLAIN = {
+    "overlap": (
+        "Both video files carry the same mixed audio, so simultaneous speech "
+        "cannot be detected &mdash; measured against known overlap, recall "
+        "never exceeds 0.26 at any setting, and raising it costs precision "
+        "one for one. These are withheld rather than estimated. For the same "
+        "reason, response latencies here are <strong>right-censored at "
+        "zero</strong>: an unresolved overlap collapses into a hard speaker "
+        "switch. Recording a separate audio file for each participant removes "
+        "the limitation entirely."
+    ),
+}
+
+
 def _quality_block(context: AnalysisContext) -> str:
     """What the recordings themselves were like."""
     video = context.video_quality or {}
@@ -786,6 +844,7 @@ def render_dashboard(
   &nbsp;&middot;&nbsp; {len(registry)} measures in catalogue
 </p>
 {sync_note}
+{_withheld_banner(values)}
 
 <h2>Overview</h2>
 {_tiles(context, values)}

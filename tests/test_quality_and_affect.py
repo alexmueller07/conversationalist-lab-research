@@ -235,3 +235,50 @@ class TestCatalogueIntegrity:
         ]
         missing = [m for m in needed if m not in registry]
         assert not missing, f"scorecard refers to measures that do not exist: {missing}"
+
+
+class TestWithheldBanner:
+    """A reader must not have to reconstruct why a whole family is empty."""
+
+    def _values(self, n, reason="requires turn_set, overlap_evidence"):
+        from convlab.measures.base import MeasureValue
+
+        ids = [
+            "interruption_rate", "interrupted_rate", "interruption_success_rate",
+            "interruption_asymmetry", "transition_overlap_rate", "floor_hold_rate",
+            "overlap_proportion", "mean_overlap_duration",
+            "turn_transition_overlap_rate",
+        ][:n]
+        return [
+            MeasureValue(i, "person", "A", None, unavailable_reason=reason)
+            for i in ids
+        ]
+
+    def test_a_whole_family_withheld_is_announced(self):
+        from convlab.report.dashboard import _withheld_banner
+
+        html = _withheld_banner(self._values(9))
+        assert "9 measures were not computed" in html
+        assert "right-censored" in html, (
+            "the latency censoring shares the cause and must be stated with it"
+        )
+        assert "separate audio file" in html, "the reader needs the remedy"
+
+    def test_nothing_is_said_when_everything_computed(self):
+        from convlab.measures.base import MeasureValue
+        from convlab.report.dashboard import _withheld_banner
+
+        assert _withheld_banner([MeasureValue("turn_count", "person", "A", 12.0)]) == ""
+
+    def test_a_one_off_failure_is_left_to_the_tables(self):
+        """Isolated gaps are about the measure, not about the recording."""
+        from convlab.report.dashboard import _withheld_banner
+
+        assert _withheld_banner(self._values(2, reason="value is not finite")) == ""
+
+    def test_an_unrecognized_reason_is_still_reported_verbatim(self):
+        from convlab.report.dashboard import _withheld_banner
+
+        html = _withheld_banner(self._values(5, reason="requires prosody"))
+        assert "5 measures were not computed" in html
+        assert "requires prosody" in html
