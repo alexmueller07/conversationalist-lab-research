@@ -12,6 +12,8 @@ import queue
 
 import pytest
 
+from convlab.gui import Message
+
 tk = pytest.importorskip("tkinter")
 
 
@@ -24,6 +26,27 @@ def root():
     window.withdraw()
     yield window
     window.destroy()
+
+
+@pytest.fixture
+def app(root):
+    """A realised window, sized as it is in use.
+
+    ``update_idletasks`` after an explicit geometry is what makes layout
+    assertions meaningful: without it every widget reports zero width and a
+    clipping check would pass trivially.
+    """
+    from convlab.gui import App
+
+    built = App(root)
+    root.geometry("1180x900")
+    # Mapped, not merely built: a withdrawn window reports every widget as
+    # zero-sized, so a clipping assertion against it would pass whatever the
+    # layout did.
+    root.deiconify()
+    root.update_idletasks()
+    root.update()
+    return built
 
 
 class TestApp:
@@ -203,3 +226,67 @@ class TestPipelineHooks:
         assert result.stages[0].status == "failed"
         assert "boom" in result.stages[0].detail
 
+
+
+class TestResultsTable:
+    """The window has to answer "how did the run go" without scrolling a log.
+
+    Layout is asserted numerically rather than eyeballed: a screenshot of a
+    Tk window can be spoiled by whatever else is on the screen, and "the
+    button is off the right edge" is exactly the kind of regression a
+    screenshot review misses when the window happens to be wide enough that
+    day.
+    """
+
+    def test_a_session_appears_as_a_row(self, app):
+        app._handle(Message("session", payload={
+            "session_id": "dyad01", "verdict": "pass", "minutes": 10.4,
+            "turns": 188, "values": "226/226", "note": "",
+            "dashboard": "dyad01/dashboard.html"}))
+        assert app.results.exists("dyad01")
+        assert app.results.item("dyad01", "tags") == ("pass",)
+
+    def test_a_running_session_is_replaced_rather_than_duplicated(self, app):
+        for verdict in ("running", "review"):
+            app._handle(Message("session", payload={
+                "session_id": "dyad01", "verdict": verdict, "minutes": 9.0,
+                "turns": 100, "values": "220/226", "note": "frames are frozen"}))
+        assert len(app.results.get_children()) == 1
+        assert app.results.item("dyad01", "tags") == ("review",)
+
+    def test_starting_a_run_clears_the_previous_results(self, app):
+        app._handle(Message("session", payload={
+            "session_id": "old", "verdict": "fail", "minutes": 1.0,
+            "turns": 2, "values": "1/226", "note": ""}))
+        app.results.delete(*app.results.get_children())
+        assert app.results.get_children() == ()
+
+    def test_open_report_prefers_the_whole_run_page(self, app, monkeypatch, tmp_path):
+        opened: list[str] = []
+        monkeypatch.setattr("convlab.gui.webbrowser.open", opened.append)
+        app.dashboards["dyad01"] = str(tmp_path / "dyad01" / "dashboard.html")
+        app._handle(Message("report", text=str(tmp_path / "index.html")))
+        app._open_dashboard()
+        assert opened and opened[0].endswith("index.html"), (
+            "with several sessions analyzed the corpus page is the useful "
+            "destination, not the last session's dashboard"
+        )
+
+    def test_open_report_falls_back_to_a_dashboard(self, app, monkeypatch, tmp_path):
+        opened: list[str] = []
+        monkeypatch.setattr("convlab.gui.webbrowser.open", opened.append)
+        app.dashboards["dyad01"] = str(tmp_path / "dyad01" / "dashboard.html")
+        app._open_dashboard()
+        assert opened and opened[0].endswith("dashboard.html")
+
+    def test_every_action_button_fits_inside_the_window(self, app):
+        app.root.update_idletasks()
+        frame = app.run_button.master
+        width = frame.winfo_width()
+        for button in (app.run_button, app.stop_button, app.dashboard_button):
+            assert button.winfo_ismapped(), button["text"]
+            right = button.winfo_x() + button.winfo_width()
+            assert 0 <= button.winfo_x() and right <= width, (
+                f"{button['text']!r} spans {button.winfo_x()}-{right} in a "
+                f"{width}px row; it would be clipped at the window edge"
+            )

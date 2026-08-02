@@ -37,6 +37,7 @@ clock relative to the others*, and *who is speaking right now*.
 
 ```
 results/
+├── index.html              the whole run: verdicts, links, distributions
 ├── measures_all.csv        one row per session x person x measure
 ├── measures_all_wide.csv   pivoted, for eyeballing
 ├── codebook.csv            all 132 measures defined
@@ -283,9 +284,22 @@ and the score approaches 1.0 for a model that has learned nothing. And when
 held-out accuracy fails to beat 0.68, the cue is **discarded and reported as
 unavailable** rather than fed forward as confident noise.
 
-The cue identifies *who*, not *how many*. Simultaneous speech in one mixed
-channel stays the province of lip motion, where two moving mouths are
-directly observable.
+The cue identifies *who*, not *how many* — and on a shared feed *how many*
+turns out not to be answerable at all.
+
+Scored against known overlap, recall never exceeds **0.26** at any setting,
+and pushing it higher costs precision one for one. There is no operating
+point, because a single mixed channel carries no evidence distinguishing two
+voices from one ambiguous one; lip motion is all that remains, and at a turn
+transition both mouths are moving anyway. So nine overlap and interruption
+measures are **withheld** on such recordings rather than reported.
+
+The same limitation reaches one measure that looks unaffected. At a direct
+speaker switch in real recordings the voice detector reports speech straight
+through — median minimum probability 1.00 — so those are unresolved overlaps
+collapsing into a hard switch, not gaps. Response latencies therefore pile up
+at exactly zero and should be read as **right-censored** there. Recording a
+separate audio file per participant removes all of it.
 
 Measured on scripted sessions with the same audio copied into both files and
 synthetic lip tracking that drops out:
@@ -321,6 +335,25 @@ comparable with published ones.
   Lapses beyond 10 s are excluded: they are not responses, and one long
   silence would dominate a median over a few dozen turns.
 
+#### The lip cue answers two questions, and is only good at one
+
+The difference between the two lip scores says *who*; their sum says *how
+many*. One weight controlled both until a real corpus showed why that fails.
+
+The difference compares two faces at the same instant, so whatever makes one
+person's score run high — a still resting face, a tighter crop, a more mobile
+mouth — largely cancels. The sum cancels nothing, because each score is
+standardized against that person's own not-speaking baseline: its size says
+how unusual their mouth movement is *for them*, not how much speech is in the
+room. And at every turn transition both mouths are moving, one finishing and
+one starting, so the sum peaks exactly where the difference carries least
+information.
+
+"Both" therefore won at nearly every transition. Splitting the two weights
+took overlapping onsets from 37 % to 4 % on real recordings and turn counts
+from 98 to 219 — from six turns a minute to about fifteen, which is what a
+conversation actually looks like.
+
 #### Holding the floor is the definition
 
 Sorting speech by start time and calling every change of speaker a turn
@@ -342,8 +375,17 @@ one ended.
 So the test is whether the floor actually changed hands. Speech that was not
 produced over the incumbent takes the floor by default — the floor was free.
 Speech produced *over* them takes it only if the incumbent then gives way, or
-if the challenger clearly dominates what follows. Speech that fails the test
-is kept and reported as a **failed interruption**, not deleted.
+if the challenger dominates what follows. Speech that fails the test is kept
+and reported as a **failed interruption**, not deleted.
+
+**Length settles it past three seconds**, and that clause exists because of
+real data. The rule as first written assumed attribution clean enough that an
+incumbent still talking really was holding the floor. With real attribution
+the incumbent retains a little speech almost everywhere, so genuine turns
+were rejected as failed incursions: one session came out with 44 turns, a
+median turn of 13.5 s, and twice as many failed interruptions as turns — a
+conversation reported as two people monologuing at each other. Failing to
+take the floor is something *short* utterances do.
 
 That last point also fixes the sign of the interruption measures. Counting
 only interruptions that succeed scores a person as *less* interrupting the
@@ -473,6 +515,22 @@ fails when it degrades.
   missing data, it is *wrong* data: head position stops changing, so nods
   vanish and gaze looks perfectly steady on whatever the last frame showed —
   with tracking confidence high throughout.
+
+  The test is **bit-identity**, and that precision was learned the hard way.
+  An earlier version used a plausible-looking "near identical" threshold on
+  the whole-frame mean difference and reported 38–95 % freezing on eight
+  genuine conversations. They were not frozen. A whole-frame mean is
+  dominated by whatever is *not* moving, and in a 720p conferencing frame the
+  moving face is a small part of it, so ordinary head movement fell under the
+  threshold — one file measured 0 % bit-identical and still read as 95 %
+  frozen. Freezing is a claim about the decoder emitting the same picture
+  twice, so that is now exactly the test: fifteen of sixteen real files come
+  out at 0–15 % and the one that genuinely freezes at 60 %.
+- **Motion** — how much of the picture is changing at all — is a separate
+  question and also worth asking. A very still person on a good connection
+  freezes not at all and moves very little, and the head-movement measures
+  are weak for the second reason rather than the first. Across the real
+  corpus this runs 1 % to 25 %.
 - **Sharpness** (high-frequency image energy). Blur does not move the facial
   landmarks, it makes their position uncertain, which adds noise to every
   expression measure and to the lip motion attribution depends on.
@@ -800,7 +858,33 @@ dominated by whichever third happened to be noisiest.
 
 ---
 
-## 5. Quality control
+## 5. The whole-run report
+
+A per-session dashboard answers *what happened in this conversation*. Nobody
+analyzing a corpus asks that first. `index.html` answers the questions that
+come before it, and it is the file to open after a run:
+
+- **Which sessions can be used** — verdict, duration, turns per minute, and
+  the specific check that failed, sorted worst first. Sorted that way
+  deliberately: a table that lists the broken sessions last is one where a
+  broken session reaches a results table because nobody scrolled.
+- **What was not measurable, and why** — withheld measures grouped by reason.
+  On a corpus recorded with one shared audio feed the same nine measures are
+  withheld from every session for the same reason, and meeting that once at
+  the top is more useful than meeting it nine times.
+- **How every measure is distributed** — one dot per session per person, on
+  each measure's own scale, median marked, hover to name the session. A point
+  far from the rest is worth opening *before* it is interpreted: in a corpus
+  this size it is more often a detector failure than a remarkable
+  participant.
+
+Findings that fire on both views of one recording are counted as one affected
+session rather than two, so the summary reflects how widespread a problem is
+rather than how many files it touched.
+
+---
+
+## 6. Quality control
 
 Every session gets `pass` / `review` / `fail` from checks on **inputs**:
 duration, sync confidence, speech proportion, attribution certainty, turn
@@ -826,7 +910,7 @@ while whether its statistics can be trusted is a matter of count.
 
 ---
 
-## 6. The review player
+## 7. The review player
 
 The report can describe what the pipeline believed, but a number cannot show
 you a mistake. The dashboard therefore plays both participants' video side by
@@ -840,7 +924,7 @@ summary statistic revealed it; ten seconds of watching would have.
 
 ---
 
-## 7. Validation
+## 8. Validation
 
 `convlab validate` builds material whose answer is known by construction,
 runs the real detectors on it, and scores them. All 29 checks pass:
@@ -889,8 +973,13 @@ a whole class of event.
 
 ---
 
-## 8. What to be careful about
+## 9. What to be careful about
 
+- **Every threshold that was calibrated against real recordings is now
+  calibrated against eight conversations, not one.** That is enough to catch
+  a detector that is grossly wrong and not enough to tune one finely. The
+  freeze test, the incursion limit and the two visual weights all moved after
+  seeing real data, and all of them should be revisited on a larger corpus.
 - **Accuracy on real dyads is unmeasured.** This is the single largest gap.
   Every number in the validation table comes from synthetic material, which
   establishes that the arithmetic is right and nothing about whether the
@@ -898,9 +987,13 @@ a whole class of event.
   leaning out of frame. The next step is hand-coding a subset and reporting
   agreement against human coders.
 - **A separate audio file per participant is still much better.** The learned
-  voice model makes shared-feed recordings analysable, but the level cue
-  gives 0.04 % identity confusion against 1.4 %. In Zoom the setting is
-  "record a separate audio file for each participant".
+  voice model makes shared-feed recordings analyzable, but the level cue gives
+  0.04 % identity confusion against 1.4 %, and it is the only thing that makes
+  simultaneous speech measurable at all — nine overlap and interruption
+  measures are withheld without it, and response latencies are censored at
+  zero. In Zoom the setting is "record a separate audio file for each
+  participant". This is the single highest-value change to how the
+  conversations are recorded.
 - **The voice model can decline to work,** and says so. Similar voices, heavy
   compression, or a provisional track too noisy to learn from all leave
   held-out accuracy below the threshold, and the session then falls back on

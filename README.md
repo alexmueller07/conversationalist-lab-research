@@ -171,6 +171,8 @@ because the slow steps are cached.
 ```
 results/
 ├── measures_all.csv        every pair, every measure — this is the one to analyze
+├── index.html              open this first: every session, what passed,
+│                          what was withheld, and every distribution
 ├── codebook.csv            what all 132 measures mean
 ├── session_summary.csv     pass / review / fail per pair
 └── dyad012/
@@ -295,6 +297,7 @@ the real detectors on it, and scores them. All 29 checks pass:
 | **Response latency accuracy** | **31 ms** median error |
 | Backchannel detection | precision 0.964, recall 0.742 |
 | Hesitation detection | precision 1.00, recall 0.87 |
+| Interjection is not a turn | a mid-turn incursion does not split the holder |
 | **Same audio in both files** — identity | **1.4 %** error |
 | **Same audio in both files** — track stability | 14 % short runs (truth 9 %) |
 | **Same audio in both files** — turn boundaries | 10 % overlapping onsets (truth 17 %) |
@@ -413,6 +416,11 @@ Load-bearing design decisions:
   voice model is learned per session from labels the visual cues supply, and
   discarded if it fails held-out cross-validation. Without it, conferencing
   exports leave only lip motion and the speaker track flickers.
+- **What cannot be measured is withheld, not estimated.** On a shared audio
+  feed simultaneous speech has a measured recall ceiling of 0.26 at any
+  setting, so the nine overlap and interruption measures come out as missing
+  with a reason rather than as numbers. Response latencies on those
+  recordings are right-censored at zero and the report says so.
 
 No GPU required, and no `ffmpeg` on `PATH` (PyAV links the libraries directly,
 a common silent failure on lab Windows machines).

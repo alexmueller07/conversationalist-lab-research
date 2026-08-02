@@ -314,6 +314,45 @@ synthetic lip tracking that drops out:
 
 ---
 
+## 4.7 What a shared feed cannot support
+
+The learned voice model of §4.6 answers *who is speaking*. It does not answer
+*how many*, and on a single mixed channel nothing does.
+
+Scored against known overlap while sweeping the weight that controls the
+silence-versus-both axis:
+
+| activity weight | overlap precision | overlap recall |
+|---|---|---|
+| 0.3 | 0.16 | 0.01 |
+| 0.9 | 0.82 | 0.06 |
+| 1.2 | 0.69 | 0.15 |
+| 2.0 | 0.58 | 0.22 |
+| 2.5 | 0.52 | 0.26 |
+
+Recall never clears 0.26 and every point of it is bought with precision.
+There is no operating point because there is no evidence: a mixture of two
+voices and one ambiguous voice produce the same collapsed log-odds, and lip
+motion cannot arbitrate because at a turn transition both mouths are moving.
+
+The response is to declare it rather than pick a number. Nine measures --
+the seven in the interruption family plus overlap proportion and mean overlap
+duration -- declare ``overlap_evidence`` as a requirement, which is present
+only when the two files carry genuinely different audio. On a shared feed
+they come out as missing with a reason, alongside a quality-control warning
+naming the recording setting that fixes it.
+
+One measure is affected without looking affected. On real recordings the
+voice detector reports speech straight through a direct speaker switch --
+median minimum probability 1.00 across the switch -- so these are unresolved
+overlaps collapsing into a hard boundary, not gaps. The floor transfer offset
+is then exactly zero rather than the negative value it should be, and about
+two thirds of transitions land there. Response latencies from shared-feed
+recordings are **right-censored at zero** and must be read that way; the
+quality report states it per session.
+
+---
+
 ## 5. Turns
 
 Definitions follow the turn-taking literature so the numbers are comparable
@@ -356,8 +395,18 @@ The test is therefore whether the floor changed hands:
    incumbent then falls silent (≤ 15 % of the following second), or if the
    challenger clearly dominates what follows (more than twice the incumbent's
    speech).
-3. Otherwise it is kept as a **failed interruption** — real speech, recorded
+3. A unit lasting **three seconds or more** takes the floor regardless.
+   Failing to take the floor is something short utterances do; someone still
+   talking after three seconds is holding it whatever their partner does.
+4. Otherwise it is kept as a **failed interruption** — real speech, recorded
    as an event, but not a turn, and it does not split the incumbent's.
+
+Rule 3 exists because of real recordings. Written without it, the test
+assumed attribution clean enough that an incumbent who kept talking really
+held the floor; with real attribution the incumbent retains a little speech
+almost everywhere, so genuine turns were rejected as failed incursions. One
+session came out with 44 turns, a median turn of 13.5 s and twice as many
+failed interruptions as turns.
 
 Rule 3 also fixes the sign of the interruption family. Counting only
 interruptions that *succeed* scores a person as less interrupting the more
@@ -469,13 +518,29 @@ spread across the file. Bursts rather than scattered single frames because
 freezing is only visible between *consecutive* frames, and freezing is the
 artifact most likely to be present.
 
-- **Freeze rate** — share of consecutive sampled pairs whose mean absolute
-  luma difference is under 0.002. Not exact equality: re-encoding a held
-  frame produces slightly different pixels, so a zero tolerance reports no
-  freezing on exactly the files most likely to freeze. A held frame is worse
-  than a dropped one — head position stops changing, so nods vanish and gaze
-  appears perfectly steady, with tracking confidence high throughout and the
-  container still reporting full frame rate.
+- **Freeze rate** — share of consecutive sampled pairs the decoder emitted
+  identically, at a tolerance of 1e-5 mean absolute luma difference (float
+  round-trip, nothing more). A held frame is worse than a dropped one: head
+  position stops changing, so nods vanish and gaze appears perfectly steady,
+  with tracking confidence high throughout and the container still reporting
+  full frame rate.
+
+  The tolerance was 0.002 in the first version — a plausible-looking "near
+  identical" — and on eight real conversations it reported 38-95 % freezing
+  on every file. Nothing was frozen. A mean over the whole picture is
+  dominated by whatever is not moving, and in a 720p conferencing frame the
+  moving face is a small fraction of the pixels, so ordinary head movement
+  falls well under 0.002; one file measured 0 % bit-identical and still read
+  as 95 % frozen. At 1e-5, fifteen of sixteen real files come out at 0-15 %
+  and the one that genuinely freezes at 60 %. The general lesson is that a
+  threshold on a whole-frame average measures frame *composition* as much as
+  motion.
+
+**Motion** — median share of pixels changing by more than 2/255. A separate
+  question from freezing and worth asking alongside it: a very still person
+  on a good connection freezes not at all and moves very little, and the
+  head-movement measures are weak for the second reason. Real recordings run
+  1-25 %.
 - **Sharpness** — variance of a discrete Laplacian, normalized by pixel
   count so two resolutions are comparable. Blur does not move landmarks, it
   makes their position uncertain, adding noise to every facial measure and to

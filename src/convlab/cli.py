@@ -37,6 +37,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     from convlab.config import Config
     from convlab.pipeline import analyze_session
     from convlab.report.codebook import write_codebook
+    from convlab.report.corpus import SessionEntry, write_corpus_report
     from convlab.report.dashboard import write_dashboard
     from convlab.report.qc import assess_quality
     from convlab.report.tables import measures_long, write_session_tables
@@ -57,6 +58,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     all_long: list[pd.DataFrame] = []
     summary: list[dict] = []
+    entries: list[SessionEntry] = []
 
     for index, session in enumerate(sessions, 1):
         print(f"\n[{index}/{len(sessions)}] {session.describe()}")
@@ -70,6 +72,12 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             summary.append(
                 {"session_id": session.session_id, "verdict": "fail",
                  "error": f"{type(exc).__name__}: {exc}"}
+            )
+            entries.append(
+                SessionEntry(
+                    session_id=session.session_id, verdict="fail",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
             )
             continue
 
@@ -104,6 +112,32 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             print(f"    QC {check.severity}: {check.message}")
         print(f"    -> {paths.get('measures')}")
 
+        entries.append(
+            SessionEntry(
+                session_id=session.session_id,
+                verdict=qc.verdict,
+                duration_s=result.context.duration,
+                n_turns=len(result.context.turn_set.turns)
+                if result.context.turn_set else 0,
+                values_available=available,
+                values_total=len(result.measures),
+                seconds=elapsed,
+                dashboard=f"{session.session_id}/dashboard.html",
+                failures=[
+                    (c.name, c.severity, c.message) for c in qc.failures
+                ],
+                values={
+                    (m.id, m.person): m.value
+                    for m in result.measures if m.available
+                },
+                unavailable={
+                    m.id: m.unavailable_reason
+                    for m in result.measures
+                    if not m.available and m.unavailable_reason
+                },
+            )
+        )
+
         summary.append(
             {
                 "session_id": session.session_id,
@@ -126,6 +160,15 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         print(f"\nCombined -> {output / 'measures_all.csv'}")
 
     pd.DataFrame(summary).to_csv(output / "session_summary.csv", index=False)
+
+    # One page for the whole run. Opening eight dashboards in turn is how a
+    # problem in session five gets missed.
+    if entries:
+        index = write_corpus_report(
+            output / "index.html", entries, title=Path(args.target).name
+        )
+        print(f"\nCorpus report -> {index}")
+
     passed = sum(1 for s in summary if s.get("verdict") == "pass")
     print(f"Summary: {passed}/{len(summary)} sessions passed QC "
           f"-> {output / 'session_summary.csv'}")

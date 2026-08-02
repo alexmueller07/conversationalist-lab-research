@@ -513,21 +513,21 @@ Total seconds occupied by detected nods.
 ### `floor_hold_rate` -- Floor retention when interrupted
 
 - **Level:** person &nbsp; **Unit:** proportion
-- **Requires:** turn_set
+- **Requires:** turn_set, overlap_evidence
 
 Share of interruptions against this person that they resisted by continuing to speak.
 
 ### `interrupted_rate` -- Rate of being interrupted
 
 - **Level:** person &nbsp; **Unit:** per minute
-- **Requires:** turn_set
+- **Requires:** turn_set, overlap_evidence
 
 Times per minute this person was interrupted mid-turn by the partner.
 
 ### `interruption_asymmetry` -- Interruption asymmetry
 
 - **Level:** dyad &nbsp; **Unit:** per minute
-- **Requires:** turn_set
+- **Requires:** turn_set, overlap_evidence
 
 Person A's interruption rate minus person B's. Positive means A interrupted more often than B did.
 
@@ -536,7 +536,7 @@ Person A's interruption rate minus person B's. Positive means A interrupted more
 ### `interruption_rate` -- Interruption rate
 
 - **Level:** person &nbsp; **Unit:** per minute
-- **Requires:** turn_set
+- **Requires:** turn_set, overlap_evidence
 
 Times per minute this person began speaking while the partner was still well inside a turn. Onsets close enough to the turn end to be ordinary turn-taking are excluded and counted separately.
 
@@ -548,7 +548,7 @@ Times per minute this person began speaking while the partner was still well ins
 ### `interruption_success_rate` -- Interruption success rate
 
 - **Level:** person &nbsp; **Unit:** proportion
-- **Requires:** turn_set
+- **Requires:** turn_set, overlap_evidence
 
 Share of this person's interruptions after which they held the floor and the partner stopped.
 
@@ -560,14 +560,14 @@ Share of this person's interruptions after which they held the floor and the par
 ### `mean_overlap_duration` -- Mean overlap duration
 
 - **Level:** dyad &nbsp; **Unit:** s
-- **Requires:** turn_set
+- **Requires:** turn_set, overlap_evidence
 
 Average length of stretches in which both people spoke at once. Long overlaps indicate neither party yielded quickly.
 
 ### `transition_overlap_rate` -- Transition overlap rate
 
 - **Level:** person &nbsp; **Unit:** per minute
-- **Requires:** turn_set
+- **Requires:** turn_set, overlap_evidence
 
 Times per minute this person came in during the final moments of the partner's turn -- early onsets that reflect accurate projection of the turn end rather than competition for the floor.
 
@@ -1148,7 +1148,7 @@ Median duration of this person's floor-holding turns.
 ### `overlap_proportion` -- Proportion of simultaneous speech
 
 - **Level:** dyad &nbsp; **Unit:** proportion
-- **Requires:** turn_set
+- **Requires:** turn_set, overlap_evidence
 
 Share of the conversation in which both people were speaking at once.
 
@@ -1276,7 +1276,7 @@ Floor-holding turns taken per minute of conversation.
 ### `turn_transition_overlap_rate` -- Rate of overlapping turn onsets
 
 - **Level:** person &nbsp; **Unit:** per minute
-- **Requires:** turn_set
+- **Requires:** turn_set, overlap_evidence
 
 Turns this person began before the partner had finished, per minute. Counts all early onsets, whether competitive or not.
 

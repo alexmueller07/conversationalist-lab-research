@@ -129,6 +129,7 @@ class Worker(threading.Thread):
         from convlab.config import Config
         from convlab.pipeline import Canceled, analyze_session
         from convlab.report.codebook import write_codebook
+        from convlab.report.corpus import SessionEntry, write_corpus_report
         from convlab.report.dashboard import write_dashboard
         from convlab.report.qc import assess_quality
         from convlab.report.tables import measures_long, measures_wide, write_session_tables
@@ -173,6 +174,7 @@ class Worker(threading.Thread):
 
         all_long: list[Any] = []
         summary: list[dict] = []
+        entries: list[Any] = []
 
         for index, session in enumerate(sessions, 1):
             if self.stopping:
@@ -209,6 +211,9 @@ class Worker(threading.Thread):
                                               "verdict": "failed"})
                 summary.append({"session_id": session.session_id, "verdict": "fail",
                                 "error": f"{type(exc).__name__}: {exc}"})
+                entries.append(SessionEntry(
+                    session_id=session.session_id, verdict="fail",
+                    error=f"{type(exc).__name__}: {exc}"))
                 continue
 
             qc = assess_quality(result.context, result.sync)
@@ -246,7 +251,26 @@ class Worker(threading.Thread):
                 "session_id": session.session_id,
                 "verdict": qc.verdict,
                 "dashboard": str(dashboard),
+                "turns": n_turns,
+                "minutes": result.context.duration / 60.0,
+                "values": f"{available}/{len(result.measures)}",
+                "note": (qc.failures[0].message if qc.failures else ""),
             })
+
+            entries.append(SessionEntry(
+                session_id=session.session_id,
+                verdict=qc.verdict,
+                duration_s=result.context.duration,
+                n_turns=n_turns,
+                values_available=available,
+                values_total=len(result.measures),
+                dashboard=f"{session.session_id}/dashboard.html",
+                failures=[(c.name, c.severity, c.message) for c in qc.failures],
+                values={(m.id, m.person): m.value
+                        for m in result.measures if m.available},
+                unavailable={m.id: m.unavailable_reason for m in result.measures
+                             if not m.available and m.unavailable_reason},
+            ))
 
             all_long.append(
                 measures_long(session.session_id, result.measures, result.context.metadata)
@@ -266,6 +290,16 @@ class Worker(threading.Thread):
         if summary:
             pd.DataFrame(summary).to_csv(output / "session_summary.csv", index=False)
 
+        # The whole-run page. This is what a person opens first when they have
+        # analyzed more than one conversation, so it is what the Open button
+        # points at once it exists.
+        if entries:
+            report = write_corpus_report(
+                output / "index.html", entries, title=Path(self.target).name
+            )
+            self.send("log", f"Report for all {len(entries)} session(s): {report}", "ok")
+            self.send("report", text=str(report))
+
         self.send("progress", text="Finished", value=100.0)
 
 
@@ -282,9 +316,11 @@ class App:
         self.queue: "queue.Queue[Message]" = queue.Queue()
         self.worker: Worker | None = None
         self.dashboards: dict[str, str] = {}
+        self.report_path: str = ""
 
         root.title(APP_TITLE)
-        root.geometry("980x760")
+        root.geometry("1180x900")
+        root.minsize(980, 700)
         root.minsize(820, 620)
         root.configure(bg=PALETTE["bg"])
 
@@ -325,6 +361,15 @@ class App:
             indicatorforeground=[("selected", "#ffffff")],
         )
         style.configure("TEntry", padding=6)
+        style.configure("Treeview", background=PALETTE["panel"],
+                        fieldbackground=PALETTE["panel"],
+                        foreground=PALETTE["text"], borderwidth=0,
+                        rowheight=24, font=("Segoe UI", 9))
+        style.configure("Treeview.Heading", background=PALETTE["bg"],
+                        foreground=PALETTE["muted"], borderwidth=0,
+                        font=("Segoe UI", 9, "bold"))
+        style.map("Treeview", background=[("selected", PALETTE["accent"])],
+                  foreground=[("selected", "#ffffff")])
         style.configure("Horizontal.TProgressbar", background=PALETTE["accent"],
                         troughcolor="#e2e8f0", borderwidth=0, thickness=10)
 
@@ -344,6 +389,11 @@ class App:
                  "two videos - one showing each person's face. Both will "
                  "contain both voices; that is expected.",
             style="Muted.TLabel",
+            # Without a wrap length this label is a single long line, and its
+            # requested width becomes the window's minimum -- which pushed the
+            # buttons on the right off the edge of the window.
+            wraplength=940,
+            justify="left",
         ).pack(anchor="w", pady=(2, 0))
 
         # -- paths ------------------------------------------------------
@@ -395,11 +445,13 @@ class App:
         self.stop_button = ttk.Button(
             actions, text="Stop", command=self._stop, state="disabled")
         self.stop_button.pack(side="left", padx=8)
-        ttk.Button(actions, text="Open results folder",
-                   command=self._open_output).pack(side="right")
+        ttk.Button(actions, text="Results folder",
+                   command=self._open_output).pack(side="left", padx=(8, 0))
+        # The one thing worth doing after a run, so it sits alone on the right
+        # where nothing can crowd it off the edge of the window.
         self.dashboard_button = ttk.Button(
             actions, text="Open report", command=self._open_dashboard, state="disabled")
-        self.dashboard_button.pack(side="right", padx=8)
+        self.dashboard_button.pack(side="right")
 
         self.progress = ttk.Progressbar(outer, mode="determinate", maximum=100)
         self.progress.grid(row=4, column=0, sticky="ew")
@@ -407,9 +459,48 @@ class App:
         ttk.Label(outer, textvariable=self.status_var, style="Muted.TLabel").grid(
             row=5, column=0, sticky="w", pady=(4, 10))
 
-        outer.rowconfigure(6, weight=1)
+        # -- results ----------------------------------------------------
+        #
+        # A running log is the right place for detail and the wrong place for
+        # state: by the time eight sessions have finished, "which ones came
+        # out badly" has scrolled away. The table holds the answer to that
+        # question and stays put; the log keeps the detail underneath.
+        results = ttk.Frame(outer, style="Panel.TFrame")
+        results.grid(row=6, column=0, sticky="nsew", pady=(0, 8))
+        results.columnconfigure(0, weight=1)
+        results.rowconfigure(0, weight=1)
+        columns = ("verdict", "minutes", "turns", "values", "note")
+        self.results = ttk.Treeview(
+            results, columns=columns, show="tree headings", height=7,
+            selectmode="browse",
+        )
+        self.results.heading("#0", text="Session")
+        self.results.column("#0", width=130, stretch=False)
+        for key, label, width, anchor in (
+            ("verdict", "Verdict", 84, "center"),
+            ("minutes", "Minutes", 70, "e"),
+            ("turns", "Turns", 60, "e"),
+            ("values", "Values", 74, "e"),
+            ("note", "What was flagged", 420, "w"),
+        ):
+            self.results.heading(key, text=label)
+            self.results.column(key, width=width, anchor=anchor,
+                                stretch=(key == "note"))
+        self.results.grid(row=0, column=0, sticky="nsew")
+        rscroll = ttk.Scrollbar(results, orient="vertical",
+                                command=self.results.yview)
+        rscroll.grid(row=0, column=1, sticky="ns")
+        self.results.configure(yscrollcommand=rscroll.set)
+        self.results.tag_configure("pass", foreground=PALETTE["ok"])
+        self.results.tag_configure("review", foreground=PALETTE["warn"])
+        self.results.tag_configure("fail", foreground=PALETTE["fail"])
+        self.results.tag_configure("running", foreground=PALETTE["muted"])
+        # Double-clicking a row opens that session's own report.
+        self.results.bind("<Double-1>", self._open_selected)
+
+        outer.rowconfigure(7, weight=1)
         log_frame = ttk.Frame(outer, style="Panel.TFrame")
-        log_frame.grid(row=6, column=0, sticky="nsew")
+        log_frame.grid(row=7, column=0, sticky="nsew")
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
 
@@ -531,6 +622,9 @@ class App:
 
         skip = tuple(k for k, var in self.stage_vars.items() if not var.get())
         self.dashboards.clear()
+        self.report_path = ""
+        for row in self.results.get_children():
+            self.results.delete(row)
         self.dashboard_button.configure(state="disabled")
         self.progress.configure(value=0)
         self._log("")
@@ -564,11 +658,23 @@ class App:
         webbrowser.open(path.as_uri())
 
     def _open_dashboard(self) -> None:
-        if not self.dashboards:
-            return
-        # The most recently finished session is the one the user is waiting on.
-        latest = list(self.dashboards.values())[-1]
-        webbrowser.open(Path(latest).as_uri())
+        """Open the whole-run report, falling back to the latest session.
+
+        The corpus page is the right destination once more than one
+        conversation has been analyzed: it links every session and shows the
+        distributions, so it answers "how did the run go" rather than "how
+        did the last one go".
+        """
+        if self.report_path:
+            webbrowser.open(Path(self.report_path).as_uri())
+        elif self.dashboards:
+            webbrowser.open(Path(list(self.dashboards.values())[-1]).as_uri())
+
+    def _open_selected(self, _event=None) -> None:
+        selected = self.results.focus()
+        target = self.dashboards.get(selected)
+        if target:
+            webbrowser.open(Path(target).as_uri())
 
     def _on_close(self) -> None:
         if self.worker and self.worker.is_alive():
@@ -604,10 +710,30 @@ class App:
             self.status_var.set(message.text)
         elif message.kind == "session":
             info = message.payload or {}
+            session_id = info["session_id"]
+            verdict = info.get("verdict", "running")
+            values = (
+                verdict.upper() if verdict != "running" else "running...",
+                f"{info['minutes']:.1f}" if info.get("minutes") else "",
+                str(info.get("turns", "")),
+                info.get("values", ""),
+                info.get("note", ""),
+            )
+            if self.results.exists(session_id):
+                self.results.item(session_id, values=values, tags=(verdict,))
+            else:
+                self.results.insert(
+                    "", "end", iid=session_id, text=session_id,
+                    values=values, tags=(verdict,),
+                )
+            self.results.see(session_id)
             dashboard = info.get("dashboard")
             if dashboard:
-                self.dashboards[info["session_id"]] = dashboard
+                self.dashboards[session_id] = dashboard
                 self.dashboard_button.configure(state="normal")
+        elif message.kind == "report":
+            self.report_path = message.text
+            self.dashboard_button.configure(state="normal", text="Open report")
         elif message.kind == "demo_ready":
             self.run_button.configure(state="normal")
             if message.text:
