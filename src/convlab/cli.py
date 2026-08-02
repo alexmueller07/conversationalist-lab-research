@@ -193,6 +193,11 @@ def cmd_demo(args: argparse.Namespace) -> int:
         offsets={"close_a": 0.0, "close_b": 1.7, "wide": 0.4},
     )
     print(f"  wrote {len(roles)} views to {media}")
+    print(
+        "  note: the demo's picture is a still placeholder, so the report will\n"
+        "        warn that the video is frozen and no face was tracked. That is\n"
+        "        the quality checks working; the demo exercises the audio chain."
+    )
 
     args.target = str(media)
     args.lenient = False
