@@ -1,4 +1,4 @@
-"""Nonverbal behaviour: gaze, head movement, expression, gesture, posture.
+"""Nonverbal behavior: gaze, head movement, expression, gesture, posture.
 
 Several of these are reported *conditioned on role* -- while speaking versus
 while listening -- rather than averaged over the whole session. That is not
@@ -176,7 +176,7 @@ def gaze_speaker_listener_gap(ctx: AnalysisContext) -> dict[str, float]:
     requires=("face",),
     interpretation=(
         "Mutual gaze is a dyadic achievement rather than a sum of two "
-        "individual behaviours, and is associated with rapport and with "
+        "individual behaviors, and is associated with rapport and with "
         "perceived intimacy."
     ),
     references=_GAZE_REF,
@@ -235,7 +235,7 @@ def mutual_gaze_episode_rate(ctx: AnalysisContext) -> float:
     requires=("face", "turn_set"),
     interpretation=(
         "The visual counterpart of a vocal backchannel, and a direct index of "
-        "active listening. Normalised by the partner's talk time so that "
+        "active listening. Normalized by the partner's talk time so that "
         "having a quiet partner does not read as inattention."
     ),
     references=(
@@ -474,7 +474,7 @@ def _body_usable(ctx: AnalysisContext, person: str) -> bool:
     family=FAMILY_BODY,
     requires=("body", "turn_set"),
     interpretation=(
-        "Normalised by own speaking time because co-speech gesture is "
+        "Normalized by own speaking time because co-speech gesture is "
         "produced while talking; dividing by session length would confound "
         "gesturing with talkativeness."
     ),
@@ -499,7 +499,7 @@ def gesture_rate(ctx: AnalysisContext) -> dict[str, float]:
     id="posture_shift_rate",
     label="Postural shift rate",
     description=(
-        "Distinct movements of the torso centre per minute, in shoulder-width "
+        "Distinct movements of the torso center per minute, in shoulder-width "
         "units so the value does not depend on camera distance."
     ),
     unit="per minute",
@@ -534,7 +534,7 @@ def posture_shift_rate(ctx: AnalysisContext) -> dict[str, float]:
     interpretation=(
         "Face-directed self-touch is a much-cited proxy for self-soothing "
         "under discomfort. The evidence for that reading is mixed, so it is "
-        "offered as a descriptive behaviour rather than an anxiety score."
+        "offered as a descriptive behavior rather than an anxiety score."
     ),
 )
 def self_touch_proportion(ctx: AnalysisContext) -> dict[str, float]:
@@ -548,4 +548,155 @@ def self_touch_proportion(ctx: AnalysisContext) -> dict[str, float]:
             out[p] = float("nan")
             continue
         out[p] = float(np.mean(sig.self_touch[sig.tracked]))
+    return out
+
+
+# ----------------------------------------------------------------------
+# Counts and durations behind the rates above
+# ----------------------------------------------------------------------
+
+
+def _event_stats(ctx: AnalysisContext, attribute: str):
+    out = {}
+    for person in PERSONS:
+        signals = (ctx.face or {}).get(person)
+        spans = list(getattr(signals, attribute)) if signals is not None else []
+        out[person] = spans
+    return out
+
+
+@measure(
+    id="nod_count",
+    label="Number of nods",
+    description="Count of head-pitch oscillations of at least 1.2 cycles.",
+    unit="count",
+    level=PERSON_LEVEL,
+    family=FAMILY_HEAD,
+    requires=("face",),
+    interpretation=(
+        "The raw count behind the nod rate. A nod here is an oscillation, "
+        "not a single downward movement -- that distinction is what keeps "
+        "postural adjustments out of the count."
+    ),
+)
+def nod_count(ctx: AnalysisContext) -> dict[str, float]:
+    return {p: float(len(s)) for p, s in _event_stats(ctx, "nods").items()}
+
+
+@measure(
+    id="nod_total_duration",
+    label="Time spent nodding",
+    description="Total seconds occupied by detected nods.",
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY_HEAD,
+    requires=("face",),
+    interpretation=(
+        "Read with the count: the same total can be a few long agreements or "
+        "many short ones, and those are different listening styles."
+    ),
+)
+def nod_total_duration(ctx: AnalysisContext) -> dict[str, float]:
+    return {
+        p: float(sum(e - s for s, e in spans))
+        for p, spans in _event_stats(ctx, "nods").items()
+    }
+
+
+@measure(
+    id="nod_mean_duration",
+    label="Mean nod length",
+    description="Mean duration of a detected nod.",
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY_HEAD,
+    requires=("face",),
+)
+def nod_mean_duration(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p, spans in _event_stats(ctx, "nods").items():
+        out[p] = float(np.mean([e - s for s, e in spans])) if spans else float("nan")
+    return out
+
+
+@measure(
+    id="smile_count",
+    label="Number of smiles",
+    description=(
+        "Count of distinct smile episodes: stretches above the smile "
+        "threshold, merged across gaps shorter than 0.2 s."
+    ),
+    unit="count",
+    level=PERSON_LEVEL,
+    family=FAMILY_FACE,
+    requires=("face",),
+    interpretation=(
+        "Episodes rather than frames, so a single long smile counts once. "
+        "The merging matters: without it, one smile that dips briefly below "
+        "threshold would be reported as several."
+    ),
+)
+def smile_count(ctx: AnalysisContext) -> dict[str, float]:
+    return {p: float(len(s)) for p, s in _event_stats(ctx, "smiles").items()}
+
+
+@measure(
+    id="smile_total_duration",
+    label="Time spent smiling",
+    description="Total seconds occupied by detected smile episodes.",
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY_FACE,
+    requires=("face",),
+)
+def smile_total_duration(ctx: AnalysisContext) -> dict[str, float]:
+    return {
+        p: float(sum(e - s for s, e in spans))
+        for p, spans in _event_stats(ctx, "smiles").items()
+    }
+
+
+@measure(
+    id="smile_mean_duration",
+    label="Mean smile length",
+    description="Mean duration of a smile episode.",
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY_FACE,
+    requires=("face",),
+)
+def smile_mean_duration(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p, spans in _event_stats(ctx, "smiles").items():
+        out[p] = float(np.mean([e - s for s, e in spans])) if spans else float("nan")
+    return out
+
+
+@measure(
+    id="gaze_partner_time",
+    label="Time looking at partner",
+    description=(
+        "Seconds spent with gaze within tolerance of the estimated partner "
+        "direction, counting only frames where the face was tracked."
+    ),
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY_GAZE,
+    requires=("face",),
+    interpretation=(
+        "The quantity behind the gaze proportion. Because untracked frames "
+        "are excluded rather than assumed, this under-counts by however much "
+        "tracking was lost -- check face coverage before comparing two people."
+    ),
+)
+def gaze_partner_time(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for person in PERSONS:
+        signals = (ctx.face or {}).get(person)
+        if signals is None or not np.isfinite(signals.partner_direction[0]):
+            out[person] = float("nan")
+            continue
+        on = np.asarray(signals.on_partner, dtype=bool)
+        tracked = np.asarray(signals.tracked, dtype=bool)[: on.size]
+        out[person] = float(np.sum(on[: tracked.size] & tracked) / ctx.frame_hz)
     return out

@@ -60,9 +60,9 @@ TOPICS: tuple[dict, ...] = (
         "anchor": "bakery",
         "open": "There is a bakery near my apartment that opens at four in the morning.",
         "more": [
-            "The owner recognises everyone and refuses to learn anyone's name.",
+            "The owner recognizes everyone and refuses to learn anyone's name.",
             "I go on Sundays and read there until it gets crowded.",
-            "Their sourdough is genuinely the best thing in the neighbourhood.",
+            "Their sourdough is genuinely the best thing in the neighborhood.",
         ],
         "ask": "Do you have a place like that where you live?",
     },
@@ -81,7 +81,7 @@ TOPICS: tuple[dict, ...] = (
         "open": "I started learning piano again at twenty six after quitting as a kid.",
         "more": [
             "Practising as an adult is humiliating in a way I did not expect.",
-            "My neighbours have been remarkably patient about the whole thing.",
+            "My neighbors have been remarkably patient about the whole thing.",
             "I can get through two pieces now without stopping.",
         ],
         "ask": "Is there something you went back to later than most people?",

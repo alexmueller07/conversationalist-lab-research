@@ -109,7 +109,7 @@ def _concatenate_speech(
     return np.concatenate(pieces) if pieces else np.zeros(0, dtype=np.float32)
 
 
-def analyse_prosody(
+def analyze_prosody(
     signal: np.ndarray,
     speech: Segments,
     sample_rate: int,

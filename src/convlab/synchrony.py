@@ -1,7 +1,7 @@
 """Interpersonal coordination, measured against chance.
 
 Two independent time series that each have strong autocorrelation -- which
-every behavioural signal does, because people do not change expression or
+every behavioral signal does, because people do not change expression or
 posture at random from frame to frame -- produce sizeable cross-correlations
 purely by chance. Reporting a raw correlation between two partners' smiling
 and calling it mimicry is therefore not a weak result, it is an invalid one:
@@ -75,7 +75,7 @@ def _zscore_windows(x: np.ndarray) -> np.ndarray | None:
 
 
 def _peak_correlation(
-    a: np.ndarray, b: np.ndarray, max_lag: int
+    a: np.ndarray, b: np.ndarray, max_lag: int, restrict: str | None = None
 ) -> tuple[float, int] | None:
     """Strongest correlation between two z-scored windows, over +/- max_lag.
 
@@ -99,10 +99,24 @@ def _peak_correlation(
     values = np.concatenate((corr[-max_lag:], corr[: max_lag + 1]))
 
     lags = np.arange(-max_lag, max_lag + 1)
-    # Unbiased normalisation: only n-|lag| samples overlap at each lag, so
+    # Unbiased normalization: only n-|lag| samples overlap at each lag, so
     # without this the estimate shrinks toward zero as the lag grows and the
     # peak is biased toward lag 0.
     values = values / np.maximum(n - np.abs(lags), 1)
+
+    # A directional measure has to exclude simultaneity, not merely prefer
+    # one side of it: two people reacting to the same event align at lag
+    # zero, and admitting that lag would let a shared cause count as one
+    # person following the other.
+    if restrict == "a_leads":
+        keep = lags < 0
+    elif restrict == "b_leads":
+        keep = lags > 0
+    else:
+        keep = np.ones(lags.size, dtype=bool)
+    if not keep.any():
+        return None
+    values, lags = values[keep], lags[keep]
 
     peak = int(np.argmax(values))
     if not np.isfinite(values[peak]):
@@ -116,12 +130,19 @@ def windowed_lagged_correlation(
     frame_hz: float,
     cfg: SynchronyConfig,
     rng: np.random.Generator | None = None,
+    restrict: str | None = None,
 ) -> SynchronyResult:
     """Cross-correlate two partner signals in windows, with a surrogate test.
 
     Windowing matters because coordination is not stationary: partners fall
     in and out of step over a ten-minute conversation, and a single
     correlation across the whole session averages those episodes away.
+
+    ``restrict`` turns the undirected measure into a directional one.
+    ``"a_leads"`` keeps only lags at which ``a``'s pattern precedes ``b``'s,
+    which is what distinguishes "b responds to a" from "a and b both respond
+    to something else". Left unset, the peak is taken over all lags and the
+    result says only that the two are coordinated.
     """
     a = np.asarray(a, dtype=np.float64).ravel()
     b = np.asarray(b, dtype=np.float64).ravel()
@@ -147,7 +168,7 @@ def windowed_lagged_correlation(
             wb = _zscore_windows(shifted[start : start + win])
             if wa is None or wb is None:
                 continue
-            found = _peak_correlation(wa, wb, max_lag)
+            found = _peak_correlation(wa, wb, max_lag, restrict)
             if found is None:
                 continue
             peaks.append(found[0])

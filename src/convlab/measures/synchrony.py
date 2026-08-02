@@ -1,8 +1,8 @@
-"""Coordination between the two partners' behaviour.
+"""Coordination between the two partners' behavior.
 
 Each measure reports the *excess* over a surrogate baseline, not the raw
 correlation. The raw value is not interpretable: two people who never met
-produce correlations around 0.3 on these signals simply because behavioural
+produce correlations around 0.3 on these signals simply because behavioral
 time series are autocorrelated. Only the amount by which an observed value
 exceeds its own shuffled baseline carries information, and the accompanying
 z score says whether it does so at all.

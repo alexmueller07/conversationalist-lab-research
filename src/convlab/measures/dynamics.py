@@ -111,7 +111,7 @@ def response_latency_trend(ctx: AnalysisContext) -> dict[str, float]:
     level=PERSON_LEVEL,
     family=FAMILY,
     requires=("turn_set",),
-    interpretation="Rising acknowledgement suggests growing engagement.",
+    interpretation="Rising acknowledgment suggests growing engagement.",
 )
 def backchannel_rate_trend(ctx: AnalysisContext) -> dict[str, float]:
     return {

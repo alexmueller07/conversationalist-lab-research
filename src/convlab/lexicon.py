@@ -86,7 +86,7 @@ LSM_CATEGORIES: dict[str, frozenset[str]] = {
 FILLERS = frozenset("um uh erm er ah eh hmm mm uhm umm".split())
 """Filled pauses. 'like' and 'you know' are excluded: they are discourse
 markers whose frequency varies enormously by dialect and age, and counting
-them as disfluency would systematically penalise younger speakers."""
+them as disfluency would systematically penalize younger speakers."""
 
 DISCOURSE_MARKERS = frozenset(
     ["like", "you know", "i mean", "sort of", "kind of", "well", "so", "right"]
@@ -105,7 +105,7 @@ HEDGES = frozenset(
 # ----------------------------------------------------------------------
 
 GRATITUDE = frozenset(["thank", "thanks", "thank you", "appreciate", "grateful"])
-APOLOGY = frozenset(["sorry", "apologize", "apologise", "my bad", "excuse me", "forgive"])
+APOLOGY = frozenset(["sorry", "apologize", "apologize", "my bad", "excuse me", "forgive"])
 GREETING = frozenset(["hi", "hello", "hey", "good morning", "good afternoon"])
 PLEASE = frozenset(["please"])
 POSITIVE = frozenset(
@@ -171,7 +171,7 @@ def tokenize(text: str) -> list[str]:
     """Lower-case alphabetic tokens, apostrophes preserved then stripped.
 
     Contractions are reduced to a bare form ("don't" -> "dont") so that the
-    negation and auxiliary lists match regardless of how the recogniser
+    negation and auxiliary lists match regardless of how the recognizer
     chose to punctuate.
     """
     return [t.replace("'", "") for t in _TOKEN_RE.findall(text.lower()) if t.strip("'")]
@@ -201,7 +201,7 @@ def classify_question(text: str) -> str | None:
     """Label an utterance as a question type, or None if it is not one.
 
     Declarative questions ("you grew up there?") carry no interrogative
-    syntax and are identified only by the question mark the recogniser
+    syntax and are identified only by the question mark the recognizer
     supplies, so they are the least reliable category and are reported
     separately rather than folded into the total.
     """

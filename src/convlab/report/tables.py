@@ -2,12 +2,12 @@
 
 The primary artifact is long format -- one row per session, person and
 measure -- because that is what mixed-effects models want, and dyadic data
-must be modelled with a random effect for the pair. A wide pivot is written
-alongside for inspection, but the long table is the one to analyse.
+must be modeled with a random effect for the pair. A wide pivot is written
+alongside for inspection, but the long table is the one to analyze.
 
 Unavailable measures are written as rows with a null value and a stated
 reason, never dropped and never zero-filled. Deleting them would make a
-missing camera look like an absence of behaviour, and in a table of
+missing camera look like an absence of behavior, and in a table of
 per-dyad values that difference is the whole analysis.
 """
 

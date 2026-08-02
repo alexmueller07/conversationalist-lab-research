@@ -77,7 +77,7 @@ def decode_audio(
 
 def _resample(resampler: "av.AudioResampler", frame) -> list:
     """PyAV returns a list from ``resample`` on modern versions and a single
-    frame (or None) on older ones; normalise both."""
+    frame (or None) on older ones; normalize both."""
     out = resampler.resample(frame)
     if out is None:
         return []
@@ -94,7 +94,7 @@ def _resample(resampler: "av.AudioResampler", frame) -> list:
 def frame_count(n_samples: int, sample_rate: int, frame_hz: float) -> int:
     """Frames on the master grid covering ``n_samples``.
 
-    Frame ``i`` is centred at ``i / frame_hz`` seconds. Defined in one place
+    Frame ``i`` is centered at ``i / frame_hz`` seconds. Defined in one place
     so audio, video and derived series always agree on grid length.
     """
     return int(np.floor(n_samples / sample_rate * frame_hz)) + 1
@@ -114,9 +114,9 @@ def highpass(x: np.ndarray, sample_rate: int, cutoff_hz: float, order: int = 4) 
 
 
 def _frame_view(x: np.ndarray, frame_len: int, hop: int, n_frames: int) -> np.ndarray:
-    """All frames as one zero-copy strided view, centred on the grid.
+    """All frames as one zero-copy strided view, centered on the grid.
 
-    Frame ``i`` is centred at sample ``i * hop``, so it spans
+    Frame ``i`` is centered at sample ``i * hop``, so it spans
     ``[i*hop - frame_len//2, ... + frame_len)``. The signal is padded once
     and every chunk downstream is a view into that single buffer.
     """
@@ -186,7 +186,7 @@ def log_energy_envelope(
 ) -> np.ndarray:
     """Mean-removed, unit-variance log-energy envelope used for coarse sync.
 
-    Normalising away level and offset lets two cameras with different gains
+    Normalizing away level and offset lets two cameras with different gains
     and different microphones still correlate on *when* sound happened.
     """
     # frame_energy adds an epsilon before the log, so values are always finite.

@@ -1,7 +1,7 @@
 """convlab -- multimodal measurement of dyadic conversation quality.
 
-The package turns three synchronised video recordings of a two-person
-conversation into a documented table of behavioural measures: who spoke
+The package turns three synchronized video recordings of a two-person
+conversation into a documented table of behavioral measures: who spoke
 when, how quickly each replied, what they looked at, when they nodded,
 smiled and laughed, how their speech and movement tracked one another, and
 how all of that changed over the course of the conversation.

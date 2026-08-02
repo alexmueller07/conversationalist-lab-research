@@ -52,10 +52,20 @@ class AnalysisContext:
 
     # -- audio events ---------------------------------------------------
     laughter: dict[str, Segments] | None = None
+    filled_pauses: dict[str, Segments] | None = None
+    """Hesitations ("um", "uh") found in the audio rather than the
+    transcript, which usually does not contain them."""
 
     # -- derived --------------------------------------------------------
     topics: Any | None = None
     semantics: Any | None = None
+
+    # -- recording quality ----------------------------------------------
+    video_quality: dict[str, Any] | None = None
+    audio_quality: dict[str, Any] | None = None
+    """Measured properties of the source files, keyed by view. Populated
+    after voice activity, because the noise floor can only be measured
+    where the detector says nobody is speaking."""
 
     # -- bookkeeping ----------------------------------------------------
     persons: tuple[str, ...] = PERSONS

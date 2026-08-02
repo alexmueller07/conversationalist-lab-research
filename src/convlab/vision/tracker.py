@@ -75,7 +75,7 @@ class FaceTrack:
     head_roll: np.ndarray
     """Degrees. Pitch positive is nodding down, yaw positive is turning left."""
     mouth_aperture: np.ndarray
-    """Inner-lip separation normalised by inter-ocular distance, so it does
+    """Inner-lip separation normalized by inter-ocular distance, so it does
     not change when the participant leans toward or away from the camera."""
     detected: np.ndarray
     view: str = ""
@@ -250,7 +250,7 @@ def track_body(
     cfg: VisionConfig,
     view: str = "",
 ) -> BodyTrack:
-    """Run the pose landmarker, producing shoulder-normalised body signals."""
+    """Run the pose landmarker, producing shoulder-normalized body signals."""
     import mediapipe as mp
     from mediapipe.tasks import python as mp_python
     from mediapipe.tasks.python import vision

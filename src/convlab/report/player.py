@@ -1,4 +1,4 @@
-"""Synchronised video review panel for the dashboard.
+"""Synchronized video review panel for the dashboard.
 
 Every number in the report is a claim about something that happened in the
 recording, and the fastest way to judge a claim is to watch it. This panel
@@ -282,11 +282,11 @@ _PLAYER_JS = r"""
 
 
 def _embed_json(data: dict) -> str:
-    """Serialise for embedding inside a <script> element.
+    """Serialize for embedding inside a <script> element.
 
     An HTML parser ends a script block at the first literal ``</script>`` in
     the byte stream, regardless of JSON quoting. Transcript text is
-    recogniser output -- untrusted, and it can contain anything a participant
+    recognizer output -- untrusted, and it can contain anything a participant
     said or the model hallucinated -- so a turn containing that sequence
     would truncate the payload and break the report. Escaping the slash keeps
     the JSON byte-identical to a parser while making the sequence
@@ -329,11 +329,11 @@ def render_player(data: dict, jump_to: Sequence[tuple[float, str]] = ()) -> str:
         source = data["sources"].get(person)
         if source is None:
             continue
-        colour = "var(--a)" if person == "A" else "var(--b)"
+        color = "var(--a)" if person == "A" else "var(--b)"
         figures.append(
             f'<figure><video id="vid{person}" preload="metadata" playsinline '
             f'src="{source["src"]}"></video>'
-            f'<figcaption><span class="who" id="who{person}" style="color:{colour}">'
+            f'<figcaption><span class="who" id="who{person}" style="color:{color}">'
             f'{person} &middot; {source["name"]}</span>'
             f'<span class="chips">{_chips(person, data)}</span>'
             f"</figcaption></figure>"
@@ -345,7 +345,7 @@ def render_player(data: dict, jump_to: Sequence[tuple[float, str]] = ()) -> str:
 
     return f"""
 <p class="desc">Play the recording against what the pipeline believes at that
-instant. A chip lights up when the measure says the behaviour is happening,
+instant. A chip lights up when the measure says the behavior is happening,
 so a wrong detection is visible rather than merely reported. Click the
 timeline above to jump. Space plays and pauses; arrow keys step 2 seconds,
 with shift for 10.</p>

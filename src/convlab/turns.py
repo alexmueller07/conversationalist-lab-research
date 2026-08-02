@@ -50,28 +50,28 @@ BACKCHANNEL_LEXICON: frozenset[str] = frozenset(
         "no", "nope", "god", "jesus", "damn", "geez",
     }
 )
-"""Tokens that count as acknowledgement when produced inside a partner's turn.
+"""Tokens that count as acknowledgment when produced inside a partner's turn.
 
 Membership alone never makes something a backchannel -- "yeah" beginning a
 long answer is not one. The lexicon is a *filter* applied on top of the
 structural test (short, inside the partner's turn, floor not taken), which
-is what distinguishes an acknowledgement from a brief but genuine turn.
+is what distinguishes an acknowledgment from a brief but genuine turn.
 """
 
 
-def normalise_token(token: str) -> str:
+def normalize_token(token: str) -> str:
     return "".join(ch for ch in token.lower() if ch.isalpha())
 
 
 def is_backchannel_text(text: str, max_words: int) -> bool:
-    """Does this transcript look like an acknowledgement?
+    """Does this transcript look like an acknowledgment?
 
     Many backchannels are multi-word ("uh huh", "I see", "that's right") and
-    their parts are not acknowledgements on their own -- "see" and "right"
+    their parts are not acknowledgments on their own -- "see" and "right"
     carry content, "uh" is a filler. So the joined form is tested first and
     the token-by-token test is the fallback, not the other way round.
     """
-    tokens = [t for t in (normalise_token(t) for t in text.split()) if t]
+    tokens = [t for t in (normalize_token(t) for t in text.split()) if t]
     if not tokens or len(tokens) > max_words:
         return False
     if "".join(tokens) in BACKCHANNEL_LEXICON:
@@ -162,7 +162,7 @@ class TurnSet:
     backchannels: list[IPU] = field(default_factory=list)
     interruptions: list[Interruption] = field(default_factory=list)
     non_floor: list[IPU] = field(default_factory=list)
-    """Speech that never took the floor and is not an acknowledgement:
+    """Speech that never took the floor and is not an acknowledgment:
     attempts to come in that the other person talked through."""
     duration: float = 0.0
     speech: dict[str, Segments] = field(default_factory=dict)
@@ -282,7 +282,7 @@ def _text_for(
 def classify_backchannels(
     ipus: Sequence[IPU], speech: dict[str, Segments], cfg: TurnConfig
 ) -> list[IPU]:
-    """Mark short acknowledgements produced inside the partner's turn.
+    """Mark short acknowledgments produced inside the partner's turn.
 
     Three conditions must hold together. The unit must be short; it must sit
     mostly inside the partner's speech; and the partner must keep speaking
@@ -291,7 +291,7 @@ def classify_backchannels(
     not a backchannel, and the last condition is what separates them.
 
     When a transcript is available its text must also look like an
-    acknowledgement, which removes the brief but contentful turns ("I did
+    acknowledgment, which removes the brief but contentful turns ("I did
     too, in Chicago") that the structural test alone would misclassify.
     """
     other_of = {"A": "B", "B": "A"}
@@ -338,7 +338,7 @@ def takes_the_floor(
     Sorting speech by start time and calling every change of speaker a new
     turn seems obvious and is wrong. Consider one person talking for thirty
     seconds while the other says eight words in the middle without stopping
-    them. By start time that is three turns, and it produces two artefacts,
+    them. By start time that is three turns, and it produces two artifacts,
     both severe. The interjection "begins before the previous speaker
     finished" by twenty seconds, so it lands in the overlap statistics as an
     enormous negative latency. And when the first speaker's own words resume,
@@ -383,7 +383,7 @@ def build_turns(
     """Group non-backchannel IPUs into floor-holding turns.
 
     Returns the turns and the units that spoke without taking the floor --
-    failed interruptions and acknowledgements the lexical test did not catch.
+    failed interruptions and acknowledgments the lexical test did not catch.
     They are events in their own right and are reported as such.
     """
     floor = [u for u in ipus if not u.is_backchannel]
@@ -513,7 +513,7 @@ def find_interruptions(
 
     An onset landing within ``interruption_success_s`` of the current turn's
     end is not an interruption at all: the listener misjudged the ending by a
-    fraction of a second, which is ordinary turn-taking and is labelled a
+    fraction of a second, which is ordinary turn-taking and is labeled a
     transition overlap so the two are never pooled.
     """
     out: list[Interruption] = []

@@ -198,7 +198,7 @@ def pair_by_shared_field(paths: Sequence[Path]) -> tuple[dict[str, dict[str, Pat
     """Pair files that carry no view token, using a shared filename field.
 
     Many labs name recordings ``<participant>_<session>.mp4`` and never write
-    an A/B token at all. Such a folder is perfectly well organised and
+    an A/B token at all. Such a folder is perfectly well organized and
     contains everything needed, so refusing it would be pedantry.
 
     The strategy is to find the *one* field position whose values partition
@@ -325,7 +325,7 @@ def discover_sessions(root: str | Path, strict: bool = True) -> list[Session]:
             raise SessionError(
                 f"session {sid!r} has only {sorted(views)}; both close_a and "
                 "close_b are required for speaker attribution. Pass strict=False "
-                "to analyse it with reduced accuracy."
+                "to analyze it with reduced accuracy."
             )
         sessions.append(session)
 

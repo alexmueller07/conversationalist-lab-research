@@ -25,6 +25,7 @@ from convlab.measures import lexical as _lexical  # noqa: F401
 from convlab.measures import prosodic as _prosodic  # noqa: F401
 from convlab.measures import semantic as _semantic  # noqa: F401
 from convlab.measures import visual as _visual  # noqa: F401
+from convlab.measures import affect as _affect  # noqa: F401
 from convlab.measures import laughter as _laughter  # noqa: F401
 from convlab.measures import synchrony as _synchrony  # noqa: F401
 from convlab.measures import dynamics as _dynamics  # noqa: F401

@@ -89,7 +89,7 @@ class TestBackchannelClassification:
 
     def test_successful_interruption_is_not_backchannel(self, cfg):
         # B speaks briefly and A *stops*: the floor was taken, so this is an
-        # interruption, not an acknowledgement.
+        # interruption, not an acknowledgment.
         speech = {"A": Segments.from_pairs([(0.0, 3.2)]),
                   "B": Segments.from_pairs([(3.0, 3.5)])}
         ipus = classify_backchannels(build_ipus(speech, cfg), speech, cfg)

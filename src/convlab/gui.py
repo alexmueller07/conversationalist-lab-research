@@ -62,8 +62,8 @@ SKIPPABLE = (
     ("asr", "Transcribe speech", "Needed for questions, callbacks and style matching"),
     ("face", "Track faces", "Needed for gaze, nods, smiles and expressivity"),
     ("body", "Track body", "Gesture and posture; the slowest stage"),
-    ("prosody", "Analyse voice", "Pitch, loudness and entrainment"),
-    ("semantics", "Analyse meaning", "Topics, coherence and long-range callbacks"),
+    ("prosody", "Analyze voice", "Pitch, loudness and entrainment"),
+    ("semantics", "Analyze meaning", "Topics, coherence and long-range callbacks"),
     ("laughter", "Detect laughter", "Laughter and shared laughter"),
 )
 
@@ -127,7 +127,7 @@ class Worker(threading.Thread):
 
         from convlab import models
         from convlab.config import Config
-        from convlab.pipeline import Cancelled, analyse_session
+        from convlab.pipeline import Canceled, analyze_session
         from convlab.report.codebook import write_codebook
         from convlab.report.dashboard import write_dashboard
         from convlab.report.qc import assess_quality
@@ -148,7 +148,7 @@ class Worker(threading.Thread):
                 models.ensure(row["name"], self.model_dir)
         self.send("log", "Models ready.", "ok")
 
-        # Discover leniently and skip what cannot be analysed, rather than
+        # Discover leniently and skip what cannot be analyzed, rather than
         # letting one badly named pair abort the whole batch. Strict mode
         # raises on the first incomplete session, which would contradict the
         # folder scan's promise that such sessions are simply skipped.
@@ -164,7 +164,7 @@ class Worker(threading.Thread):
                 "warn",
             )
         if not sessions:
-            self.send("log", "Nothing to analyse.", "warn")
+            self.send("log", "Nothing to analyze.", "warn")
             return
 
         output = Path(self.output)
@@ -196,11 +196,11 @@ class Worker(threading.Thread):
                 )
 
             try:
-                result = analyse_session(
+                result = analyze_session(
                     session, config, output_root=output, skip=self.skip,
                     progress=on_progress, cancel=lambda: self.stopping,
                 )
-            except Cancelled:
+            except Canceled:
                 self.send("log", "  stopped", "warn")
                 break
             except Exception as exc:  # noqa: BLE001
@@ -297,7 +297,7 @@ class App:
     def _init_style(self) -> None:
         style = ttk.Style()
         # 'clam' is the one theme present on every platform that actually
-        # honours colour options; the native themes ignore most of them.
+        # honours color options; the native themes ignore most of them.
         if "clam" in style.theme_names():
             style.theme_use("clam")
         style.configure(".", background=PALETTE["bg"], foreground=PALETTE["text"])
@@ -390,7 +390,7 @@ class App:
         actions = ttk.Frame(outer)
         actions.grid(row=3, column=0, sticky="ew", pady=(14, 8))
         self.run_button = ttk.Button(
-            actions, text="Analyse", style="Accent.TButton", command=self._start)
+            actions, text="Analyze", style="Accent.TButton", command=self._start)
         self.run_button.pack(side="left")
         self.stop_button = ttk.Button(
             actions, text="Stop", command=self._stop, state="disabled")
@@ -423,10 +423,10 @@ class App:
         scroll.grid(row=0, column=1, sticky="ns")
         self.log.configure(yscrollcommand=scroll.set)
 
-        for tag, colour in (("ok", PALETTE["ok"]), ("warn", PALETTE["warn"]),
+        for tag, color in (("ok", PALETTE["ok"]), ("warn", PALETTE["warn"]),
                             ("fail", PALETTE["fail"]), ("accent", PALETTE["accent"]),
                             ("info", PALETTE["text"])):
-            self.log.tag_configure(tag, foreground=colour)
+            self.log.tag_configure(tag, foreground=color)
         self.log.tag_configure("accent", font=("Consolas", 9, "bold"))
 
         self._log("Ready. Choose a folder of recordings, or click "
@@ -613,7 +613,7 @@ class App:
             if message.text:
                 self.input_var.set(message.text)
                 self._scan(message.text)
-                self._log("Demo data ready - click Analyse.", "ok")
+                self._log("Demo data ready - click Analyze.", "ok")
         elif message.kind == "error":
             messagebox.showerror("Analysis failed", message.text)
         elif message.kind == "done":

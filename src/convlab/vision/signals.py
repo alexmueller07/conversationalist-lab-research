@@ -1,4 +1,4 @@
-﻿"""Turning raw tracking into behavioural signals and discrete events.
+﻿"""Turning raw tracking into behavioral signals and discrete events.
 
 Everything here operates on plain numpy arrays laid out on the master frame
 grid, with no dependency on MediaPipe or on a video decoder. That is
@@ -27,6 +27,35 @@ _EPS = 1e-9
 SMILE_SHAPES = ("mouthSmileLeft", "mouthSmileRight")
 DUCHENNE_SHAPES = ("cheekSquintLeft", "cheekSquintRight", "eyeSquintLeft", "eyeSquintRight")
 BROW_RAISE_SHAPES = ("browInnerUp", "browOuterUpLeft", "browOuterUpRight")
+
+POSITIVE_SHAPES: tuple[tuple[str, float], ...] = (
+    ("mouthSmileLeft", 1.0), ("mouthSmileRight", 1.0),
+    ("cheekSquintLeft", 0.5), ("cheekSquintRight", 0.5),
+)
+NEGATIVE_SHAPES: tuple[tuple[str, float], ...] = (
+    ("mouthFrownLeft", 1.0), ("mouthFrownRight", 1.0),
+    ("browDownLeft", 0.5), ("browDownRight", 0.5),
+    ("noseSneerLeft", 0.5), ("noseSneerRight", 0.5),
+)
+"""Facial actions summed into a valence index, and how much each counts.
+
+This is a *pleasantness* index built from observable muscle actions, not
+emotion recognition. It does not name an emotion and should not be reported
+as though it did: the same muscle actions occur for different reasons, and no
+configuration of a face licenses a claim about what the person felt.
+
+The weights encode how confusable each action is. Smiling and frowning are
+the two clearest signals and carry full weight. Cheek raise is weighted at a
+half because it is also produced by squinting at a screen; brow lowering
+because it accompanies concentration as readily as displeasure; nose wrinkle
+because it is the least reliably tracked of the set.
+
+The unavoidable confound is articulation. Speaking moves the mouth
+continuously, and a wide vowel can raise the smile channel on its own. That
+is why valence is reported separately for speaking and listening frames
+rather than pooled -- the listening figure is the one to trust when the two
+disagree.
+"""
 EXPRESSIVE_SHAPES = (
     "browDownLeft", "browDownRight", "browInnerUp", "browOuterUpLeft",
     "browOuterUpRight", "cheekSquintLeft", "cheekSquintRight", "eyeSquintLeft",
@@ -39,7 +68,7 @@ EXPRESSIVE_SHAPES = (
 
 @dataclass
 class FaceSignals:
-    """One person's facial behaviour on the master frame grid."""
+    """One person's facial behavior on the master frame grid."""
 
     person: str
     frame_hz: float
@@ -57,6 +86,8 @@ class FaceSignals:
     on_partner: np.ndarray
     """Boolean: gaze within tolerance of the estimated partner direction."""
     tracked: np.ndarray
+    valence: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    """Positive minus negative facial action, per frame. NaN where untracked."""
     nods: Segments = field(default_factory=Segments.empty)
     shakes: Segments = field(default_factory=Segments.empty)
     smiles: Segments = field(default_factory=Segments.empty)
@@ -281,9 +312,14 @@ def derive_face_signals(
     duchenne = _nanmean(np.stack([shape(s) for s in DUCHENNE_SHAPES]), axis=0)
     brow = _nanmean(np.stack([shape(s) for s in BROW_RAISE_SHAPES]), axis=0)
 
+    def weighted(pairs: tuple[tuple[str, float], ...]) -> np.ndarray:
+        return _nanmean(np.stack([w * shape(s) for s, w in pairs]), axis=0)
+
+    valence = weighted(POSITIVE_SHAPES) - weighted(NEGATIVE_SHAPES)
+
     expressive = np.stack([shape(s) for s in EXPRESSIVE_SHAPES])
     # Expressivity is how much the face is *moving*, not how activated it is:
-    # a permanently raised eyebrow is a feature of a face, not a behaviour.
+    # a permanently raised eyebrow is a feature of a face, not a behavior.
     expressivity = _nanmean(
         np.abs(np.diff(expressive, axis=1, prepend=expressive[:, :1])), axis=0
     )
@@ -333,6 +369,7 @@ def derive_face_signals(
         duchenne=duchenne,
         brow_raise=brow,
         expressivity=expressivity,
+        valence=valence,
         gaze_yaw=gaze_yaw,
         gaze_pitch=gaze_pitch,
         on_partner=on_partner,

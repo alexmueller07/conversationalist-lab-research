@@ -27,6 +27,7 @@ number is correct, which is where silent errors actually live.
 from convlab.synth.audio import (
     SynthTruth,
     Utterance,
+    render_filled_pause,
     render_voice,
     synthesize_dyad_audio,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "Utterance",
     "synthesize_dyad_audio",
     "render_voice",
+    "render_filled_pause",
     "ScriptPlan",
     "ScriptedUtterance",
     "build_script",

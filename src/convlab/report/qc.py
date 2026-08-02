@@ -167,6 +167,40 @@ def assess_quality(context: AnalysisContext, sync=None) -> QCReport:
                 "is not a two-way conversation",
             )
 
+    # Recording quality. These are warnings rather than failures on purpose:
+    # a soft or occasionally frozen recording still yields usable turn-taking
+    # and prosody, and the right response is to know which measures to
+    # discount rather than to discard the session. What must not happen is
+    # for the degradation to go unmentioned, because none of it is visible in
+    # the numbers it damages -- a frozen frame produces confident, stable
+    # tracking of a face that is not moving.
+    for role, quality in (context.video_quality or {}).items():
+        if np.isfinite(quality.freeze_rate):
+            check(
+                f"video_continuity_{role}", quality.freeze_rate, cfg.max_freeze_rate,
+                quality.freeze_rate <= cfg.max_freeze_rate, "warning",
+                f"{quality.freeze_rate:.0%} of sampled frame pairs in {role} are "
+                "identical; the picture is freezing, which suppresses nods and "
+                "head movement without reducing tracking confidence",
+            )
+        if quality.height:
+            check(
+                f"video_resolution_{role}", float(quality.height),
+                float(cfg.min_video_height), quality.height >= cfg.min_video_height,
+                "warning",
+                f"{role} is {quality.width}x{quality.height}; facial action "
+                "estimates degrade as the face occupies fewer pixels",
+            )
+    for role, quality in (context.audio_quality or {}).items():
+        if np.isfinite(quality.snr_db):
+            check(
+                f"audio_snr_{role}", quality.snr_db, cfg.min_snr_db,
+                quality.snr_db >= cfg.min_snr_db, "warning",
+                f"{role} signal-to-noise is {quality.snr_db:.0f} dB; pitch "
+                "measures and level-based speaker attribution both degrade "
+                f"below {cfg.min_snr_db:.0f} dB",
+            )
+
     if context.transcript is not None:
         confidence = context.transcript.mean_confidence
         if np.isfinite(confidence):

@@ -149,7 +149,7 @@ class TestVoiceActivitySource:
 
         from convlab import pipeline
 
-        source = inspect.getsource(pipeline.analyse_session)
+        source = inspect.getsource(pipeline.analyze_session)
         assert "CLOSE_VIEW[p] for p in PERSONS" in source
         assert "np.maximum.reduce" in source
 

@@ -1,12 +1,12 @@
-"""Listener responses: acknowledgement tokens and how they are placed.
+"""Listener responses: acknowledgment tokens and how they are placed.
 
-Backchannels are the clearest behavioural signal that someone is listening
+Backchannels are the clearest behavioral signal that someone is listening
 rather than merely waiting, and their *rate* is only half the story. A
 listener who produces them steadily throughout a partner's turn behaves
 differently from one who produces the same number all at the end, so
 placement and dispersion are reported alongside the count.
 
-Rates are normalised by the partner's speaking time rather than by session
+Rates are normalized by the partner's speaking time rather than by session
 duration. A person who had few opportunities to backchannel, because their
 partner said little, must not be scored as unresponsive.
 """
@@ -31,7 +31,7 @@ _REF = (
     id="backchannel_rate",
     label="Backchannel rate",
     description=(
-        "Acknowledgement tokens ('mhm', 'right', 'yeah') this person produced "
+        "Acknowledgment tokens ('mhm', 'right', 'yeah') this person produced "
         "per minute of their partner's speaking time."
     ),
     unit="per minute of partner speech",
@@ -39,9 +39,9 @@ _REF = (
     family=FAMILY,
     requires=("turn_set",),
     interpretation=(
-        "The standard vocal index of active listening. Normalised by the "
+        "The standard vocal index of active listening. Normalized by the "
         "partner's talk time so that someone with a quiet partner is not "
-        "penalised for having had fewer opportunities."
+        "penalized for having had fewer opportunities."
     ),
     references=_REF,
 )
@@ -57,7 +57,7 @@ def backchannel_rate(ctx: AnalysisContext) -> dict[str, float]:
 @measure(
     id="backchannel_count",
     label="Backchannel count",
-    description="Number of acknowledgement tokens this person produced.",
+    description="Number of acknowledgment tokens this person produced.",
     unit="count",
     level=PERSON_LEVEL,
     family=FAMILY,
@@ -72,7 +72,7 @@ def backchannel_count(ctx: AnalysisContext) -> dict[str, float]:
     label="Backchannel coverage of partner turns",
     description=(
         "Share of the partner's turns longer than three seconds that received "
-        "at least one acknowledgement from this person."
+        "at least one acknowledgment from this person."
     ),
     unit="proportion",
     level=PERSON_LEVEL,
@@ -108,7 +108,7 @@ def backchannel_coverage(ctx: AnalysisContext) -> dict[str, float]:
     id="backchannel_relative_position",
     label="Mean backchannel position within turn",
     description=(
-        "Where in the partner's turn this person's acknowledgements fall, as a "
+        "Where in the partner's turn this person's acknowledgments fall, as a "
         "fraction of the turn's length. 0 is the very start, 1 the very end."
     ),
     unit="proportion of turn",
@@ -139,7 +139,7 @@ def backchannel_relative_position(ctx: AnalysisContext) -> dict[str, float]:
     label="Backchannel latency after partner pause",
     description=(
         "Median delay between the partner reaching a brief within-turn pause "
-        "and this person producing an acknowledgement, when one follows within "
+        "and this person producing an acknowledgment, when one follows within "
         "two seconds."
     ),
     unit="s",
@@ -172,7 +172,7 @@ def backchannel_latency(ctx: AnalysisContext) -> dict[str, float]:
     id="backchannel_reciprocity",
     label="Backchannel reciprocity",
     description=(
-        "How evenly the two partners produced acknowledgements, as 1 minus the "
+        "How evenly the two partners produced acknowledgments, as 1 minus the "
         "absolute difference in their shares of the dyad's total."
     ),
     unit="index",

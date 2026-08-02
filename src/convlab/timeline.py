@@ -23,7 +23,7 @@ _EMPTY = np.zeros((0, 2), dtype=np.float64)
 class Segments:
     """A set of disjoint, sorted, half-open time intervals ``[start, end)``.
 
-    The constructor normalises: intervals are sorted, zero/negative-length
+    The constructor normalizes: intervals are sorted, zero/negative-length
     ones dropped, and overlapping ones merged. Every operation returns a
     value obeying the same invariant, so a ``Segments`` is always a clean
     set and callers never have to defend against overlaps.
@@ -76,7 +76,7 @@ class Segments:
 
     # -- conversion ----------------------------------------------------
     def to_mask(self, n_frames: int, frame_hz: float, t0: float = 0.0) -> np.ndarray:
-        """Boolean mask on the frame grid. A frame is True when its centre
+        """Boolean mask on the frame grid. A frame is True when its center
         falls inside a segment."""
         t = t0 + np.arange(n_frames, dtype=np.float64) / frame_hz
         out = np.zeros(n_frames, dtype=bool)
@@ -126,7 +126,7 @@ class Segments:
 
     # -- shaping -------------------------------------------------------
     def merge_gaps(self, max_gap: float) -> "Segments":
-        """Join neighbours separated by at most ``max_gap`` seconds."""
+        """Join neighbors separated by at most ``max_gap`` seconds."""
         if len(self) < 2 or max_gap <= 0:
             return self
         out = [self.bounds[0].copy()]

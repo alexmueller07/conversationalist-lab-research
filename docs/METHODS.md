@@ -38,7 +38,7 @@ contains different content.
 estimate. The phase transform discards the magnitude spectrum, keeping only
 phase, which makes the peak sharp and robust to the two microphones having
 very different frequency responses. A parabolic fit through the peak's
-neighbours gives sub-sample resolution.
+neighbors gives sub-sample resolution.
 
 **Diagnostics.** The median of the excerpt estimates is the offset; their MAD
 is the confidence; their slope against time is the clock drift in ppm. Both
@@ -136,7 +136,7 @@ band-limited to 300–3400 Hz before comparison — restricting to the telephone
 band suppresses low-frequency room modes and high-frequency hiss, which
 differ between cameras for reasons unrelated to who is speaking.
 
-**Lip motion.** Mouth aperture, normalised by inter-ocular distance so it does
+**Lip motion.** Mouth aperture, normalized by inter-ocular distance so it does
 not change when a participant leans toward the camera, band-passed to
 1.5–8 Hz and enveloped via Hilbert transform. Untracked frames score 0 —
 neutral evidence, not evidence of silence. This is a supporting cue when
@@ -206,7 +206,7 @@ Four states — silence, A, B, both — decoded with an HMM (`self_transition_lo
 flickers several times inside a word. A mild extra penalty on direct A→B
 transitions stops the decoder using a clean switch to explain a moment of
 acoustic ambiguity. Forward–backward posteriors give a calibrated per-frame
-confidence; runs shorter than 80 ms are absorbed into their neighbours.
+confidence; runs shorter than 80 ms are absorbed into their neighbors.
 
 Downstream measures use that confidence to *exclude* uncertain regions rather
 than quietly averaging over them.
@@ -223,7 +223,7 @@ with published ones.
   a boundary.
 - **Backchannel** — short (≤ 1.2 s), mostly inside the partner's speech
   (≥ 50 % contained), *and the partner keeps going afterwards*. That last
-  condition is what separates an acknowledgement from a successful
+  condition is what separates an acknowledgment from a successful
   interruption. When a transcript exists the text must also look like one.
 - **Turn** — a maximal run of one person's non-backchannel IPUs with no
   intervening non-backchannel speech from the other.
@@ -240,7 +240,7 @@ latency medians are pulled toward zero.
 Multi-word backchannels are matched on the **joined** form first ("uh huh" →
 `uhhuh`), then token-by-token. Testing tokens alone fails on exactly the
 common cases — "uh" is a filler and "see" is contentful, but "uh huh" and "I
-see" are acknowledgements. Fixing this raised backchannel recall from 0.68 to
+see" are acknowledgments. Fixing this raised backchannel recall from 0.68 to
 0.88 and turn precision from 0.85 to 0.93.
 
 **Overlap classification.** An onset within 1.0 s of the current turn's end is
@@ -252,7 +252,7 @@ and it counts as successful when the interrupted speaker actually stops.
 
 ## 6. Transcription
 
-faster-whisper `small.en`, with each person's speech recognised from **their
+faster-whisper `small.en`, with each person's speech recognized from **their
 own** close-up track.
 
 **Compaction.** Whisper pads every call out to a 30-second window regardless
@@ -306,10 +306,10 @@ Measured over 40 simulated conversations:
 | | no accommodation | with accommodation |
 |---|---|---|
 | raw values | −0.983 | −0.936 |
-| **standardised within speaker** | **+0.006** | **+0.723** |
+| **standardized within speaker** | **+0.006** | **+0.723** |
 
 The raw statistic cannot distinguish the two conditions at all. Values are
-therefore standardised against each speaker's own mean and spread before
+therefore standardized against each speaker's own mean and spread before
 pairing, leaving deviation from personal baseline — which is what
 accommodation means. `pitch_proximity` deliberately opts out, since it is
 defined as the raw distance between the voices.
@@ -408,7 +408,7 @@ into tens of minutes once surrogates are involved, which is how
 methodological shortcuts get taken.
 
 **Surrogate testing is not optional.** Two independent time series that each
-have strong autocorrelation — which every behavioural signal does — produce
+have strong autocorrelation — which every behavioral signal does — produce
 sizeable cross-correlations by chance. Each observed value is compared
 against 50 surrogates built by circularly shifting one partner's series far
 enough to destroy any real relationship while preserving its autocorrelation
@@ -444,7 +444,7 @@ failed every short recording regardless of quality.
 
 Unavailable measures are written as rows with a null value and a stated
 reason. A zero and a missing value mean opposite things, and conflating them
-makes a failed camera indistinguishable from an absence of behaviour.
+makes a failed camera indistinguishable from an absence of behavior.
 
 ---
 

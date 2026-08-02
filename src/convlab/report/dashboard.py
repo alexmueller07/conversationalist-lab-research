@@ -5,7 +5,7 @@ the file can be opened from a network share, emailed, or archived alongside
 the data and still render years from now. That matters more than it sounds:
 a report that silently loses its styling once a CDN moves is not a record.
 
-The timeline is the part worth looking at first. Measures summarise; the
+The timeline is the part worth looking at first. Measures summarize; the
 ribbon lets a reader check the summary against what actually happened, and
 spot the failure modes that a table hides -- an attribution that flickers, a
 participant who never speaks, a burst of "turns" that are really one long
@@ -63,7 +63,8 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);
 vertical-align:top}
 th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;
 letter-spacing:.04em;position:sticky;top:0;background:var(--card)}
-td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.num,th.num{text-align:right}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 tr:last-child td{border-bottom:none}
 .na{color:var(--muted);font-style:italic}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);
@@ -75,7 +76,15 @@ border-radius:0 8px 8px 0;margin:6px 0;font-size:13.5px}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
 details{margin:8px 0} summary{cursor:pointer;color:var(--muted);font-size:13.5px}
 svg{display:block;max-width:100%;height:auto}
-.desc{color:var(--muted);font-size:12.5px;max-width:52ch}
+.desc{color:var(--muted);font-size:12.5px;max-width:64ch}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+padding:16px 18px}
+table.score{width:100%;font-size:13.5px}
+table.score td{border-bottom:1px dashed var(--line);padding:6px 0;vertical-align:top}
+table.score tr:last-child td{border-bottom:none}
+td.score-k{color:var(--muted);padding-right:18px;width:44%}
+td.score-v{font-variant-numeric:tabular-nums}
 footer{margin-top:48px;color:var(--muted);font-size:12.5px;
 border-top:1px solid var(--line);padding-top:14px}
 """
@@ -126,7 +135,15 @@ def _timeline_svg(context: AnalysisContext, width: int = 1120, row: int = 26) ->
     if context.semantics is not None and context.semantics.callbacks:
         event_rows.append(("callback", "Callbacks"))
 
-    height = 40 + row * (len(rows) + len(event_rows)) + 34
+    n_valence = (
+        sum(
+            1 for p in context.persons
+            if context.face and context.face.get(p) is not None
+            and np.asarray(context.face[p].valence).size
+        )
+        if context.face else 0
+    )
+    height = 40 + row * (len(rows) + n_valence + len(event_rows)) + 34
     parts = [
         f'<svg viewBox="0 0 {width} {height}" width="{width}" height="{height}" '
         f'role="img" aria-label="Conversation timeline">'
@@ -148,7 +165,7 @@ def _timeline_svg(context: AnalysisContext, width: int = 1120, row: int = 26) ->
 
     y = 34
     for person, label in rows:
-        colour = "var(--a)" if person == "A" else "var(--b)"
+        color = "var(--a)" if person == "A" else "var(--b)"
         parts.append(
             f'<text x="{left - 8}" y="{y + row / 2 + 4:.1f}" font-size="12" '
             f'fill="var(--muted)" text-anchor="end">{_esc(person)}</text>'
@@ -161,10 +178,52 @@ def _timeline_svg(context: AnalysisContext, width: int = 1120, row: int = 26) ->
             w = max(1.0, x(end) - x(start))
             parts.append(
                 f'<rect x="{x(start):.1f}" y="{y}" width="{w:.1f}" '
-                f'height="{row - 8}" rx="2" fill="{colour}"><title>'
+                f'height="{row - 8}" rx="2" fill="{color}"><title>'
                 f'{label} {start:.1f}-{end:.1f}s</title></rect>'
             )
         y += row
+
+    # Valence strips. Two rows of colored bins rather than two line charts:
+    # the question a reader asks here is "did they brighten at the same
+    # moments", and color answers it at a glance across ten minutes in a way
+    # two overlapping traces do not.
+    if context.face:
+        for person in context.persons:
+            signals = context.face.get(person)
+            if signals is None or np.asarray(signals.valence).size == 0:
+                continue
+            values = np.asarray(signals.valence, dtype=float)
+            tracked = np.asarray(signals.tracked, dtype=bool)[: values.size]
+            values = np.where(tracked, values, np.nan)
+            n_bins = 220
+            edges = np.linspace(0, values.size, n_bins + 1).astype(int)
+            binned = np.array(
+                [
+                    np.nanmean(values[a:b]) if b > a and np.isfinite(values[a:b]).any()
+                    else np.nan
+                    for a, b in zip(edges[:-1], edges[1:])
+                ]
+            )
+            finite = binned[np.isfinite(binned)]
+            scale = float(np.percentile(np.abs(finite), 95)) if finite.size else 0.0
+            parts.append(
+                f'<text x="{left - 8}" y="{y + row / 2 + 4:.1f}" font-size="11" '
+                f'fill="var(--muted)" text-anchor="end">{_esc(person)} mood</text>'
+            )
+            bin_w = plot / n_bins
+            for k, value in enumerate(binned):
+                if not np.isfinite(value) or scale <= 0:
+                    continue
+                strength = float(np.clip(value / scale, -1.0, 1.0))
+                color = "var(--ok)" if strength >= 0 else "var(--fail)"
+                parts.append(
+                    f'<rect x="{left + k * bin_w:.2f}" y="{y}" '
+                    f'width="{bin_w + 0.4:.2f}" height="{row - 8}" fill="{color}" '
+                    f'opacity="{abs(strength) * 0.85:.2f}"><title>'
+                    f'{person} valence {value:+.3f} at '
+                    f'{k * duration / n_bins:.0f}s</title></rect>'
+                )
+            y += row
 
     marker_colour = {
         "nod": "var(--both)", "smile": "var(--a)",
@@ -275,6 +334,259 @@ def _histogram_svg(values: np.ndarray, width: int = 540, height: int = 170,
     )
     parts.append("</svg>")
     return "".join(parts)
+
+
+# ----------------------------------------------------------------------
+# Scorecard
+# ----------------------------------------------------------------------
+
+
+def _duration(seconds: float | None) -> str:
+    """Seconds as a human reads them, not as a computer stores them."""
+    if seconds is None or not np.isfinite(seconds):
+        return "n/a"
+    seconds = float(seconds)
+    if seconds < 60:
+        return f"{seconds:.0f} s"
+    minutes, rest = divmod(int(round(seconds)), 60)
+    return f"{minutes} min {rest:02d} s" if rest else f"{minutes} min"
+
+
+def _scorecard(context: AnalysisContext, values: Sequence[MeasureValue]) -> str:
+    """A plain-language summary of each participant.
+
+    The measure tables are the record; this is the part a reader can act on.
+    Every line names a quantity and its denominator, because "looked at their
+    partner 68% of the time" is ambiguous between the whole session and the
+    frames where the face was actually tracked, and the two can differ by a
+    lot on a recording that dropped tracking.
+
+    Anything not computed says so. A blank or a zero here would be read as a
+    behavior that did not occur.
+    """
+    lookup = {(v.id, v.person): v.value for v in values}
+
+    def get(measure_id: str, person: str | None = None) -> float | None:
+        value = lookup.get((measure_id, person))
+        return value if value is not None and np.isfinite(value) else None
+
+    def count(value: float | None) -> str:
+        return "n/a" if value is None else f"{value:,.0f}"
+
+    total = max(context.duration, 1e-9)
+    cards = []
+    for person in context.persons:
+        speaking = get("speaking_time", person)
+        listening = get("listening_time", person)
+        gaze = get("gaze_partner_time", person)
+        latency = get("response_latency_median", person)
+        smiles = get("smile_count", person)
+        duchenne = get("duchenne_smile_ratio", person)
+        topics = get("topics_initiated", person)
+        n_topics = get("topic_count")
+        opened = get("spoke_first", person)
+        interruptions = get("interruption_rate", person)
+        success = get("interruption_success_rate", person)
+
+        lines: list[tuple[str, str]] = [
+            (
+                "Spoke",
+                f"{_duration(speaking)}"
+                + (f" &mdash; {speaking / total:.0%} of the conversation"
+                   if speaking is not None else ""),
+            ),
+            ("Not speaking", _duration(get("silent_time", person))),
+            (
+                "Listening (partner had the floor)",
+                _duration(listening),
+            ),
+            (
+                "Turns taken",
+                f"{count(get('turn_count', person))}"
+                + (f", median {get('median_turn_duration', person):.1f} s long"
+                   if get("median_turn_duration", person) is not None else ""),
+            ),
+            (
+                "Replied after",
+                f"{latency * 1000:.0f} ms (median)" if latency is not None else "n/a",
+            ),
+            (
+                "Looked at their partner",
+                f"{_duration(gaze)}"
+                + (f" &mdash; {get('gaze_partner_proportion', person):.0%} of frames "
+                   "where their face was tracked"
+                   if get("gaze_partner_proportion", person) is not None else ""),
+            ),
+            (
+                "Nodded",
+                f"{count(get('nod_count', person))} times, "
+                f"{_duration(get('nod_total_duration', person))} in total",
+            ),
+            (
+                "Smiled",
+                f"{count(smiles)} times, "
+                f"{_duration(get('smile_total_duration', person))} in total"
+                + (f" &mdash; {duchenne:.0%} involving the eyes"
+                   if duchenne is not None else ""),
+            ),
+            (
+                "Laughed",
+                f"{get('laughter_rate', person):.1f} times per minute"
+                if get("laughter_rate", person) is not None else "n/a",
+            ),
+            (
+                "Acknowledged their partner",
+                f"{count(get('backchannel_count', person))} times "
+                f'("mhm", "right", "yeah")',
+            ),
+            (
+                "Asked questions",
+                f"{get('question_rate', person):.1f} per minute"
+                if get("question_rate", person) is not None else "n/a",
+            ),
+            (
+                "Hesitated",
+                f"{get('hesitation_rate', person):.1f} times per minute of their "
+                "own speech"
+                if get("hesitation_rate", person) is not None else "n/a",
+            ),
+            (
+                "Came in over their partner",
+                f"{interruptions:.1f} times per minute"
+                + (f", winning the floor {success:.0%} of the time"
+                   if success is not None else "")
+                if interruptions is not None else "n/a",
+            ),
+            (
+                "Introduced topics",
+                f"{count(topics)} of {count(n_topics)}"
+                if topics is not None else "n/a",
+            ),
+            (
+                "Opened the conversation",
+                ("yes" if opened else "no") if opened is not None else "n/a",
+            ),
+        ]
+
+        rows = "".join(
+            f'<tr><td class="score-k">{k}</td><td class="score-v">{v}</td></tr>'
+            for k, v in lines
+        )
+        color = "var(--a)" if person == "A" else "var(--b)"
+        cards.append(
+            f'<div class="card"><h3 style="color:{color};margin-top:0">'
+            f"Person {_esc(person)}</h3>"
+            f'<table class="score">{rows}</table></div>'
+        )
+    return f'<div class="cards">{"".join(cards)}</div>'
+
+
+def _quality_block(context: AnalysisContext) -> str:
+    """What the recordings themselves were like."""
+    video = context.video_quality or {}
+    audio = context.audio_quality or {}
+    if not video and not audio:
+        return '<p class="na">Recording quality was not measured for this session.</p>'
+
+    rows = []
+    for role in sorted(set(video) | set(audio)):
+        v = video.get(role)
+        a = audio.get(role)
+        rows.append(
+            "<tr>"
+            f"<td>{_esc(role)}</td>"
+            f"<td>{f'{v.width}&times;{v.height}' if v and v.width else '&mdash;'}</td>"
+            f'<td class="num">{_fmt(v.fps) if v else None}</td>'
+            f'<td class="num">{_fmt(v.sharpness) if v else "&mdash;"}</td>'
+            f'<td class="num">{_pct(v.freeze_rate) if v else "&mdash;"}</td>'
+            f'<td class="num">{_fmt(a.snr_db) if a else "&mdash;"}</td>'
+            f'<td class="num">{_pct(a.clipping) if a else "&mdash;"}</td>'
+            "</tr>"
+        )
+    return (
+        '<p class="desc">Measured from the files rather than read off the '
+        "container. <strong>Frozen</strong> is the share of sampled "
+        "consecutive frames that are the same image &mdash; a conferencing "
+        "tool holding the last frame when packets stop arriving, which "
+        "suppresses nods and head movement while tracking confidence stays "
+        "high. <strong>Sharpness</strong> is high-frequency image energy; low "
+        "values add noise to every facial measure. <strong>SNR</strong> below "
+        "about 15 dB degrades pitch and level-based speaker attribution.</p>"
+        '<div class="scroll"><table><thead><tr><th>View</th><th>Resolution</th>'
+        '<th class="num">FPS</th><th class="num">Sharpness</th>'
+        '<th class="num">Frozen</th><th class="num">SNR dB</th>'
+        '<th class="num">Clipping</th></tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+    )
+
+
+def _topic_block(context: AnalysisContext) -> str:
+    """Every topic, when it ran, and who opened it."""
+    semantics = context.semantics
+    topics = getattr(semantics, "topics", None) or []
+    if not topics:
+        return '<p class="na">No topic structure was computed for this session.</p>'
+
+    from convlab.semantics import describe_topics
+
+    turns = context.turn_set.turns if context.turn_set else []
+    labels = describe_topics(topics, turns, context.config.semantic)
+
+    rows = []
+    for topic, label in zip(topics, labels + [""] * len(topics)):
+        color = "var(--a)" if topic.initiator == "A" else "var(--b)"
+        rows.append(
+            f"<tr><td>{topic.index + 1}</td>"
+            f'<td class="num">{topic.start / 60:.1f}</td>'
+            f'<td class="num">{topic.duration / 60:.1f}</td>'
+            f'<td class="num">{topic.n_turns}</td>'
+            f'<td style="color:{color};font-weight:600">{_esc(topic.initiator)}</td>'
+            f'<td class="mono">{_esc(label)}</td></tr>'
+        )
+    return (
+        '<p class="desc">Boundaries are placed where lexical cohesion between '
+        "neighboring blocks of turns drops sharply. The keywords are the "
+        "terms most distinctive to each stretch &mdash; a reading aid, not an "
+        "input to any measure. <strong>Opened by</strong> is whoever spoke "
+        "first after the boundary.</p>"
+        '<div class="scroll"><table><thead><tr><th>#</th>'
+        '<th class="num">Starts (min)</th><th class="num">Length (min)</th>'
+        '<th class="num">Turns</th><th>Opened by</th>'
+        "<th>Distinctive words</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+    )
+
+
+def _callback_sensitivity_block(context: AnalysisContext) -> str:
+    """How the callback count depends on the reach required."""
+    rows_data = getattr(context.semantics, "sensitivity", None) or []
+    if not rows_data:
+        return ""
+    chosen = context.config.semantic.callback_min_lag_turns
+    rows = "".join(
+        "<tr"
+        + (' style="font-weight:650"' if int(r["min_lag_turns"]) == chosen else "")
+        + f'><td class="num">{int(r["min_lag_turns"])}'
+        + (" (used)" if int(r["min_lag_turns"]) == chosen else "")
+        + f'</td><td class="num">{int(r["n_callbacks"])}</td>'
+        f'<td class="num">{_fmt(r["median_lag"])}</td></tr>'
+        for r in rows_data
+    )
+    return (
+        "<h3>How much the count depends on the reach required</h3>"
+        '<p class="desc">A callback must reach back at least four turns. The '
+        "argument is that an adjacency pair spans two turns and one insertion "
+        "sequence extends it to three, so four is the first distance that "
+        "cannot be explained by the exchange still being open. An argument is "
+        "not evidence the result is robust to the choice, so the detector is "
+        "re-run at each reach below. A smooth decline means the finding does "
+        "not hinge on the threshold; a cliff between three and five means it "
+        "does, and should be reported that way.</p>"
+        '<div class="scroll"><table><thead><tr><th class="num">Minimum reach (turns)</th>'
+        '<th class="num">Callbacks found</th>'
+        '<th class="num">Median reach</th></tr></thead>'
+        f"<tbody>{rows}</tbody></table></div>"
+    )
 
 
 # ----------------------------------------------------------------------
@@ -431,12 +743,23 @@ def render_dashboard(
     player_data = build_player_data(context, video_paths, offsets)
     player_html = render_player(player_data, _review_jumps(context))
 
+    legend_items = [
+        ('style="background:var(--a)"', "Person A speaking"),
+        ('style="background:var(--b)"', "Person B speaking"),
+    ]
+    if context.face:
+        legend_items += [
+            ('style="background:var(--ok)"', "Looking positive"),
+            ('style="background:var(--fail)"', "Looking negative"),
+            ('style="background:var(--both)"', "Nods"),
+        ]
+    if context.laughter:
+        legend_items.append(('style="background:var(--b)"', "Laughter"))
     legend = (
-        f'<div class="legend">'
-        f'<span><i class="sw" style="background:var(--a)"></i>Person A</span>'
-        f'<span><i class="sw" style="background:var(--b)"></i>Person B</span>'
-        f'<span><i class="sw" style="background:var(--both)"></i>Nods</span>'
-        f"<span>Hover any block for exact times</span></div>"
+        '<div class="legend">'
+        + "".join(f'<span><i class="sw" {style}></i>{label}</span>'
+                  for style, label in legend_items)
+        + "<span>Hover any block for exact times</span></div>"
     )
 
     sync_note = ""
@@ -467,12 +790,24 @@ def render_dashboard(
 <h2>Overview</h2>
 {_tiles(context, values)}
 
+<h2>Scorecard</h2>
+<p class="desc">Every figure names its denominator. A dash means the value
+could not be computed &mdash; it is not a zero.</p>
+{_scorecard(context, values)}
+
 <h2>Timeline</h2>
 {legend}
 <div class="scroll" id="timeline-strip" style="padding:8px">{_timeline_svg(context)}</div>
 
 <h2>Watch it</h2>
 {player_html}
+
+<h2>Topics</h2>
+{_topic_block(context)}
+{_callback_sensitivity_block(context)}
+
+<h2>Recording quality</h2>
+{_quality_block(context)}
 
 <h2>Response latency</h2>
 <p class="desc">Floor transfer offsets across the session. Negative values are

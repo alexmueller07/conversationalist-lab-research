@@ -7,7 +7,7 @@ per person**. It works out who
 spoke when, how quickly each replied, what they looked at, when they nodded,
 smiled and laughed, how their speech and movement tracked one another, and
 how all of that changed as the conversation went on — **104 measures**, each
-defined and unit-labelled in a codebook, plus a visual report per pair.
+defined and unit-labeled in a codebook, plus a visual report per pair.
 
 ![The convlab desktop application](docs/images/app.png)
 
@@ -83,11 +83,11 @@ chmod +x launch-convlab.sh
 ## Try it with no data at all
 
 Click **Use demo data**. It builds a synthetic two-person conversation using
-your computer's speech voices, writes three video files, and analyses them.
+your computer's speech voices, writes three video files, and analyzes them.
 Takes about four minutes start to finish. This is the fastest way to see what
 the tool produces. *(Windows only — it needs the system speech engine.)*
 
-## Analyse your own recordings
+## Analyze your own recordings
 
 **1. Name your files.** Each conversation is **two videos** — one showing each
 person's face. Give the pair a shared id and a person token:
@@ -119,7 +119,7 @@ speaking is the tool's job, and it handles the two setups differently:
 You don't have to tell it which you have — it measures the level difference
 and says which mode it used in the log and the quality report.
 
-**Naming.** It recognises `close_a` / `cam_a` / `person_a` / `p1` for person A
+**Naming.** It recognizes `close_a` / `cam_a` / `person_a` / `p1` for person A
 and the `b` / `p2` equivalents for person B. It also handles files with **no
 A/B token at all**, such as `<participant>_<session>.mp4`:
 
@@ -147,7 +147,7 @@ parse — not forty minutes later.
 **4. Untick anything you don't need.** *Track body* is the slowest stage;
 turning it off roughly halves the runtime.
 
-**5. Click Analyse.** Progress and a running log appear as it works. **Stop**
+**5. Click Analyze.** Progress and a running log appear as it works. **Stop**
 is safe at any point — it finishes the current step and leaves valid output.
 
 **6. Click Open report** when it finishes.
@@ -169,7 +169,7 @@ because the slow steps are cached.
 
 ```
 results/
-├── measures_all.csv        every pair, every measure — this is the one to analyse
+├── measures_all.csv        every pair, every measure — this is the one to analyze
 ├── codebook.csv            what all 104 measures mean
 ├── session_summary.csv     pass / review / fail per pair
 └── dyad012/
@@ -194,9 +194,9 @@ lat <- subset(d, measure == "response_latency_median" & available)
 summary(lmer(value ~ meta_condition + (1 | session_id), data = lat))
 ```
 
-**Two conventions to know before analysing.** A measure that could not be
+**Two conventions to know before analyzing.** A measure that could not be
 computed is a row with an empty value and a stated reason — never a zero, and
-never a dropped row, because a failed camera and an absence of behaviour must
+never a dropped row, because a failed camera and an absence of behavior must
 not look the same. And every pair carries a quality verdict based on the
 *inputs* (sync confidence, tracking coverage, attribution certainty), not on
 whether the numbers look plausible — filtering on surprising values is how a
@@ -234,8 +234,8 @@ apart, they share a rare content anchor, and **that anchor appears in no
 intervening turn**, so the topic was genuinely dropped and then picked back
 up. Scored against planted callbacks: **precision 0.97, recall 1.00**.
 
-**Synchrony above chance** — two independent behavioural time series correlate
-at around 0.3 simply because behaviour is autocorrelated. Reporting that as
+**Synchrony above chance** — two independent behavioral time series correlate
+at around 0.3 simply because behavior is autocorrelated. Reporting that as
 mimicry isn't a weak result, it's an invalid one: the same number arises
 between two people who never met. Every synchrony measure here is the *excess
 over a surrogate baseline*, with a z score saying whether it clears that
@@ -331,7 +331,7 @@ useless.
 - **Body measures need the torso in frame.** They come from the close-up
   views, where attribution is certain; a tight head-and-shoulders shot yields
   low coverage and withheld measures — the honest outcome, not a bug.
-- **These are proxies for behaviour, not scores of skill.** Almost none has a
+- **These are proxies for behavior, not scores of skill.** Almost none has a
   defensible "higher is better", which is why the codebook marks direction as
   unknown for most.
 
@@ -345,8 +345,8 @@ The app is a thin shell over a library and a CLI.
 pip install -e ".[semantic,dev]"
 
 convlab gui                        # the desktop app
-convlab analyse recordings/ -o out/
-convlab analyse sessions.json -o out/     # explicit manifest
+convlab analyze recordings/ -o out/
+convlab analyze sessions.json -o out/     # explicit manifest
 convlab demo -o out/
 convlab validate                   # 21 ground-truth checks
 convlab codebook -o docs/measures.md
@@ -367,7 +367,7 @@ relative to the manifest, so it can travel with the recordings:
 ```
 
 Save it as `sessions.json` next to the videos and point the app or
-`convlab analyse` at that file instead of the folder.
+`convlab analyze` at that file instead of the folder.
 
 Pipeline order, and why:
 

@@ -116,7 +116,7 @@ class TestPlayerHtml:
     def test_a_transcript_containing_a_script_tag_cannot_truncate_the_page(
         self, context, tmp_path
     ):
-        """Recogniser output is untrusted text and can contain anything.
+        """Recognizer output is untrusted text and can contain anything.
 
         An HTML parser ends the script block at the first literal
         ``</script>``, whatever the JSON quoting says, so an unescaped one

@@ -24,6 +24,7 @@ is the one that a similarity-only approach cannot express at all.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 from collections import Counter
@@ -130,6 +131,9 @@ class SemanticAnalysis:
     adjacent_coherence: list[tuple[int, float]] = field(default_factory=list)
     """(turn index, cosine similarity with the previous turn)."""
     callbacks: list[Callback] = field(default_factory=list)
+    sensitivity: list[dict[str, float]] = field(default_factory=list)
+    """Callback counts at a range of minimum reaches, so that a result
+    depending on the chosen threshold can be identified as such."""
     topics: list[TopicSegment] = field(default_factory=list)
     model: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -169,7 +173,7 @@ class EmbeddingModel:
 
 
 def cosine_matrix(a: np.ndarray, b: np.ndarray | None = None) -> np.ndarray:
-    """Cosine similarity; inputs are expected already L2-normalised."""
+    """Cosine similarity; inputs are expected already L2-normalized."""
     b = a if b is None else b
     return np.clip(a @ b.T, -1.0, 1.0)
 
@@ -286,6 +290,52 @@ def find_callbacks(
     return callbacks
 
 
+SENSITIVITY_LAGS: tuple[int, ...] = (2, 3, 4, 5, 6, 8, 10)
+"""Minimum reach values the callback count is reported at.
+
+The threshold is argued for in :class:`convlab.config.SemanticConfig`, but an
+argument is not evidence that a result is robust to it. Recomputing the count
+at each of these and writing the curve into every run turns "why four?" into
+a question the output answers: if the count falls off a cliff between three
+and five, the finding depends on the threshold and should be reported that
+way; if it declines smoothly, it does not."""
+
+
+def callback_sensitivity(
+    turn_texts: Sequence[str],
+    turn_indices: Sequence[int],
+    turn_persons: Sequence[str],
+    turn_times: Sequence[float],
+    embeddings: np.ndarray,
+    cfg: SemanticConfig,
+    lags: Sequence[int] = SENSITIVITY_LAGS,
+) -> list[dict[str, float]]:
+    """Re-run the detector at each minimum reach and report what changes.
+
+    The detector is genuinely re-run rather than the results filtered, and
+    the difference is not cosmetic: it keeps one callback per turn, the
+    strongest available, so relaxing the minimum can change *which* earlier
+    turn a given turn is judged to call back to. Filtering a single run by
+    lag would report a curve the detector would never actually produce.
+    """
+    out: list[dict[str, float]] = []
+    for lag in lags:
+        variant = dataclasses.replace(cfg, callback_min_lag_turns=int(lag))
+        found = find_callbacks(
+            turn_texts, turn_indices, turn_persons, turn_times, embeddings, variant
+        )
+        out.append(
+            {
+                "min_lag_turns": float(lag),
+                "n_callbacks": float(len(found)),
+                "median_lag": (
+                    float(np.median([c.lag for c in found])) if found else float("nan")
+                ),
+            }
+        )
+    return out
+
+
 # ----------------------------------------------------------------------
 # Topic segmentation
 # ----------------------------------------------------------------------
@@ -378,6 +428,55 @@ def segment_topics(
     return segments
 
 
+def describe_topics(
+    topics: Sequence[TopicSegment],
+    turns: Sequence,
+    cfg: SemanticConfig,
+    n_terms: int = 3,
+) -> list[str]:
+    """A few distinctive words for each topic segment.
+
+    Scored the way a topic label should be: a term describes this stretch of
+    talk if it is common *here* and rare *elsewhere*. Taking the most
+    frequent words instead would return the same handful of generic terms for
+    every segment, which is worse than no label at all -- it would look like
+    the segmentation had failed when the labeling had.
+
+    These are a reading aid for the report and nothing more. They are not
+    used in any measure, and they are not the topic: they are the words that
+    most distinguish one stretch from the rest.
+    """
+    if not topics:
+        return []
+    by_index = {t.index: t for t in turns}
+    per_topic: list[Counter] = []
+    for topic in topics:
+        counts: Counter = Counter()
+        for index in range(topic.start_turn, topic.end_turn + 1):
+            turn = by_index.get(index)
+            if turn is not None and getattr(turn, "text", ""):
+                counts.update(
+                    t for t in content_terms(turn.text, cfg.callback_min_anchor_len)
+                    if " " not in t
+                )
+        per_topic.append(counts)
+
+    spread: Counter = Counter()
+    for counts in per_topic:
+        spread.update(counts.keys())
+
+    labels: list[str] = []
+    n = len(per_topic)
+    for counts in per_topic:
+        scored = sorted(
+            counts.items(),
+            key=lambda kv: kv[1] * np.log(n / max(spread[kv[0]], 1) + 1.0),
+            reverse=True,
+        )
+        labels.append(", ".join(term for term, _ in scored[:n_terms]))
+    return labels
+
+
 def _unit(v: np.ndarray) -> np.ndarray:
     norm = float(np.linalg.norm(v))
     return v / norm if norm > 1e-9 else v
@@ -388,7 +487,7 @@ def _unit(v: np.ndarray) -> np.ndarray:
 # ----------------------------------------------------------------------
 
 
-def analyse_semantics(
+def analyze_semantics(
     turns: Sequence,
     cfg: SemanticConfig,
     model: EmbeddingModel | None = None,
@@ -427,6 +526,14 @@ def analyse_semantics(
     ]
 
     analysis.callbacks = find_callbacks(
+        texts,
+        [t.index for t in usable],
+        [t.person for t in usable],
+        [t.start for t in usable],
+        embeddings,
+        cfg,
+    )
+    analysis.sensitivity = callback_sensitivity(
         texts,
         [t.index for t in usable],
         [t.person for t in usable],

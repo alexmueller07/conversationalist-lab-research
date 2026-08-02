@@ -12,17 +12,19 @@ interjection latency,worst |offset| (s),1.0,2.0,max,True,no response latency may
 interjection is recorded,failed interruptions,1.0,1.0,min,True,speech that loses the floor is still an event
 callback precision,precision,0.9666666666666667,0.8,min,True,"29 true positives, 1 false"
 callback recall,recall,1.0,0.8,min,True,0 missed across 7 scripts
-speech detection,F1 per person,0.9398398238053663,0.88,min,True,4 scripted sessions
-speaker identity confusion,error rate,0.0012214516206370133,0.03,max,True,"wrong person named, among committed single-speaker frames"
-speaker attribution,strict state accuracy,0.905425843031318,0.86,min,True,single-speaker frames; also counts frames labelled as overlap
+speech detection,F1 per person,0.9397689018428251,0.88,min,True,4 scripted sessions
+speaker identity confusion,error rate,0.0011777229013587875,0.03,max,True,"wrong person named, among committed single-speaker frames"
+speaker attribution,strict state accuracy,0.9053608418273349,0.86,min,True,single-speaker frames; also counts frames labeled as overlap
 overlap precision,precision,0.9691075534125907,0.75,min,True,simultaneous speech
 overlap recall,recall,0.5775416131885982,0.5,min,True,under-detection is the safer failure here
 turn detection precision,precision,0.9545454545454546,0.85,min,True,
 turn detection recall,recall,1.0,0.88,min,True,
-turn onset accuracy,median error (ms),5.653629210378597,60.0,max,True,against exact scripted onsets
+turn onset accuracy,median error (ms),5.80748070455428,60.0,max,True,against exact scripted onsets
 response latency accuracy,median error (ms),30.923738778468433,80.0,max,True,session median floor transfer offset
 backchannel precision,precision,0.9642857142857143,0.85,min,True,
 backchannel recall,recall,0.7420634920634921,0.7,min,True,
-shared-audio identity,error rate,0.013565638006766224,0.05,max,True,same audio in both files; speakers separated by voice model
-shared-audio track stability,short speaking runs,0.11580270719903206,0.25,max,True,the flickering failure; ground truth is 0.09
-shared-audio turn boundaries,overlapping onsets,0.08435068180195615,0.3,max,True,ground truth for the same sessions is 0.17
+shared-audio identity,error rate,0.013657979489035712,0.05,max,True,same audio in both files; speakers separated by voice model
+shared-audio track stability,short speaking runs,0.14032595693779903,0.25,max,True,the flickering failure; ground truth is 0.09
+shared-audio turn boundaries,overlapping onsets,0.09538587848932675,0.3,max,True,ground truth for the same sessions is 0.17
+filled pause precision,precision,1.0,0.9,min,True,0 spurious across 4 sessions
+filled pause recall,recall,0.8688524590163934,0.8,min,True,61 held vowels planted at known positions

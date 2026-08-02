@@ -1,6 +1,6 @@
 """The measure registry.
 
-Every behavioural proxy in this project is a registered function with a
+Every behavioral proxy in this project is a registered function with a
 declared identifier, unit, level of analysis, upstream requirements and a
 short statement of what it is supposed to capture. Three things follow from
 that, and all three matter more than the convenience:
@@ -48,7 +48,7 @@ class MeasureSpec:
     non-None for this measure to be computable."""
     interpretation: str = ""
     """What a higher value plausibly indicates. Deliberately hedged: these
-    are proxies for conversational behaviour, not measurements of skill."""
+    are proxies for conversational behavior, not measurements of skill."""
     references: tuple[str, ...] = ()
     higher_is_better: bool | None = None
     """None where the literature does not support a direction, which is the

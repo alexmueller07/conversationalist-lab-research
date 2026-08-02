@@ -1,4 +1,4 @@
-"""Memory probing and recogniser sizing.
+"""Memory probing and recognizer sizing.
 
 These exist because the failure they prevent is silent and expensive: the
 process is killed part-way through a batch, with no traceback, after an hour

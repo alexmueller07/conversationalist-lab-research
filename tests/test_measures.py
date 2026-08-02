@@ -177,7 +177,7 @@ class TestProsodicEntrainment:
     """Entrainment must measure accommodation, not who was speaking.
 
     Turns alternate, and partners usually differ in vocal register. Without
-    standardising each speaker against their own baseline, the correlation
+    standardizing each speaker against their own baseline, the correlation
     between adjacent turns is driven entirely by that alternation, and it
     reports a near-perfect effect whether or not any accommodation occurred.
     """
@@ -194,11 +194,11 @@ class TestProsodicEntrainment:
             previous = deviation
         return series
 
-    def _correlation(self, seed, accommodation, normalise):
+    def _correlation(self, seed, accommodation, normalize):
         from convlab.measures.prosodic import _adjacent_pairs
 
         prev, nxt = _adjacent_pairs(
-            self._series(seed, accommodation), normalise=normalise
+            self._series(seed, accommodation), normalize=normalize
         )
         return float(np.corrcoef(prev, nxt)[0, 1])
 
@@ -221,7 +221,7 @@ class TestProsodicEntrainment:
     def test_proximity_stays_in_semitones(self):
         from convlab.measures.prosodic import _adjacent_pairs
 
-        prev, nxt = _adjacent_pairs(self._series(0, 0.0), normalise=False)
+        prev, nxt = _adjacent_pairs(self._series(0, 0.0), normalize=False)
         # Two speakers ~15 semitones apart must show that separation.
         assert float(np.mean(np.abs(nxt - prev))) > 10.0
 

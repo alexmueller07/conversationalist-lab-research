@@ -172,8 +172,8 @@ def _normxcorr(a: np.ndarray, b: np.ndarray, max_lag: int) -> tuple[int, float]:
     max_lag = int(min(max_lag, n // 2 - 1))
     window = np.concatenate((corr[-max_lag:], corr[: max_lag + 1]))
 
-    # Normalise by the overlap length at each lag, otherwise short overlaps
-    # at extreme lags are penalised and long ones flattered.
+    # Normalize by the overlap length at each lag, otherwise short overlaps
+    # at extreme lags are penalized and long ones flattered.
     lags = np.arange(-max_lag, max_lag + 1)
     overlap = np.maximum(1.0, np.minimum(a.size, b.size) - np.abs(lags))
     window = window / overlap
@@ -208,7 +208,7 @@ def estimate_offset(
     # `reference`, so `other`'s clock must be shifted back to align.
     coarse_delay_s = coarse_lag / env_hz
 
-    residuals, sharpnesses, centres = _probe_residuals(
+    residuals, sharpnesses, centers = _probe_residuals(
         other, reference, sample_rate, coarse_delay_s, cfg
     )
 
@@ -230,9 +230,9 @@ def estimate_offset(
 
     drift_ppm = 0.0
     if cfg.drift_check and residuals.size >= 3:
-        span = float(centres.max() - centres.min())
+        span = float(centers.max() - centers.min())
         if span > 1.0:
-            slope = float(np.polyfit(centres, residuals, 1)[0])
+            slope = float(np.polyfit(centers, residuals, 1)[0])
             drift_ppm = slope * 1e6
 
     agreement = float(np.clip(1.0 - scatter / max(cfg.min_agreement_s, _EPS), 0.0, 1.0))
@@ -272,7 +272,7 @@ def _probe_residuals(
 
     starts = np.linspace(lo, hi - win, num=max(1, cfg.n_probes)).astype(int)
 
-    residuals, sharpnesses, centres = [], [], []
+    residuals, sharpnesses, centers = [], [], []
     for start in starts:
         ref_seg = reference[start : start + win]
         oth_start = start + shift
@@ -291,12 +291,12 @@ def _probe_residuals(
             continue
         residuals.append(residual)
         sharpnesses.append(sharp)
-        centres.append((start + win / 2) / sample_rate)
+        centers.append((start + win / 2) / sample_rate)
 
     return (
         np.asarray(residuals, dtype=np.float64),
         np.asarray(sharpnesses, dtype=np.float64),
-        np.asarray(centres, dtype=np.float64),
+        np.asarray(centers, dtype=np.float64),
     )
 
 

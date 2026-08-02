@@ -45,7 +45,7 @@ def _voiced_semitones(ctx: AnalysisContext, person: str) -> np.ndarray:
     requires=("prosody",),
     interpretation=(
         "Largely determined by anatomy, so reported for description and as a "
-        "sanity check on tracking rather than as a behavioural measure."
+        "sanity check on tracking rather than as a behavioral measure."
     ),
 )
 def f0_median(ctx: AnalysisContext) -> dict[str, float]:
@@ -187,7 +187,7 @@ def _turn_series(ctx: AnalysisContext, key: str) -> list[tuple[int, str, float]]
 def _within_speaker_z(
     series: list[tuple[int, str, float]]
 ) -> list[tuple[int, str, float]]:
-    """Standardise each speaker's values against their own distribution.
+    """Standardize each speaker's values against their own distribution.
 
     This is essential, not cosmetic. Turns alternate between speakers, and
     two people almost always differ in vocal register -- often by an octave
@@ -217,14 +217,14 @@ def _within_speaker_z(
 
 
 def _adjacent_pairs(
-    series: list[tuple[int, str, float]], normalise: bool = True
+    series: list[tuple[int, str, float]], normalize: bool = True
 ) -> tuple[np.ndarray, np.ndarray]:
     """Values of consecutive turns by *different* speakers.
 
-    Values are standardised within speaker by default; see
+    Values are standardized within speaker by default; see
     :func:`_within_speaker_z` for why that is required rather than optional.
     """
-    if normalise:
+    if normalize:
         series = _within_speaker_z(series)
     prev_vals, next_vals = [], []
     for i in range(1, len(series)):
@@ -336,10 +336,10 @@ def pitch_entrainment_convergence(ctx: AnalysisContext) -> float:
     references=_ENTRAIN_REF,
 )
 def pitch_proximity(ctx: AnalysisContext) -> float:
-    # Deliberately *not* standardised within speaker: proximity is defined as
+    # Deliberately *not* standardized within speaker: proximity is defined as
     # the raw distance between the two voices in semitones, so removing each
     # speaker's own mean would remove exactly the quantity being measured.
-    prev, nxt = _adjacent_pairs(_turn_series(ctx, "f0_mean_st"), normalise=False)
+    prev, nxt = _adjacent_pairs(_turn_series(ctx, "f0_mean_st"), normalize=False)
     if prev.size < ctx.config.prosody.entrainment_min_turns:
         return float("nan")
     return float(-np.mean(np.abs(nxt - prev)))

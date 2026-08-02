@@ -1,6 +1,6 @@
 """Command line interface.
 
-    convlab analyse RECORDINGS/ -o workspace/
+    convlab analyze RECORDINGS/ -o workspace/
     convlab models fetch
     convlab codebook -o docs/measures.md
     convlab demo -o workspace/
@@ -33,9 +33,9 @@ def _configure_logging(verbosity: int) -> None:
 # ----------------------------------------------------------------------
 
 
-def cmd_analyse(args: argparse.Namespace) -> int:
+def cmd_analyze(args: argparse.Namespace) -> int:
     from convlab.config import Config
-    from convlab.pipeline import analyse_session
+    from convlab.pipeline import analyze_session
     from convlab.report.codebook import write_codebook
     from convlab.report.dashboard import write_dashboard
     from convlab.report.qc import assess_quality
@@ -62,7 +62,7 @@ def cmd_analyse(args: argparse.Namespace) -> int:
         print(f"\n[{index}/{len(sessions)}] {session.describe()}")
         started = time.perf_counter()
         try:
-            result = analyse_session(
+            result = analyze_session(
                 session, config, output_root=output, skip=tuple(args.skip or ())
             )
         except Exception as exc:  # noqa: BLE001
@@ -165,7 +165,7 @@ def cmd_codebook(args: argparse.Namespace) -> int:
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
-    """Generate a synthetic session, write it as video, and analyse it."""
+    """Generate a synthetic session, write it as video, and analyze it."""
     from convlab.synth import build_script, render_session, tts_available
     from convlab.synth.media import write_session
 
@@ -196,7 +196,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
     args.target = str(media)
     args.lenient = False
-    return cmd_analyse(args)
+    return cmd_analyze(args)
 
 
 def cmd_gui(args: argparse.Namespace) -> int:
@@ -227,18 +227,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-v", "--verbose", action="count", default=0)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    analyse = sub.add_parser("analyse", aliases=["analyze"],
-                             help="analyse a directory of recordings or a manifest")
-    analyse.add_argument("target", help="directory of videos, or a manifest .json")
-    analyse.add_argument("-o", "--output", default="workspace")
-    analyse.add_argument("-c", "--config", default=None, help="YAML config overrides")
-    analyse.add_argument("--model-dir", default=None)
-    analyse.add_argument("--lenient", action="store_true",
+    analyze = sub.add_parser("analyze",
+                             help="analyze a directory of recordings or a manifest")
+    analyze.add_argument("target", help="directory of videos, or a manifest .json")
+    analyze.add_argument("-o", "--output", default="workspace")
+    analyze.add_argument("-c", "--config", default=None, help="YAML config overrides")
+    analyze.add_argument("--model-dir", default=None)
+    analyze.add_argument("--lenient", action="store_true",
                          help="allow sessions missing a close-up view")
-    analyse.add_argument("--skip", nargs="*", default=[],
+    analyze.add_argument("--skip", nargs="*", default=[],
                          choices=["face", "body", "asr", "prosody", "semantics", "laughter"],
                          help="stages to skip")
-    analyse.set_defaults(func=cmd_analyse)
+    analyze.set_defaults(func=cmd_analyze)
 
     models_cmd = sub.add_parser("models", help="download or check model assets")
     models_cmd.add_argument("action", choices=["fetch", "status"], nargs="?",
@@ -250,7 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
     codebook.add_argument("-o", "--output", default="codebook.csv")
     codebook.set_defaults(func=cmd_codebook)
 
-    demo = sub.add_parser("demo", help="build a synthetic session and analyse it")
+    demo = sub.add_parser("demo", help="build a synthetic session and analyze it")
     demo.add_argument("-o", "--output", default="workspace")
     demo.add_argument("--turns", type=int, default=20)
     demo.add_argument("--seed", type=int, default=3)

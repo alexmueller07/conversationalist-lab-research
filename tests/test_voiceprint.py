@@ -54,8 +54,8 @@ class TestMelFilterbank:
 
     def test_filter_centres_increase(self):
         bank = mel_matrix(FS)
-        centres = bank.argmax(axis=1)
-        assert (np.diff(centres) >= 0).all()
+        centers = bank.argmax(axis=1)
+        assert (np.diff(centers) >= 0).all()
 
 
 class TestSpectralFeatures:
@@ -206,7 +206,7 @@ class TestSpeakerLogOdds:
         assert np.all(cue.log_odds == 0.0), "an unusable cue must be neutral"
 
     def test_one_voice_only_cannot_be_split_in_two(self):
-        """Identical audio labelled as two speakers must not pass the gate."""
+        """Identical audio labeled as two speakers must not pass the gate."""
         n = 4000
         audio = _tone(150.0, n / HZ, seed=5)
         state = np.repeat([1, 2], n // 2).astype(np.int8)

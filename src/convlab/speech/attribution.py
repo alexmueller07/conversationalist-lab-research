@@ -42,7 +42,7 @@ leaking across the table, and the noise floor. Those three numbers predict
 the *joint* energy pair for each of the four states -- and the four
 predictions are distinct, because both people talking puts energy in both
 channels at once while either one alone does not. Overlap becomes
-identifiable rather than merely penalised.
+identifiable rather than merely penalized.
 
 Both passes are decoded with a hidden Markov model so the result is
 temporally coherent instead of a per-frame argmax that flickers several
@@ -156,7 +156,7 @@ class LevelModel:
 class SourceModel:
     """Per-person speech power after the two channels have been unmixed.
 
-    Unmixing is what makes simultaneous speech detectable. Modelling the raw
+    Unmixing is what makes simultaneous speech detectable. Modeling the raw
     channel levels does not work: frame energy swings by roughly 8 dB across
     syllables within a single utterance, which is as large as the shift that
     a second voice adds to the far channel. Solving the two-by-two mixing
@@ -326,7 +326,7 @@ def calibrate_channels(
     if float(np.std(values)) < 1e-6:
         # One shared feed mixed into both files: the difference is a constant,
         # so there are no modes to find. Fitting a mixture to it would spend
-        # real time to return a fitting artefact.
+        # real time to return a fitting artifact.
         return Calibration(float(np.mean(values)), 0.0, "identical-channels", ok=False)
 
     try:
@@ -340,7 +340,7 @@ def calibrate_channels(
         means = gm.means_.ravel()[order]
         weights = gm.weights_[order]
         separation = float(means[1] - means[0])
-        # A component holding almost nothing is a fitting artefact, not a
+        # A component holding almost nothing is a fitting artifact, not a
         # speaker; fall back rather than trust a lopsided split.
         if separation > 1.0 and weights.min() > 0.05:
             return Calibration(float(means.mean()), separation, "gmm", ok=True)
@@ -386,7 +386,7 @@ def fit_level_model(
 
     def robust_sd(x: np.ndarray) -> float:
         residuals = []
-        for mask, centre in ((only_a, None), (only_b, None), (silent, None)):
+        for mask, center in ((only_a, None), (only_b, None), (silent, None)):
             if mask.sum() >= min_frames:
                 seg = x[mask]
                 residuals.append(seg - np.median(seg))
@@ -445,9 +445,9 @@ def lip_motion_score(
     clip: float = 6.0,
     quiet: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Mouth movement, standardised against the person's own resting face.
+    """Mouth movement, standardized against the person's own resting face.
 
-    The reference point is the subtle part. Standardising against the median
+    The reference point is the subtle part. Standardizing against the median
     of the whole session puts the zero at *typical* movement, which makes
     roughly half of every session score positive whether or not the person
     said anything -- so the difference between two such scores is a
@@ -613,7 +613,7 @@ def _clean_states(
 def _absorb_short_states(
     state: np.ndarray, min_frames: int, only: int | None = None
 ) -> np.ndarray:
-    """Remove runs shorter than ``min_frames`` by extending their neighbours,
+    """Remove runs shorter than ``min_frames`` by extending their neighbors,
     so a single stray frame inside a long turn cannot create a boundary.
 
     ``only`` restricts the rule to runs of one particular state, which is how
@@ -671,7 +671,7 @@ def _difference_emission(
 ) -> np.ndarray:
     """Emissions from a per-frame log-odds cue plus the visual terms.
 
-    ``z`` is evidence in favour of A over B on a log-odds scale, whatever
+    ``z`` is evidence in favor of A over B on a log-odds scale, whatever
     produced it: the calibrated channel-level difference, or the learned
     voice model when there is no level difference to calibrate.
 

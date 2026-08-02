@@ -1,4 +1,4 @@
-"""Face and body tracking, and the behavioural signals derived from them."""
+"""Face and body tracking, and the behavioral signals derived from them."""
 
 from convlab.vision.tracker import (
     BLENDSHAPE_NAMES,

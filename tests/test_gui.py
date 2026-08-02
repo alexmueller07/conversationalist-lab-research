@@ -48,8 +48,8 @@ class TestApp:
         from convlab.gui import SKIPPABLE
 
         parser = build_parser()
-        analyse = parser._subparsers._group_actions[0].choices["analyse"]
-        skip_action = next(a for a in analyse._actions if a.dest == "skip")
+        analyze = parser._subparsers._group_actions[0].choices["analyze"]
+        skip_action = next(a for a in analyze._actions if a.dest == "skip")
         assert set(k for k, _, _ in SKIPPABLE) == set(skip_action.choices), (
             "a stage the GUI offers to skip must be one the pipeline accepts"
         )
@@ -169,13 +169,13 @@ class TestWorker:
 
 class TestPipelineHooks:
     def test_cancel_raises_at_a_stage_boundary(self):
-        from convlab.pipeline import Cancelled, SessionResult, _StageTimer
+        from convlab.pipeline import Canceled, SessionResult, _StageTimer
         from convlab.config import Config
         from convlab.context import AnalysisContext
 
         ctx = AnalysisContext("t", Config(), 10.0, 100.0)
         result = SessionResult(session=None, context=ctx)  # type: ignore[arg-type]
-        with pytest.raises(Cancelled):
+        with pytest.raises(Canceled):
             with _StageTimer(result, "probe", cancel=lambda: True):
                 pass  # pragma: no cover
 

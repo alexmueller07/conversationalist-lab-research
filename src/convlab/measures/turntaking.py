@@ -186,7 +186,7 @@ def talk_time_share(ctx: AnalysisContext) -> dict[str, float]:
     requires=("turn_set",),
     interpretation=(
         "Balance is a dyad property and is reported separately from each "
-        "person's share so that it can be modelled directly."
+        "person's share so that it can be modeled directly."
     ),
     higher_is_better=None,
 )
@@ -416,4 +416,121 @@ def turn_transition_overlap_rate(ctx: AnalysisContext) -> dict[str, float]:
             if t.person == p and t.is_overlap_onset and t.prev_person != p
         )
         out[p] = per_minute(n, ctx.duration)
+    return out
+
+
+# ----------------------------------------------------------------------
+# Plain counts and durations
+#
+# Rates and proportions are what statistical models want; a person reading a
+# report about two specific people wants seconds and counts. Both are kept
+# so that neither audience has to do arithmetic on the other's numbers, and
+# so that a proportion can always be traced to the quantity behind it.
+# ----------------------------------------------------------------------
+
+
+@measure(
+    id="spoke_first",
+    label="Opened the conversation",
+    description="1 for the participant whose turn came first, 0 for the other.",
+    unit="indicator",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set",),
+    interpretation=(
+        "Who began. Not a skill measure on its own -- seating, the "
+        "experimenter's last words and simple chance all bear on it -- but it "
+        "conditions everything that follows, since the opener sets the first "
+        "topic and the other person's first turn is a response."
+    ),
+)
+def spoke_first(ctx: AnalysisContext) -> dict[str, float]:
+    first = ctx.turn_set.first_speaker() if ctx.turn_set else None
+    if first is None:
+        return {p: float("nan") for p in PERSONS}
+    return {p: 1.0 if p == first else 0.0 for p in PERSONS}
+
+
+@measure(
+    id="speaking_time",
+    label="Time spent speaking",
+    description=(
+        "Total seconds this person was speaking, including their speech "
+        "during overlap and their backchannels."
+    ),
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set",),
+    interpretation=(
+        "The raw quantity behind talk-time share. Reported alongside it "
+        "because a 60/40 split means something different in a three-minute "
+        "conversation than in a twenty-minute one."
+    ),
+)
+def speaking_time(ctx: AnalysisContext) -> dict[str, float]:
+    return {p: float(ctx.speech(p).total) for p in PERSONS}
+
+
+@measure(
+    id="silent_time",
+    label="Time spent not speaking",
+    description=(
+        "Total seconds this person was not speaking, whether the partner was "
+        "talking or nobody was."
+    ),
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set",),
+    interpretation=(
+        "The complement of speaking time. Most of it is ordinary listening "
+        "rather than reticence -- in a two-person conversation each person is "
+        "silent for most of it by construction."
+    ),
+)
+def silent_time(ctx: AnalysisContext) -> dict[str, float]:
+    return {p: float(max(ctx.duration - ctx.speech(p).total, 0.0)) for p in PERSONS}
+
+
+@measure(
+    id="listening_time",
+    label="Time spent listening",
+    description=(
+        "Seconds during which the partner held the floor and this person was "
+        "not speaking."
+    ),
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set",),
+    interpretation=(
+        "Silence with the partner talking, as opposed to silence with nobody "
+        "talking. This is the denominator the listening behaviors -- nodding, "
+        "gaze, backchannels -- should be read against."
+    ),
+)
+def listening_time(ctx: AnalysisContext) -> dict[str, float]:
+    return {p: float(ctx.listening_segments(p).total) for p in PERSONS}
+
+
+@measure(
+    id="median_turn_duration",
+    label="Median turn length",
+    description="Median duration of this person's floor-holding turns.",
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set",),
+    interpretation=(
+        "Median rather than mean: turn lengths are strongly skewed, and one "
+        "long story would move a mean by more than the rest of the "
+        "conversation combined."
+    ),
+)
+def median_turn_duration(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        durations = [t.duration for t in ctx.turn_set.turns_of(p)]
+        out[p] = float(np.median(durations)) if durations else float("nan")
     return out

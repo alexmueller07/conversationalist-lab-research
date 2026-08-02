@@ -33,7 +33,7 @@ frame of the session, which is exactly what the temporal model needs in
 order to stop flickering.
 
 Two things keep this honest. The discriminant is scored by *time-blocked*
-cross-validation, never on the frames it was fitted to -- neighbouring
+cross-validation, never on the frames it was fitted to -- neighboring
 frames are so correlated that a random split would report near-perfect
 accuracy for a model that had learned nothing. And when the cross-validated
 accuracy is no better than chance, the cue is discarded and said to be
@@ -75,7 +75,7 @@ this is about 8 MB, which matters on the machines these runs happen on."""
 
 @dataclass
 class VoiceCue:
-    """A per-frame acoustic judgement of which participant is speaking.
+    """A per-frame acoustic judgment of which participant is speaking.
 
     ``log_odds`` is positive where the spectrum looks like A and negative
     where it looks like B, calibrated so that it can be read directly as a
@@ -89,7 +89,7 @@ class VoiceCue:
     ok: bool
     n_seed: tuple[int, int] = (0, 0)
     separation: float = 0.0
-    """Standardised distance between the two fitted class means along the
+    """Standardized distance between the two fitted class means along the
     discriminant. Reported for diagnosis; the accuracy is what gates use."""
     note: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -104,7 +104,7 @@ def mel_matrix(
     sample_rate: int, n_fft: int = N_FFT, n_mels: int = N_MELS,
     fmin: float = 80.0, fmax: float | None = None,
 ) -> np.ndarray:
-    """Triangular mel filterbank, area-normalised."""
+    """Triangular mel filterbank, area-normalized."""
     fmax = fmax if fmax is not None else sample_rate / 2.0
 
     def to_mel(f: np.ndarray | float) -> np.ndarray:
@@ -202,7 +202,7 @@ def context_features(
     frame_hz: float,
     window_s: float = 0.5,
 ) -> np.ndarray:
-    """Summarise each frame's neighbourhood into a speaker-ish descriptor.
+    """Summarize each frame's neighborhood into a speaker-ish descriptor.
 
     A single 32 ms frame is dominated by which phoneme is being produced, not
     by who is producing it. Averaging over half a second suppresses the
@@ -263,7 +263,7 @@ def context_features(
 class VoiceModel:
     """A fitted two-class linear discriminant in feature space."""
 
-    centre: np.ndarray
+    center: np.ndarray
     scale: np.ndarray
     weights: np.ndarray
     mean_a: float
@@ -271,10 +271,10 @@ class VoiceModel:
     sigma: float
 
     def project(self, x: np.ndarray) -> np.ndarray:
-        return ((x - self.centre) / self.scale) @ self.weights
+        return ((x - self.center) / self.scale) @ self.weights
 
     def log_odds(self, x: np.ndarray, clip: float = 6.0) -> np.ndarray:
-        """Log-likelihood ratio in favour of A, from the projection."""
+        """Log-likelihood ratio in favor of A, from the projection."""
         p = self.project(x)
         sigma = max(self.sigma, 1e-6)
         llr = ((p - self.mean_b) ** 2 - (p - self.mean_a) ** 2) / (2.0 * sigma**2)
@@ -284,7 +284,7 @@ class VoiceModel:
 _SHRINKAGE = 0.25
 """Pull the pooled covariance toward a scaled identity before inverting it.
 
-Neighbouring frames overlap in time, so the descriptors are far from
+Neighboring frames overlap in time, so the descriptors are far from
 independent and the empirical covariance is close to singular in some
 directions. Inverting it unshrunk produces enormous weights on those
 directions, which is how a discriminant ends up fitting the recording's noise
@@ -297,10 +297,10 @@ def fit_discriminant(x: np.ndarray, labels: np.ndarray) -> VoiceModel | None:
     if a.shape[0] < 30 or b.shape[0] < 30:
         return None
 
-    centre = x.mean(axis=0)
+    center = x.mean(axis=0)
     scale = x.std(axis=0)
     scale[scale < 1e-6] = 1.0
-    za, zb = (a - centre) / scale, (b - centre) / scale
+    za, zb = (a - center) / scale, (b - center) / scale
 
     mu_a, mu_b = za.mean(axis=0), zb.mean(axis=0)
     cov = (np.cov(za, rowvar=False) * za.shape[0] + np.cov(zb, rowvar=False) * zb.shape[0])
@@ -323,7 +323,7 @@ def fit_discriminant(x: np.ndarray, labels: np.ndarray) -> VoiceModel | None:
     sigma = float(np.sqrt(0.5 * (pa.var() + pb.var())))
     if not np.isfinite(sigma) or sigma < 1e-9:
         return None
-    return VoiceModel(centre, scale, weights, float(pa.mean()), float(pb.mean()), sigma)
+    return VoiceModel(center, scale, weights, float(pa.mean()), float(pb.mean()), sigma)
 
 
 def blocked_accuracy(

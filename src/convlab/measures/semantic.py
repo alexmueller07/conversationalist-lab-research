@@ -173,7 +173,7 @@ def topic_turnover_rate(ctx: AnalysisContext) -> float:
     requires=("semantics",),
     interpretation=(
         "Reviving an earlier thread demonstrates that the speaker retained "
-        "and valued it, and is one of the more direct behavioural traces of "
+        "and valued it, and is one of the more direct behavioral traces of "
         "attentive listening available from transcript alone."
     ),
     higher_is_better=None,
@@ -279,3 +279,52 @@ def callback_reciprocity(ctx: AnalysisContext) -> float:
     if total == 0:
         return float("nan")
     return float(1.0 - abs(counts["A"] - counts["B"]) / total)
+
+
+@measure(
+    id="topics_initiated",
+    label="Topics introduced",
+    description=(
+        "Number of topic segments whose first turn belongs to this person."
+    ),
+    unit="count",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("semantics",),
+    interpretation=(
+        "Who moved the conversation on. Boundaries come from a drop in "
+        "lexical cohesion between neighboring blocks of turns, so a "
+        "'topic' here is a stretch that hangs together, not a subject a "
+        "human coder would name -- and the person credited is whoever spoke "
+        "first after the boundary, which is usually but not always the one "
+        "who introduced it."
+    ),
+)
+def topics_initiated(ctx: AnalysisContext) -> dict[str, float]:
+    topics = getattr(ctx.semantics, "topics", None) or []
+    if not topics:
+        return {p: float("nan") for p in PERSONS}
+    return {
+        p: float(sum(1 for t in topics if t.initiator == p)) for p in PERSONS
+    }
+
+
+@measure(
+    id="median_topic_duration",
+    label="Median topic length",
+    description="Median duration of the detected topic segments.",
+    unit="seconds",
+    level=DYAD_LEVEL,
+    family=FAMILY,
+    requires=("semantics",),
+    interpretation=(
+        "Longer topics indicate a conversation that stays with a subject; "
+        "shorter ones a conversation that ranges. Median rather than mean, "
+        "because one long stretch at the end would otherwise dominate."
+    ),
+)
+def median_topic_duration(ctx: AnalysisContext) -> float:
+    topics = getattr(ctx.semantics, "topics", None) or []
+    if not topics:
+        return float("nan")
+    return float(np.median([t.duration for t in topics]))

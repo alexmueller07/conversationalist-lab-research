@@ -9,14 +9,14 @@
 - **Level:** person &nbsp; **Unit:** count
 - **Requires:** turn_set
 
-Number of acknowledgement tokens this person produced.
+Number of acknowledgment tokens this person produced.
 
 ### `backchannel_coverage` -- Backchannel coverage of partner turns
 
 - **Level:** person &nbsp; **Unit:** proportion
 - **Requires:** turn_set
 
-Share of the partner's turns longer than three seconds that received at least one acknowledgement from this person.
+Share of the partner's turns longer than three seconds that received at least one acknowledgment from this person.
 
 *Interpretation.* Distinguishes a listener who responds throughout from one who produces a burst of tokens in a single turn. Only turns long enough to invite a backchannel are counted.
 
@@ -28,7 +28,7 @@ Share of the partner's turns longer than three seconds that received at least on
 - **Level:** person &nbsp; **Unit:** s
 - **Requires:** turn_set
 
-Median delay between the partner reaching a brief within-turn pause and this person producing an acknowledgement, when one follows within two seconds.
+Median delay between the partner reaching a brief within-turn pause and this person producing an acknowledgment, when one follows within two seconds.
 
 *Interpretation.* Short latencies indicate the listener is tracking the speaker's phrase structure and responding at natural invitation points.
 
@@ -37,9 +37,9 @@ Median delay between the partner reaching a brief within-turn pause and this per
 - **Level:** person &nbsp; **Unit:** per minute of partner speech
 - **Requires:** turn_set
 
-Acknowledgement tokens ('mhm', 'right', 'yeah') this person produced per minute of their partner's speaking time.
+Acknowledgment tokens ('mhm', 'right', 'yeah') this person produced per minute of their partner's speaking time.
 
-*Interpretation.* The standard vocal index of active listening. Normalised by the partner's talk time so that someone with a quiet partner is not penalised for having had fewer opportunities.
+*Interpretation.* The standard vocal index of active listening. Normalized by the partner's talk time so that someone with a quiet partner is not penalized for having had fewer opportunities.
 
 - Yngve (1970) -- 'On getting a word in edgewise', the backchannel concept
 - Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- listener responses
@@ -49,7 +49,7 @@ Acknowledgement tokens ('mhm', 'right', 'yeah') this person produced per minute 
 - **Level:** dyad &nbsp; **Unit:** index
 - **Requires:** turn_set
 
-How evenly the two partners produced acknowledgements, as 1 minus the absolute difference in their shares of the dyad's total.
+How evenly the two partners produced acknowledgments, as 1 minus the absolute difference in their shares of the dyad's total.
 
 *Interpretation.* 1.0 means both listened back equally; 0.0 means only one person ever acknowledged the other.
 
@@ -58,7 +58,7 @@ How evenly the two partners produced acknowledgements, as 1 minus the absolute d
 - **Level:** person &nbsp; **Unit:** proportion of turn
 - **Requires:** turn_set
 
-Where in the partner's turn this person's acknowledgements fall, as a fraction of the turn's length. 0 is the very start, 1 the very end.
+Where in the partner's turn this person's acknowledgments fall, as a fraction of the turn's length. 0 is the very start, 1 the very end.
 
 *Interpretation.* Values near 1 suggest the token is functioning as a turn-yielding signal rather than as continuous listenership.
 
@@ -71,14 +71,14 @@ Where in the partner's turn this person's acknowledgements fall, as a fraction o
 
 Bursts of hand movement above a speed threshold, per minute of this person's speaking time.
 
-*Interpretation.* Normalised by own speaking time because co-speech gesture is produced while talking; dividing by session length would confound gesturing with talkativeness.
+*Interpretation.* Normalized by own speaking time because co-speech gesture is produced while talking; dividing by session length would confound gesturing with talkativeness.
 
 ### `posture_shift_rate` -- Postural shift rate
 
 - **Level:** person &nbsp; **Unit:** per minute
 - **Requires:** body
 
-Distinct movements of the torso centre per minute, in shoulder-width units so the value does not depend on camera distance.
+Distinct movements of the torso center per minute, in shoulder-width units so the value does not depend on camera distance.
 
 *Interpretation.* Frequent shifting is commonly read as discomfort or restlessness, but it also rises with animated storytelling, so it should be interpreted alongside gesture rate rather than alone.
 
@@ -89,7 +89,7 @@ Distinct movements of the torso centre per minute, in shoulder-width units so th
 
 Proportion of tracked frames in which a hand was close to the face.
 
-*Interpretation.* Face-directed self-touch is a much-cited proxy for self-soothing under discomfort. The evidence for that reading is mixed, so it is offered as a descriptive behaviour rather than an anxiety score.
+*Interpretation.* Face-directed self-touch is a much-cited proxy for self-soothing under discomfort. The evidence for that reading is mixed, so it is offered as a descriptive behavior rather than an anxiety score.
 
 ## Dynamics (8)
 
@@ -100,7 +100,7 @@ Proportion of tracked frames in which a hand was close to the face.
 
 Backchannels per minute in the final third minus the first third.
 
-*Interpretation.* Rising acknowledgement suggests growing engagement.
+*Interpretation.* Rising acknowledgment suggests growing engagement.
 
 ### `coherence_trend` -- Change in response coherence
 
@@ -272,7 +272,7 @@ Episodes of mutual gaze lasting at least 300 ms, per minute. Brief coincidental 
 
 Proportion of the conversation in which both people were looking at each other at the same time.
 
-*Interpretation.* Mutual gaze is a dyadic achievement rather than a sum of two individual behaviours, and is associated with rapport and with perceived intimacy.
+*Interpretation.* Mutual gaze is a dyadic achievement rather than a sum of two individual behaviors, and is associated with rapport and with perceived intimacy.
 
 - Kendon (1967) Acta Psychologica 26:22 -- gaze direction in conversation
 - Argyle & Dean (1965) Sociometry 28:289 -- eye contact and intimacy equilibrium
@@ -302,7 +302,7 @@ Head nods per minute across the whole conversation.
 
 Head nods per minute of the partner's speaking time. A nod is a rhythmic pitch oscillation of at least 1.2 cycles, not a single dip.
 
-*Interpretation.* The visual counterpart of a vocal backchannel, and a direct index of active listening. Normalised by the partner's talk time so that having a quiet partner does not read as inattention.
+*Interpretation.* The visual counterpart of a vocal backchannel, and a direct index of active listening. Normalized by the partner's talk time so that having a quiet partner does not read as inattention.
 
 - Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- listener responses as a collaborative process
 
@@ -521,9 +521,9 @@ Positively valenced words per 100 words.
 - **Level:** person &nbsp; **Unit:** per minute
 - **Requires:** transcript, turn_set
 
-Questions asked per minute, counting wh-questions, inverted yes/no questions and tag questions. Declarative questions are excluded here because identifying them depends entirely on recogniser punctuation.
+Questions asked per minute, counting wh-questions, inverted yes/no questions and tag questions. Declarative questions are excluded here because identifying them depends entirely on recognizer punctuation.
 
-*Interpretation.* Asking questions is among the most robust behavioural predictors of being liked in a first conversation.
+*Interpretation.* Asking questions is among the most robust behavioral predictors of being liked in a first conversation.
 
 - Huang, Yeomans, Brooks, Minson & Gino (2017) J. Pers. Soc. Psychol. 113:430 -- question-asking increases liking
 
@@ -559,7 +559,7 @@ Words per minute of this person's actual speaking time, excluding silences. This
 - **Level:** person &nbsp; **Unit:** count
 - **Requires:** transcript
 
-Total words recognised for this person.
+Total words recognized for this person.
 
 ### `words_per_turn` -- Mean words per turn
 
@@ -577,7 +577,7 @@ Average number of words in this person's floor-holding turns.
 
 Median fundamental frequency across this person's voiced speech.
 
-*Interpretation.* Largely determined by anatomy, so reported for description and as a sanity check on tracking rather than as a behavioural measure.
+*Interpretation.* Largely determined by anatomy, so reported for description and as a sanity check on tracking rather than as a behavioral measure.
 
 ### `intensity_entrainment_synchrony` -- Loudness entrainment (synchrony)
 
@@ -687,7 +687,7 @@ Average number of turns a callback reached back, for this person's callbacks.
 
 Turns per minute in which this person revived a topic that had been dropped at least four turns earlier, evidenced by a distinctive shared content term absent from every intervening turn.
 
-*Interpretation.* Reviving an earlier thread demonstrates that the speaker retained and valued it, and is one of the more direct behavioural traces of attentive listening available from transcript alone.
+*Interpretation.* Reviving an earlier thread demonstrates that the speaker retained and valued it, and is one of the more direct behavioral traces of attentive listening available from transcript alone.
 
 ### `callback_reciprocity` -- Callback reciprocity
 
@@ -939,7 +939,7 @@ Number of mutual silences longer than 500 ms per minute. Brief articulatory gaps
 
 How evenly speaking time was shared, as 1 minus the absolute difference in shares. 1.0 is a perfectly even split, 0.0 means one person did all the talking.
 
-*Interpretation.* Balance is a dyad property and is reported separately from each person's share so that it can be modelled directly.
+*Interpretation.* Balance is a dyad property and is reported separately from each person's share so that it can be modeled directly.
 
 ### `talk_time_share` -- Share of speaking time
 

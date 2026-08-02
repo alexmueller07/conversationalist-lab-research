@@ -13,7 +13,7 @@ algorithmic detail and the justification for each threshold;
 
 Two people have a conversation. We want to know what each of them *did* —
 not just what they said, but how they timed it, where they looked, how they
-moved, and how the two of them coordinated. Then we want those behaviours as
+moved, and how the two of them coordinated. Then we want those behaviors as
 numbers, so that dozens or hundreds of conversations can be compared.
 
 The input is video. Each participant is filmed separately:
@@ -42,7 +42,7 @@ results/
 ├── codebook.csv            all 104 measures defined
 ├── session_summary.csv     pass / review / fail per session
 └── <session_id>/
-    ├── dashboard.html      visual report with synchronised video review
+    ├── dashboard.html      visual report with synchronized video review
     ├── manifest.json       every parameter, model digest and stage timing
     ├── qc.json             each quality check and its verdict
     ├── timeline.parquet    frame-level signals for re-analysis
@@ -56,7 +56,7 @@ Two conventions run through all of it:
 
 - **A measure that could not be computed is a row with a null value and a
   stated reason.** Never zero, never dropped. A failed camera and an absence
-  of behaviour must not look the same in a table of per-dyad values.
+  of behavior must not look the same in a table of per-dyad values.
 - **Quality control judges inputs, not results.** Sync confidence, tracking
   coverage, attribution stability. Screening on whether the *numbers* look
   plausible is how a real effect gets thrown away.
@@ -157,7 +157,7 @@ band-limited to 300–3400 Hz first: restricting to the telephone band
 suppresses room modes and hiss, which differ between cameras for reasons
 unrelated to who is speaking.
 
-**Lip motion.** Mouth aperture, normalised by inter-ocular distance so it
+**Lip motion.** Mouth aperture, normalized by inter-ocular distance so it
 does not change when someone leans toward the camera, band-passed to
 1.5–8 Hz and enveloped. Untracked frames score zero — neutral evidence, not
 evidence of silence.
@@ -229,7 +229,7 @@ comparable with published ones.
   articulatory; splitting on it makes every stop consonant a boundary.
 - **Backchannel** — short (≤ 1.2 s), mostly inside the partner's speech
   (≥ 50 % contained), **and the partner keeps going afterwards**. That last
-  condition is what separates an acknowledgement from a successful
+  condition is what separates an acknowledgment from a successful
   interruption. With a transcript, the text must also look like one.
 - **Turn** — a maximal run of one person's non-backchannel IPUs with no
   intervening non-backchannel speech from the other.
@@ -247,7 +247,7 @@ third and latency medians are pulled toward zero.
 Multi-word backchannels are matched on the joined form first ("uh huh" →
 `uhhuh`), then token by token. Testing tokens alone fails on exactly the
 common cases: "uh" is a filler and "see" is contentful, but "uh huh" and "I
-see" are acknowledgements. Fixing this raised backchannel recall from 0.68 to
+see" are acknowledgments. Fixing this raised backchannel recall from 0.68 to
 0.88 and turn precision from 0.85 to 0.93.
 
 **Overlap classification.** An onset within 1 s of the current turn's end is
@@ -257,7 +257,7 @@ successful when the interrupted speaker actually stops.
 
 ### 3.6 Transcription
 
-faster-whisper, with each person's speech recognised from **their own**
+faster-whisper, with each person's speech recognized from **their own**
 close-up track.
 
 Whisper pads every call out to a 30-second window regardless of input
@@ -272,7 +272,7 @@ Conditioning on previous text is disabled — it propagates hallucinated
 phrases across segments, far more damaging to per-turn measures than the
 small fluency gain is worth.
 
-The recogniser is sized to available memory and released the moment it
+The recognizer is sized to available memory and released the moment it
 finishes; it commits about 2.3 GB and holding it through later stages is
 enough to get the process killed on an 8 GB machine.
 
@@ -347,12 +347,12 @@ its complement from the other side.
 
 ### Backchannel (6)
 
-**Backchannel rate** is normalised by the *partner's* speaking time, not by
+**Backchannel rate** is normalized by the *partner's* speaking time, not by
 session length — someone whose partner said little had fewer opportunities
 and must not be scored as unresponsive.
 
 **Backchannel coverage** is the share of the partner's turns longer than
-three seconds that received at least one acknowledgement, which distinguishes
+three seconds that received at least one acknowledgment, which distinguishes
 a listener who responds throughout from one who produces a burst in a single
 turn. **Mean position within turn** locates them: values near 1 suggest the
 token is functioning as a turn-yielding signal rather than continuous
@@ -362,14 +362,14 @@ listenership.
 
 **Question rate** counts wh-, inverted yes/no, and tag questions.
 Declarative questions ("you grew up there?") are excluded from the total
-because identifying them depends entirely on recogniser punctuation.
+because identifying them depends entirely on recognizer punctuation.
 **Open question ratio** is the wh- share, since open questions invite
 elaboration.
 
 **Filled pause rate** counts "um" and "uh" only. "Like" and "you know" are
 deliberately excluded — they are discourse markers whose frequency varies
 enormously by dialect and age, and counting them as disfluency would
-systematically penalise younger speakers.
+systematically penalize younger speakers.
 
 **Linguistic style matching** compares the two partners' usage across nine
 function-word categories (pronouns, articles, conjunctions, prepositions,
@@ -397,12 +397,12 @@ different phenomena and a single number conflates them:
 Two voices can track each other turn by turn without ever becoming more
 alike, and vice versa.
 
-Critically, entrainment values are **standardised within speaker** before
+Critically, entrainment values are **standardized within speaker** before
 pairing. Turns alternate and partners differ in register, often by an octave;
 on raw values the statistic returns about −0.98 whether or not any
 accommodation occurred, because it is measuring who was talking. Measured
 across 40 simulated conversations: raw gives −0.983 with no accommodation and
-−0.936 with it (indistinguishable), while the standardised version gives
+−0.936 with it (indistinguishable), while the standardized version gives
 +0.006 and +0.723.
 
 ### Semantic (12)
@@ -487,7 +487,7 @@ counted as both a nod and a shake.
 Measured: **precision 1.00, recall 1.00**, with **zero** false positives from
 single dips, from head shakes, or from slow postural drift.
 
-**Nod rate while listening** is normalised by the partner's speaking time —
+**Nod rate while listening** is normalized by the partner's speaking time —
 the visual counterpart of a vocal backchannel.
 
 ### Facial expression (5)
@@ -507,7 +507,7 @@ scores as permanently expressive.
 
 ### Body (3)
 
-Gesture rate is normalised by the person's own speaking time, since
+Gesture rate is normalized by the person's own speaking time, since
 co-speech gesture is produced while talking; dividing by session length would
 confound gesturing with talkativeness. Postural shifts are measured in
 shoulder-width units so the value does not depend on camera distance.
@@ -526,8 +526,8 @@ resolved.*
 
 **Every synchrony value is reported as the excess over a chance baseline.**
 
-Two independent behavioural time series correlate at around 0.3 simply
-because behaviour is autocorrelated — people do not change expression or
+Two independent behavioral time series correlate at around 0.3 simply
+because behavior is autocorrelated — people do not change expression or
 posture at random from frame to frame. Reporting that as mimicry is not a
 weak result, it is an invalid one: the same number arises between two people
 who never met.
@@ -644,6 +644,6 @@ a whole class of event.
   partner more than anywhere else — usually true, and it fails on someone who
   spent the conversation staring at the table.
 - **Lexical measures are English-only.**
-- **These are proxies for behaviour, not scores of skill.** Almost none has a
+- **These are proxies for behavior, not scores of skill.** Almost none has a
   defensible "higher is better", which is why the codebook marks direction as
   unknown for most of them.

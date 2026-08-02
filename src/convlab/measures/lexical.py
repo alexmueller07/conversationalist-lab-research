@@ -36,7 +36,7 @@ def _turn_texts(ctx: AnalysisContext, person: str) -> list[str]:
 @measure(
     id="word_count",
     label="Words spoken",
-    description="Total words recognised for this person.",
+    description="Total words recognized for this person.",
     unit="count",
     level=PERSON_LEVEL,
     family=FAMILY,
@@ -119,14 +119,14 @@ def lexical_diversity(ctx: AnalysisContext) -> dict[str, float]:
     description=(
         "Questions asked per minute, counting wh-questions, inverted yes/no "
         "questions and tag questions. Declarative questions are excluded here "
-        "because identifying them depends entirely on recogniser punctuation."
+        "because identifying them depends entirely on recognizer punctuation."
     ),
     unit="per minute",
     level=PERSON_LEVEL,
     family=FAMILY,
     requires=("transcript", "turn_set"),
     interpretation=(
-        "Asking questions is among the most robust behavioural predictors of "
+        "Asking questions is among the most robust behavioral predictors of "
         "being liked in a first conversation."
     ),
     references=(
@@ -209,19 +209,22 @@ def question_reciprocity(ctx: AnalysisContext) -> float:
 
 @measure(
     id="filler_rate",
-    label="Filled pause rate",
+    label="Filled pauses written down (lower bound)",
     description=(
-        "Filled pauses ('um', 'uh') per 100 words. Discourse markers such as "
-        "'like' and 'you know' are deliberately excluded."
+        "Filled pauses ('um', 'uh') per 100 words, counted in the transcript. "
+        "A lower bound only: recognizers are trained to produce clean text "
+        "and delete most hesitations."
     ),
     unit="per 100 words",
     level=PERSON_LEVEL,
     family=FAMILY,
     requires=("transcript",),
     interpretation=(
-        "Filled pauses mark planning load. They are not simply a defect: they "
-        "reliably signal that the speaker intends to continue, and listeners "
-        "use them to avoid taking the floor prematurely."
+        "Not to be compared across sessions on its own. Measured against "
+        "scripted material the recognizer kept 4 of 9 hesitations and 0 of 4 "
+        "instances of 'uh', so this counts whichever ones happened to "
+        "survive. Use the acoustic hesitation rate instead, and this one only "
+        "to see how much the transcript lost."
     ),
 )
 def filler_rate(ctx: AnalysisContext) -> dict[str, float]:
@@ -232,6 +235,103 @@ def filler_rate(ctx: AnalysisContext) -> dict[str, float]:
             out[p] = float("nan")
             continue
         out[p] = 100.0 * lex.count_in(tokens, lex.FILLERS) / len(tokens)
+    return out
+
+
+@measure(
+    id="hesitation_rate",
+    label="Hesitation rate",
+    description=(
+        "Held, unchanging vowels per minute of this person's own speech, "
+        "found in the audio rather than the transcript."
+    ),
+    unit="per minute of speech",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("filled_pauses",),
+    interpretation=(
+        "Higher values indicate more audible planning. This is the measure to "
+        "use for hesitation: it does not depend on the recognizer, which "
+        "deletes most of them. Rate is per minute of the speaker's own "
+        "speech, not per minute of session, so it does not simply track how "
+        "much they talked."
+    ),
+    references=(
+        "Clark & Fox Tree (2002) Cognition 84:73 -- 'um' and 'uh' as words",
+        "Shriberg (2001) J. Int. Phon. Assoc. 31:153 -- disfluency in "
+        "spontaneous speech",
+    ),
+)
+def hesitation_rate(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        pauses = (ctx.filled_pauses or {}).get(p)
+        talk = ctx.speech(p).total
+        if pauses is None or talk <= 5.0:
+            out[p] = float("nan")
+            continue
+        out[p] = len(list(pauses)) / (talk / 60.0)
+    return out
+
+
+@measure(
+    id="hesitation_duration_mean",
+    label="Mean hesitation length",
+    description="Mean duration of the held vowels detected in this person's speech.",
+    unit="seconds",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("filled_pauses",),
+    interpretation=(
+        "Longer hesitations indicate more time spent planning while holding "
+        "the floor. Read with the rate: many short ones and few long ones are "
+        "different habits."
+    ),
+)
+def hesitation_duration_mean(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        pauses = (ctx.filled_pauses or {}).get(p)
+        spans = list(pauses) if pauses is not None else []
+        out[p] = (
+            float(np.mean([e - s for s, e in spans])) if spans else float("nan")
+        )
+    return out
+
+
+@measure(
+    id="discourse_marker_rate",
+    label="Discourse marker rate",
+    description=(
+        "'like', 'you know', 'I mean', 'sort of', 'well' and similar per 100 "
+        "words, counting multi-word forms as single events."
+    ),
+    unit="per 100 words",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("transcript",),
+    interpretation=(
+        "These are ordinary words, so the transcript keeps them -- 10 of 11 "
+        "survived in scripted material, against 4 of 9 hesitations. Kept "
+        "separate from hesitation for that reason and one other: their "
+        "frequency varies strongly with dialect and age, so pooling the two "
+        "produces a 'filler rate' that mostly measures which kind a speaker "
+        "favors."
+    ),
+    references=(
+        "Schiffrin (1987) Discourse Markers",
+        "Fox Tree (2010) Lang. Linguist. Compass 4:269",
+    ),
+)
+def discourse_marker_rate(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        tokens = _tokens(ctx, p)
+        if not tokens:
+            out[p] = float("nan")
+            continue
+        text = ctx.transcript.text_of(p)
+        out[p] = 100.0 * lex.count_phrases(text, lex.DISCOURSE_MARKERS) / len(tokens)
     return out
 
 

@@ -4,11 +4,11 @@ Whisper has no idea who is talking, and running it on a mixed track yields
 one undifferentiated transcript that cannot be split by speaker after the
 fact. Here the attribution result decides *what to transcribe*: each
 person's speech regions are cut from *their own* close-up track, where their
-voice is roughly 11 dB above their partner's, and recognised separately.
+voice is roughly 11 dB above their partner's, and recognized separately.
 Every word therefore arrives already attributed, and the partner's voice is
 both attenuated and outside the requested time range.
 
-Two Whisper behaviours are deliberately disabled. Conditioning on previous
+Two Whisper behaviors are deliberately disabled. Conditioning on previous
 text propagates a hallucinated phrase through every following segment, which
 is far more damaging to per-turn measures than the small fluency gain is
 worth. Whisper's internal VAD is bypassed because the speech regions
@@ -46,7 +46,7 @@ data, not from the room, and they would otherwise be counted as real words."""
 
 @dataclass(frozen=True)
 class Word:
-    """One recognised word on the session clock."""
+    """One recognized word on the session clock."""
 
     person: str
     start: float
@@ -125,7 +125,7 @@ def _build_blocks(
     pad: float = 0.15,
     separator_s: float = 0.25,
 ) -> list[_Block]:
-    """Concatenate one person's speech into recogniser-sized blocks.
+    """Concatenate one person's speech into recognizer-sized blocks.
 
     Two problems are solved at once. Whisper pads every call out to a
     30-second window regardless of how much audio it was given, so
@@ -190,7 +190,7 @@ def transcribe(
     offsets: dict[str, float] | None = None,
     download_root: str | Path | None = None,
 ) -> Transcript:
-    """Recognise each person's speech from their own close-up track.
+    """Recognize each person's speech from their own close-up track.
 
     Parameters
     ----------
@@ -221,7 +221,7 @@ def transcribe(
 
     transcript = Transcript(model=cfg.model, language=cfg.language)
 
-    # The recogniser reserves far more than its weights: small.en commits
+    # The recognizer reserves far more than its weights: small.en commits
     # about 2.3 GB. On a constrained machine, loading it on top of the
     # tracking runtime gets the process killed, so pick a size that fits and
     # say so rather than dying halfway through a batch.
@@ -304,7 +304,7 @@ def transcribe(
                 log.warning("transcription failed for %s block: %s", person, exc)
                 transcript.warnings.append(f"{person}: {type(exc).__name__}: {exc}")
 
-    # Release the recogniser before returning. It commits roughly 2.3 GB, and
+    # Release the recognizer before returning. It commits roughly 2.3 GB, and
     # holding it through the prosody, semantics and body stages is what makes
     # the pipeline fail on an 8 GB machine -- those stages then have to load
     # their own models on top of a model nothing will use again. Dropping it

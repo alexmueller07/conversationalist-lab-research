@@ -43,7 +43,7 @@ from convlab.session import CLOSE_VIEW, PERSONS, Session
 from convlab.speech.asr import Transcript, transcribe
 from convlab.speech.attribution import attribute_speakers
 from convlab.speech.laughter import detect_laughter
-from convlab.speech.prosody import analyse_prosody
+from convlab.speech.prosody import analyze_prosody
 from convlab.speech.vad import SileroVAD, probability_to_grid
 from convlab.timeline import Segments
 from convlab.turns import build_turn_set
@@ -56,16 +56,17 @@ CancelFn = Callable[[], bool]
 
 
 PIPELINE_STAGES: tuple[str, ...] = (
-    "probe", "decode_audio", "sync", "vad", "face_tracking", "attribution",
+    "probe", "decode_audio", "sync", "vad", "recording_quality",
+    "face_tracking", "attribution",
     "turns_provisional", "asr", "turns", "prosody", "semantics",
-    "face_signals", "body_tracking", "laughter", "measures",
+    "face_signals", "body_tracking", "filled_pauses", "laughter", "measures",
 )
 """Stage order, for progress reporting. Stages may be skipped, so a caller
 showing a progress bar should treat this as the maximum rather than a
 guarantee."""
 
 
-class Cancelled(Exception):
+class Canceled(Exception):
     """Raised inside a stage when a caller has asked the run to stop."""
 
 
@@ -104,7 +105,7 @@ class _StageTimer:
 
     def __enter__(self) -> "_StageTimer":
         if self.cancel is not None and self.cancel():
-            raise Cancelled(f"stopped before stage '{self.name}'")
+            raise Canceled(f"stopped before stage '{self.name}'")
         if self.progress is not None:
             index = (
                 PIPELINE_STAGES.index(self.name) if self.name in PIPELINE_STAGES else 0
@@ -117,9 +118,9 @@ class _StageTimer:
 
     def __exit__(self, exc_type, exc, tb) -> bool:
         self.report.seconds = time.perf_counter() - self.start
-        if isinstance(exc, Cancelled):
-            self.report.status = "cancelled"
-            self.result.context.stage_status[self.name] = "cancelled"
+        if isinstance(exc, Canceled):
+            self.report.status = "canceled"
+            self.result.context.stage_status[self.name] = "canceled"
             return False  # propagate: the whole run should stop
         if exc is not None:
             self.report.status = "failed"
@@ -136,7 +137,7 @@ class _StageTimer:
         self.report.detail = reason
 
 
-def analyse_session(
+def analyze_session(
     session: Session,
     config: Config | None = None,
     output_root: str | Path = "workspace",
@@ -154,7 +155,7 @@ def analyse_session(
         takes tens of minutes.
     cancel:
         Polled between stages; returning True aborts the run by raising
-        :class:`Cancelled`. Checked at stage boundaries rather than inside
+        :class:`Canceled`. Checked at stage boundaries rather than inside
         them, so a stop never leaves a half-written cache entry.
     """
     cfg = config or Config()
@@ -199,7 +200,7 @@ def analyse_session(
             )
 
     if context.duration <= 0:
-        context.note("no usable media; nothing was analysed")
+        context.note("no usable media; nothing was analyzed")
         return result
 
     n_frames = int(np.floor(context.duration * frame_hz)) + 1
@@ -279,6 +280,36 @@ def analyse_session(
             f"max over {', '.join(sources)}; speech {np.mean(speech_prob > 0.5):.1%}"
         )
 
+    # ---- 4b. recording quality -----------------------------------------
+    #
+    # After voice activity rather than at probe time: the noise floor has to
+    # be measured where the detector says nobody is speaking, and a blanket
+    # low percentile would sit inside quiet speech on exactly the recordings
+    # whose signal-to-noise matters most.
+    if "quality" not in skip:
+        with stage_ctx("recording_quality") as stage:
+            from convlab.media.quality import measure_audio_quality, measure_video_quality
+
+            speech_frames = speech_prob >= 0.5
+            video_q, audio_q = {}, {}
+            for role in session.views:
+                if infos[role].has_video:
+                    found = measure_video_quality(
+                        session.path(role), role=role, duration_s=context.duration
+                    )
+                    video_q[role] = found
+                    for warning in found.warnings:
+                        context.note(warning)
+                if role in aligned:
+                    audio_q[role] = measure_audio_quality(
+                        aligned[role], sample_rate, speech_frames, role=role
+                    )
+            context.video_quality = video_q or None
+            context.audio_quality = audio_q or None
+            stage.report.detail = "; ".join(
+                f"{r}: {q.summary()}" for r, q in sorted(video_q.items())
+            ) or "no video streams"
+
     # ---- 5. face tracking ---------------------------------------------
     face_tracks: dict[str, Any] = {}
     if "face" not in skip:
@@ -355,7 +386,7 @@ def analyse_session(
     if context.attribution is None:
         return result
 
-    # ---- 7. first-pass turns (needed to target the recogniser) --------
+    # ---- 7. first-pass turns (needed to target the recognizer) --------
     with stage_ctx("turns_provisional"):
         context.turn_set = build_turn_set(
             context.attribution.speech, cfg.turns, context.duration
@@ -406,7 +437,7 @@ def analyse_session(
                 role = CLOSE_VIEW[person]
                 if role not in aligned:
                     continue
-                prosody[person] = analyse_prosody(
+                prosody[person] = analyze_prosody(
                     aligned[role], context.attribution.speech[person], sample_rate,
                     n_frames, frame_hz, cfg.prosody, person=person,
                 )
@@ -420,9 +451,9 @@ def analyse_session(
     # ---- 11. semantics -------------------------------------------------
     if "semantics" not in skip and context.transcript is not None:
         with stage_ctx("semantics") as stage:
-            from convlab.semantics import analyse_semantics
+            from convlab.semantics import analyze_semantics
 
-            context.semantics = analyse_semantics(
+            context.semantics = analyze_semantics(
                 context.turn_set.turns, cfg.semantic,
                 cache_dir=str(Path(model_dir) / "sentence-transformers"),
             )
@@ -497,6 +528,30 @@ def analyse_session(
             context.body = body_signals or None
             stage.report.detail = ", ".join(
                 f"{p}:{s.coverage:.0%}" for p, s in body_signals.items()
+            )
+
+    # ---- 13b. filled pauses --------------------------------------------
+    if "fillers" not in skip:
+        with stage_ctx("filled_pauses") as stage:
+            from convlab.speech.fillers import detect_filled_pauses
+
+            pauses = {}
+            for person in PERSONS:
+                role = CLOSE_VIEW[person]
+                if role not in aligned:
+                    continue
+                found = detect_filled_pauses(
+                    aligned[role], sample_rate,
+                    context.attribution.speech.get(person, Segments.empty()),
+                    frame_hz, n_frames, cfg.fillers, person=person,
+                )
+                for warning in found.warnings:
+                    context.note(f"fillers: {warning}")
+                if found.available:
+                    pauses[person] = found.segments
+            context.filled_pauses = pauses or None
+            stage.report.detail = ", ".join(
+                f"{p}:{len(list(s))}" for p, s in (pauses or {}).items()
             )
 
     # ---- 14. laughter --------------------------------------------------

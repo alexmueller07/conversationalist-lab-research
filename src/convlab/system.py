@@ -83,7 +83,7 @@ def _macos_available_mb() -> float:
     return (free + inactive) * page_size / 1e6
 
 
-# Measured private commit for each recogniser on Windows/CPU/int8. These are
+# Measured private commit for each recognizer on Windows/CPU/int8. These are
 # not the weight file sizes -- CTranslate2 reserves a working arena several
 # times larger than the weights.
 ASR_MODEL_COMMIT_MB: dict[str, float] = {
@@ -100,16 +100,16 @@ ASR_MODEL_COMMIT_MB: dict[str, float] = {
 _FALLBACK_ORDER = ("medium.en", "small.en", "base.en", "tiny.en")
 
 SAFETY_MARGIN_MB = 700.0
-"""Headroom left for the rest of the pipeline while the recogniser is
+"""Headroom left for the rest of the pipeline while the recognizer is
 loaded -- audio buffers, the tracking runtime that is already resident, and
-the recogniser's own transient allocations during decoding."""
+the recognizer's own transient allocations during decoding."""
 
 
 def fit_asr_model(requested: str, available_mb: float | None = None) -> tuple[str, str]:
-    """Choose the largest recogniser that fits, and explain any downgrade.
+    """Choose the largest recognizer that fits, and explain any downgrade.
 
     Returns ``(model_name, note)`` where ``note`` is empty when the request
-    was honoured. Being killed halfway through a batch is worse than
+    was honored. Being killed halfway through a batch is worse than
     transcribing with a smaller model and saying so.
     """
     if available_mb is None:
@@ -130,7 +130,7 @@ def fit_asr_model(requested: str, available_mb: float | None = None) -> tuple[st
         if available_mb >= ASR_MODEL_COMMIT_MB[candidate] + SAFETY_MARGIN_MB:
             return candidate, (
                 f"only {available_mb:.0f} MB of memory is available, which is "
-                f"not enough for the {requested} recogniser "
+                f"not enough for the {requested} recognizer "
                 f"(~{needed:.0f} MB); using {candidate} instead. Word error "
                 "rate will be somewhat higher, which mainly affects the "
                 "lexical and semantic measures. Close other applications to "

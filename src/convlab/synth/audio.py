@@ -40,7 +40,7 @@ class Utterance:
     end: float
     kind: str = "turn"
     """``turn`` for floor-holding speech, ``backchannel`` for a short
-    acknowledgement produced while the partner holds the floor."""
+    acknowledgment produced while the partner holds the floor."""
     turn_index: int = -1
 
     @property
@@ -181,6 +181,55 @@ def render_voice(
     return out
 
 
+def render_filled_pause(
+    duration: float,
+    f0: float,
+    sample_rate: int,
+    vowel: str = "a",
+    rng: np.random.Generator | None = None,
+    level: float = 0.35,
+) -> np.ndarray:
+    """A hesitation: one vowel held without moving.
+
+    Needed because synthesised sentences contain no hesitations. A speech
+    engine asked to say "Um, I went there" produces the *word* "um" fluently,
+    at normal length and with normal intonation -- which is not the
+    phenomenon. Validating a hesitation detector against that material
+    measures nothing, and would have reported the detector as broken when
+    what was missing was the thing it detects.
+
+    What distinguishes a filled pause from ordinary speech is the absence of
+    change: one vowel rather than a sequence, a flat pitch rather than a
+    contour, and a steady amplitude rather than syllabic modulation. All
+    three are the point, so all three are built in here and nowhere else in
+    this module.
+    """
+    rng = rng or np.random.default_rng(0)
+    n = max(8, int(duration * sample_rate))
+    t = np.arange(n) / sample_rate
+
+    # Flat pitch, with only the cycle-to-cycle jitter any real voice has.
+    contour = f0 * (1.0 + rng.normal(0.0, 0.008, n))
+    phase = np.cumsum(2.0 * np.pi * contour / sample_rate)
+    n_harm = int(min(24, (sample_rate / 2) / max(f0, 1.0)))
+    source = sum(np.sin(h * phase) / (h**1.6) for h in range(1, max(2, n_harm)))
+    source = source + rng.normal(0.0, 0.01, n)
+
+    voiced = _formant_filter(source, vowel, sample_rate)
+
+    # Steady amplitude, with onset and offset ramps so the splice does not
+    # create a click that the detector could key on instead.
+    envelope = np.ones(n)
+    ramp = int(min(0.03 * sample_rate, n // 4))
+    if ramp > 1:
+        envelope[:ramp] = np.linspace(0, 1, ramp)
+        envelope[-ramp:] = np.linspace(1, 0, ramp)
+
+    out = voiced * envelope
+    peak = float(np.max(np.abs(out)))
+    return (out / peak * level) if peak > 0 else out
+
+
 # ----------------------------------------------------------------------
 # Conversation structure
 # ----------------------------------------------------------------------
@@ -275,7 +324,7 @@ def synthesize_dyad_audio(
     ----------
     near_far_db:
         How much louder a person is in their own close-up microphone than in
-        their partner's. 11 dB is typical for two cameras about a metre
+        their partner's. 11 dB is typical for two cameras about a meter
         apart on either side of a small table.
     channel_gain_db:
         Per-channel gain offsets, deliberately unequal so that calibration

@@ -17,18 +17,20 @@ convlab validation
   [PASS] callback recall               recall =   1.0000 (>= 0.8)  0 missed across 7 scripts
   [PASS] speech detection              F1 per person =   0.9398 (>= 0.88)  4 scripted sessions
   [PASS] speaker identity confusion    error rate =   0.0012 (<= 0.03)  wrong person named, among committed single-speaker frames
-  [PASS] speaker attribution           strict state accuracy =   0.9054 (>= 0.86)  single-speaker frames; also counts frames labelled as overlap
+  [PASS] speaker attribution           strict state accuracy =   0.9054 (>= 0.86)  single-speaker frames; also counts frames labeled as overlap
   [PASS] overlap precision             precision =   0.9691 (>= 0.75)  simultaneous speech
   [PASS] overlap recall                recall =   0.5775 (>= 0.5)  under-detection is the safer failure here
   [PASS] turn detection precision      precision =   0.9545 (>= 0.85)  
   [PASS] turn detection recall         recall =   1.0000 (>= 0.88)  
-  [PASS] turn onset accuracy           median error (ms) =   5.6536 (<= 60.0)  against exact scripted onsets
+  [PASS] turn onset accuracy           median error (ms) =   5.8075 (<= 60.0)  against exact scripted onsets
   [PASS] response latency accuracy     median error (ms) =  30.9237 (<= 80.0)  session median floor transfer offset
   [PASS] backchannel precision         precision =   0.9643 (>= 0.85)  
   [PASS] backchannel recall            recall =   0.7421 (>= 0.7)  
-  [PASS] shared-audio identity         error rate =   0.0136 (<= 0.05)  same audio in both files; speakers separated by voice model
-  [PASS] shared-audio track stability  short speaking runs =   0.1158 (<= 0.25)  the flickering failure; ground truth is 0.09
-  [PASS] shared-audio turn boundaries  overlapping onsets =   0.0844 (<= 0.3)  ground truth for the same sessions is 0.17
+  [PASS] shared-audio identity         error rate =   0.0137 (<= 0.05)  same audio in both files; speakers separated by voice model
+  [PASS] shared-audio track stability  short speaking runs =   0.1403 (<= 0.25)  the flickering failure; ground truth is 0.09
+  [PASS] shared-audio turn boundaries  overlapping onsets =   0.0954 (<= 0.3)  ground truth for the same sessions is 0.17
+  [PASS] filled pause precision        precision =   1.0000 (>= 0.9)  0 spurious across 4 sessions
+  [PASS] filled pause recall           recall =   0.8689 (>= 0.8)  61 held vowels planted at known positions
 --------------------------------------------------------------------------------------
-  27/27 checks passed
+  29/29 checks passed
   note: Synthetic material cannot establish accuracy on human participants. These checks establish that known events produce correct numbers.

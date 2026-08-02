@@ -5,7 +5,7 @@ nowhere else. The resolved config is written verbatim into each run's
 ``manifest.json`` so that any number in a results table can be traced back to
 the exact parameters that produced it.
 
-Defaults are chosen from the turn-taking and nonverbal-behaviour literature
+Defaults are chosen from the turn-taking and nonverbal-behavior literature
 rather than from convenience; the rationale for each is in ``docs/METHODS.md``.
 """
 
@@ -171,7 +171,7 @@ class AttributionConfig:
     Overlap is the state weak evidence collapses into, because a frame that
     matches neither speaker cleanly looks like both. Genuine simultaneous
     speech lasts long enough to be heard as such; anything briefer is a
-    boundary artefact and is absorbed into whichever neighbour is longer."""
+    boundary artifact and is absorbed into whichever neighbor is longer."""
 
     lip_motion_band: tuple[float, float] = (1.5, 8.0)
     """Band-pass (Hz) applied to mouth aperture. Speech-related jaw motion
@@ -183,7 +183,7 @@ class AttributionConfig:
 
     Distinct from lip motion magnitude, and more specific. Chewing, laughing
     and smiling all move the mouth in the speech band, so magnitude alone
-    mistakes them for speech; none of them is *synchronised* with what the
+    mistakes them for speech; none of them is *synchronized* with what the
     microphone is picking up, so coherence separates them. It matters most
     when the two files share one audio feed, where mouth movement is
     otherwise the only evidence there is."""
@@ -217,7 +217,7 @@ class AttributionConfig:
     quality control rather than reporting numbers."""
 
     voice_context_s: float = 0.5
-    """Neighbourhood averaged into each frame's voice descriptor. Shorter
+    """Neighborhood averaged into each frame's voice descriptor. Shorter
     windows are dominated by which phoneme is being said rather than by who
     is saying it; longer ones blur across speaker changes."""
 
@@ -246,7 +246,7 @@ class TurnConfig:
 
     overlap_min_s: float = 0.10
     """Minimum simultaneous speech to count as a real overlap rather than a
-    boundary artefact."""
+    boundary artifact."""
 
     interruption_success_s: float = 1.0
     """After an interruption onset, the person still speaking this long
@@ -277,7 +277,7 @@ class ASRConfig:
     word_timestamps: bool = True
 
     max_segment_s: float = 28.0
-    """Length of the compacted speech blocks handed to the recogniser. Just
+    """Length of the compacted speech blocks handed to the recognizer. Just
     under Whisper's 30 s window, which it pads out to regardless of input
     length -- so anything shorter wastes encoder time proportionally."""
 
@@ -290,13 +290,60 @@ class ASRConfig:
     """0 means (cores - 2), leaving headroom for the video stages."""
 
     auto_downscale: bool = True
-    """Step down to a smaller recogniser when memory is short.
+    """Step down to a smaller recognizer when memory is short.
 
     CTranslate2 reserves a working arena several times the size of the
     weights: ``small.en`` commits about 2.3 GB, ``base.en`` 1.0 GB and
     ``tiny.en`` 0.8 GB. On an 8 GB machine that is the difference between
     completing a batch and being killed part-way through it. A slightly
     higher word error rate, reported in the warnings, is the better trade."""
+
+
+@dataclass
+class FillerConfig:
+    """Finding hesitations acoustically, because the transcript loses them.
+
+    See :mod:`convlab.speech.fillers`. Measured on scripted sessions, the
+    recognizer keeps 0 of 4 instances of "uh" and 4 of 9 hesitation markers
+    overall, so a lexical count is not an option for this class of filler.
+    """
+
+    min_duration_s: float = 0.16
+    max_duration_s: float = 1.20
+    """Duration bounds for a held vowel. The floor sits just above an
+    ordinary stressed vowel; the ceiling above the longest hesitation
+    reported in the disfluency literature, so that a sustained note or a
+    tracking artifact cannot qualify."""
+
+    flux_percentile: float = 15.0
+    """A frame counts as spectrally steady when its rate of spectral change
+    is in the lowest this-many percent of the speaker's own speech.
+
+    Set per speaker rather than absolutely: how fast a spectrum moves depends
+    on speaking rate, microphone bandwidth and the voice, so one fixed cut
+    would read a slow speaker as continuously hesitating and never fire on a
+    fast one.
+
+    15 is where the whole measure lives. Against held vowels planted at
+    known positions, it gives precision 1.00 and recall 0.89; at 25 recall is
+    unchanged and precision falls to 0.81, at 40 to 0.44. Ordinary speech
+    simply does not hold a spectrum still for a sixth of a second, so the
+    strict setting costs almost nothing and buys near-perfect specificity."""
+
+    pitch_flatness_percentile: float = 45.0
+    """Likewise for pitch movement in semitones per second. A held vowel has
+    no intonation contour, which is what separates it from a stressed
+    syllable that happens to be spectrally stable."""
+
+    smooth_s: float = 0.05
+    """Window over which spectral and pitch change are averaged, so that a
+    single noisy frame neither creates nor breaks a candidate."""
+
+    merge_gap_s: float = 0.06
+
+    min_speech_s: float = 5.0
+    """Below this there is not enough of the speaker's own speech to set
+    their thresholds from, and no rate is reported."""
 
 
 @dataclass
@@ -394,7 +441,31 @@ class SemanticConfig:
     called a topic boundary (TextTiling's calibration approach)."""
 
     callback_min_lag_turns: int = 4
-    """How far back a reference must reach to count as a long-range callback."""
+    """How far back a reference must reach to count as a long-range callback.
+
+    Four is not arbitrary and it is not a tuning parameter, so it is worth
+    stating the argument rather than the number.
+
+    The basic unit of conversational sequence is the adjacency pair --
+    question and answer, offer and acceptance -- which spans two turns. Pairs
+    are routinely expanded by an *insertion sequence*: a clarifying exchange
+    placed between the first part and the second ("Are you free Friday?" /
+    "Which Friday?" / "The 14th." / "Then yes"). One insertion adds a further
+    pair, so the sequence currently in progress can reach three turns back.
+
+    That is what fixes the threshold. At a distance of one to three turns, a
+    reference to something said earlier is explicable by the sequence still
+    being open -- the speaker has not retrieved anything, they are still
+    inside the exchange that raised it. Four turns is the first distance at
+    which that explanation is unavailable, so it is the first distance at
+    which a reference is evidence of holding something across an intervening
+    exchange rather than of simply continuing one.
+
+    The choice is also not knife-edge, which matters more than the argument.
+    :func:`convlab.semantics.callback_sensitivity` reports how many callbacks
+    each threshold from 2 to 10 admits, and it is written into every run's
+    output, so a result that depends on this value can be identified as such
+    instead of being taken on trust."""
 
     callback_max_lag_turns: int = 40
     """How far back one can plausibly reach.
@@ -491,6 +562,28 @@ class QCConfig:
     min_asr_confidence: float = 0.45
     min_face_coverage: float = 0.60
 
+    max_freeze_rate: float = 0.05
+    """Share of consecutive sampled frames that are the same image.
+
+    Conferencing tools hold the last frame when packets stop arriving, and
+    nothing in the file says so: the container still reports full frame rate.
+    A held frame is worse than a missing one, because head position stops
+    changing and the result is a confident measurement of a face that is not
+    moving -- nods disappear, gaze looks perfectly steady. A few percent is
+    normal for a static shot of someone sitting still; more than that means
+    the connection, not the person."""
+
+    min_video_height: int = 480
+    """Below this a face occupies too few pixels for the small landmark
+    displacements that expression measures are built from. A warning, not a
+    failure: turn-taking and prosody are unaffected."""
+
+    min_snr_db: float = 15.0
+    """Speech level above the noise floor. Below roughly 15 dB, pitch
+    tracking becomes unreliable and the level difference between the two
+    microphones -- the primary speaker cue -- starts to be dominated by
+    noise rather than by who is talking."""
+
     max_short_state_fraction: float = 0.25
     """Fraction of *speaking* runs shorter than 300 ms, above which the
     speaker track is judged to be flickering rather than tracking turns.
@@ -523,6 +616,7 @@ class Config:
     attribution: AttributionConfig = field(default_factory=AttributionConfig)
     turns: TurnConfig = field(default_factory=TurnConfig)
     asr: ASRConfig = field(default_factory=ASRConfig)
+    fillers: FillerConfig = field(default_factory=FillerConfig)
     prosody: ProsodyConfig = field(default_factory=ProsodyConfig)
     vision: VisionConfig = field(default_factory=VisionConfig)
     semantic: SemanticConfig = field(default_factory=SemanticConfig)
@@ -540,7 +634,7 @@ class Config:
     Importing MediaPipe commits about 790 MB that garbage collection cannot
     return, because it belongs to the module rather than to any object. On a
     machine with little free memory that is enough to get the process killed
-    once the recogniser loads on top of it. A child process gives all of it
+    once the recognizer loads on top of it. A child process gives all of it
     back on exit.
 
     ``None`` decides automatically from available memory; True or False

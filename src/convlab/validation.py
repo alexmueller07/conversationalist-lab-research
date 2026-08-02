@@ -197,7 +197,7 @@ def validate_nods(report: ValidationReport, seed: int = 0) -> None:
 
 
 def validate_synchrony(report: ValidationReport, seed: int = 0) -> None:
-    """Independent signals must not be reported as synchronised."""
+    """Independent signals must not be reported as synchronized."""
     cfg = SynchronyConfig(n_surrogates=25)
     hz = 25.0
     rng = np.random.default_rng(seed)
@@ -231,7 +231,7 @@ def validate_synchrony(report: ValidationReport, seed: int = 0) -> None:
 
 def validate_callbacks(report: ValidationReport, seeds=(0, 1, 2, 3, 5, 7, 11)) -> None:
     """Long-range callbacks planted in a script must be found, and little else."""
-    from convlab.semantics import EmbeddingModel, analyse_semantics
+    from convlab.semantics import EmbeddingModel, analyze_semantics
     from convlab.turns import Turn
 
     cfg = SemanticConfig()
@@ -250,7 +250,7 @@ def validate_callbacks(report: ValidationReport, seeds=(0, 1, 2, 3, 5, 7, 11)) -
             for k, u in enumerate(plan.turns)
         ]
         truth = {cb for _, cb, _ in plan.callbacks}
-        detected = {c.callback_turn for c in analyse_semantics(turns, cfg, model=model).callbacks}
+        detected = {c.callback_turn for c in analyze_semantics(turns, cfg, model=model).callbacks}
         tp += len(truth & detected)
         fp += len(detected - truth)
         fn += len(truth - detected)
@@ -319,7 +319,7 @@ def validate_speech_chain(
             # Identity confusion proper: of the frames where one person truly
             # spoke and the decoder also committed to one person, how often
             # did it name the wrong one? Kept separate from the strict
-            # accuracy above, which also counts frames labelled as overlap --
+            # accuracy above, which also counts frames labeled as overlap --
             # a different and much less serious kind of error.
             committed = single & ((predicted == 1) | (predicted == 2))
             if committed.any():
@@ -358,7 +358,7 @@ def validate_speech_chain(
               0.03, "max", "wrong person named, among committed single-speaker frames"),
         Check("speaker attribution", "strict state accuracy", float(np.mean(ab_accuracy)),
               0.86, "min",
-              "single-speaker frames; also counts frames labelled as overlap"),
+              "single-speaker frames; also counts frames labeled as overlap"),
         Check("overlap precision", "precision", float(np.mean(overlap_p)), 0.75, "min",
               "simultaneous speech"),
         Check("overlap recall", "recall", float(np.mean(overlap_r)), 0.50, "min",
@@ -455,14 +455,115 @@ def validate_shared_audio(
     )
 
 
+def validate_filled_pauses(
+    report: ValidationReport, seeds=(3, 7, 11, 17), model_dir: str = "models"
+) -> None:
+    """Are hesitations found in the audio, and only where they exist?
+
+    The material has to be built specially, and the reason is the finding
+    that motivates the detector in the first place. A speech engine asked to
+    say "Um, I went there" produces the *word* "um" fluently, at ordinary
+    length and with ordinary intonation. That is not a hesitation, so a
+    detector scored against it measures nothing -- the first version of this
+    check reported recall 0.11 and the fault was entirely in the fixture.
+
+    So a real filled pause is synthesised -- one vowel held at constant pitch
+    -- and spliced into the middle of a turn, replacing a stretch of that
+    person's own speech so no timing changes. Its position is then known
+    exactly.
+    """
+    if not tts_available():
+        report.notes.append(
+            "filled-pause checks skipped: system speech synthesis unavailable"
+        )
+        return
+
+    from convlab.config import FillerConfig
+    from convlab.speech.fillers import detect_filled_pauses
+    from convlab.synth import render_filled_pause
+
+    acfg, atcfg, fcfg = AudioConfig(), AttributionConfig(), FillerConfig()
+    fs, hz = acfg.sample_rate, acfg.frame_hz
+    vad = SileroVAD(ensure("silero_vad", model_dir), fs)
+    f0 = {"A": 105.0, "B": 200.0}
+    lead_silence = 0.15
+
+    tp = fp = fn = 0
+    for seed in seeds:
+        session = render_session(
+            plan=build_script(n_turns=20, seed=seed), seed=seed, sample_rate=fs
+        )
+        rng = np.random.default_rng(seed)
+        tracks = {k: v.astype(np.float64).copy() for k, v in session.tracks.items()}
+        truth: dict[str, list[tuple[float, float]]] = {"A": [], "B": []}
+
+        for utterance in session.turns:
+            if utterance.duration < 2.5 or rng.random() > 0.9:
+                continue
+            length = float(rng.uniform(0.30, 0.60))
+            start = utterance.start + 0.8 + float(
+                rng.uniform(0, max(0.1, utterance.duration - 2.0 - length))
+            )
+            pause = render_filled_pause(length, f0[utterance.person], fs, rng=rng)
+            i_silence = int((start - lead_silence) * fs)
+            i0 = int(start * fs)
+            i1 = i0 + pause.size
+            near = "close_a" if utterance.person == "A" else "close_b"
+            far = "close_b" if utterance.person == "A" else "close_a"
+            for role, gain in ((near, 1.0), (far, 10 ** (-11.0 / 20)), ("wide", 0.7)):
+                tracks[role][i_silence:i1] = 0.0
+                tracks[role][i0:i1] += pause * gain
+            truth[utterance.person].append((start, start + length))
+
+        n_frames = frame_count(tracks["wide"].size, fs, hz)
+        probability = probability_to_grid(
+            vad.probabilities([tracks["close_a"], tracks["close_b"]]).max(axis=0),
+            vad.chunk_hz, n_frames, hz,
+        )
+        energies = {
+            person: frame_energy(tracks[view], fs, hz, band=acfg.speech_band,
+                                 n_frames=n_frames)
+            for person, view in (("A", "close_a"), ("B", "close_b"))
+        }
+        attribution = attribute_speakers(
+            energies["A"], energies["B"], probability, hz, atcfg
+        )
+
+        for person, view in (("A", "close_a"), ("B", "close_b")):
+            found = detect_filled_pauses(
+                tracks[view], fs, attribution.speech[person], hz, n_frames,
+                fcfg, person,
+            )
+            detected = list(found.segments)
+            matched: set[int] = set()
+            for start, end in truth[person]:
+                hits = [
+                    k for k, (x, y) in enumerate(detected)
+                    if k not in matched and x < end and y > start
+                ]
+                if hits:
+                    tp += 1
+                    matched.add(hits[0])
+                else:
+                    fn += 1
+            fp += len(detected) - len(matched)
+
+    report.add(
+        Check("filled pause precision", "precision", tp / max(tp + fp, 1), 0.90,
+              "min", f"{fp} spurious across {len(seeds)} sessions"),
+        Check("filled pause recall", "recall", tp / max(tp + fn, 1), 0.80, "min",
+              f"{tp + fn} held vowels planted at known positions"),
+    )
+
+
 def validate_turn_boundaries(report: ValidationReport, seed: int = 0) -> None:
     """A unit spoken inside someone else's turn must not become a turn.
 
     Ordering speech by start time and calling every speaker change a turn
-    boundary produces two artefacts from a single interjection: an onset that
+    boundary produces two artifacts from a single interjection: an onset that
     precedes the previous turn's end by the whole length of that turn, and a
     reply that appears to arrive many seconds late. Both land in the response
-    latency distribution. This check pins the behaviour with no audio in the
+    latency distribution. This check pins the behavior with no audio in the
     loop at all, so a regression is unambiguous.
     """
     cfg = TurnConfig()
@@ -533,6 +634,9 @@ def run_validation(
         report, seeds=seeds[:2] if quick else seeds, model_dir=model_dir
     )
     validate_shared_audio(
+        report, seeds=seeds[:2] if quick else seeds, model_dir=model_dir
+    )
+    validate_filled_pauses(
         report, seeds=seeds[:2] if quick else seeds, model_dir=model_dir
     )
 

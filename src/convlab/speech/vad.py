@@ -126,7 +126,7 @@ def probability_to_grid(
     """Resample chunk-rate probabilities onto the master frame grid.
 
     Chunk ``c`` is the decision for audio spanning ``[c/chunk_hz,
-    (c+1)/chunk_hz)``, so its representative instant is the chunk centre.
+    (c+1)/chunk_hz)``, so its representative instant is the chunk center.
     """
     probs = np.asarray(probs, dtype=np.float64).ravel()
     if probs.size == 0:
