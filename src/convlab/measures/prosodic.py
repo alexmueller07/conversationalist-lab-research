@@ -343,3 +343,163 @@ def pitch_proximity(ctx: AnalysisContext) -> float:
     if prev.size < ctx.config.prosody.entrainment_min_turns:
         return float("nan")
     return float(-np.mean(np.abs(nxt - prev)))
+
+
+# ----------------------------------------------------------------------
+# Turn-final cues and rate entrainment
+# Turn endings are signaled, not just reached: pitch falls, the last words
+# stretch, and listeners use those cues to time their entry (Duncan 1972;
+# Bogels & Torreira 2015; Ruhlemann & Gries 2020).
+# ----------------------------------------------------------------------
+
+_FINAL_WINDOW_S = 0.6
+_MIN_FINAL_VOICED = 8
+
+
+def _final_slope_st_per_s(ctx: AnalysisContext, person: str,
+                          end: float) -> float | None:
+    """Slope of the voiced pitch, in semitones per second, over the final
+    window of a turn. None when too little of the window is voiced."""
+    track = ctx.prosody.get(person)
+    if track is None:
+        return None
+    hz = track.frame_hz
+    i1 = int(round(end * hz))
+    i0 = max(0, i1 - int(round(_FINAL_WINDOW_S * hz)))
+    if i1 <= i0 or i1 > track.f0_hz.size:
+        return None
+    window = hz_to_semitones(track.f0_hz[i0:i1])
+    mask = np.isfinite(window)
+    if mask.sum() < _MIN_FINAL_VOICED:
+        return None
+    t = np.arange(window.size)[mask] / hz
+    return float(np.polyfit(t, window[mask], 1)[0])
+
+
+@measure(
+    id="turn_final_pitch_drop",
+    label="Turns ended with falling pitch",
+    description=(
+        "Proportion of this person's turns whose voiced pitch fell over "
+        "the final 600 ms (slope below -1 semitone per second). Turns "
+        "with too little voiced material in the window are skipped; at "
+        "least eight scoreable turns required."
+    ),
+    unit="proportion",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("prosody", "turn_set"),
+    interpretation=(
+        "The falling terminal contour is the classic turn-yielding cue "
+        "(Duncan 1972): it tells the partner the floor is about to be "
+        "free. Speakers who rarely produce it force their partners to "
+        "guess at endings from syntax alone."
+    ),
+    references=(
+        "Duncan (1972) J. Pers. Soc. Psychol. 23:283 -- signals and rules "
+        "for taking speaking turns",
+        "Bogels & Torreira (2015) J. Phonetics 52:46 -- intonational "
+        "phrase boundaries in turn-end projection",
+    ),
+)
+def turn_final_pitch_drop(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        slopes = [
+            s for t in ctx.turn_set.turns_of(p)
+            if t.duration >= 1.0
+            and (s := _final_slope_st_per_s(ctx, p, t.end)) is not None
+        ]
+        out[p] = (
+            float(np.mean([s < -1.0 for s in slopes]))
+            if len(slopes) >= 8 else float("nan")
+        )
+    return out
+
+
+@measure(
+    id="uptalk_rate",
+    label="Rising ends on statements",
+    description=(
+        "Proportion of this person's non-question turns whose voiced pitch "
+        "rose over the final 600 ms (slope above +2 semitones per second). "
+        "At least eight scoreable statements required."
+    ),
+    unit="proportion",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("prosody", "turn_set", "transcript"),
+    interpretation=(
+        "A statement delivered with a terminal rise invites confirmation "
+        "-- listeners parse uptalk as a check on shared understanding, "
+        "not as a question (Tomlinson & Fox Tree 2011). High rates can "
+        "signal engagement-seeking; they also complicate the partner's "
+        "turn-end prediction, because rise no longer means 'question'."
+    ),
+    references=(
+        "Tomlinson & Fox Tree (2011) Cognition 119:58 -- listeners' "
+        "comprehension of uptalk in spontaneous speech",
+    ),
+)
+def uptalk_rate(ctx: AnalysisContext) -> dict[str, float]:
+    from convlab import lexicon as lex
+
+    out = {}
+    for p in PERSONS:
+        slopes = []
+        for t in ctx.turn_set.turns_of(p):
+            if t.duration < 1.0 or not t.text.strip():
+                continue
+            if lex.classify_question(t.text) is not None:
+                continue
+            s = _final_slope_st_per_s(ctx, p, t.end)
+            if s is not None:
+                slopes.append(s)
+        out[p] = (
+            float(np.mean([s > 2.0 for s in slopes]))
+            if len(slopes) >= 8 else float("nan")
+        )
+    return out
+
+
+def _rate_series(ctx: AnalysisContext) -> list[tuple[int, str, float]]:
+    """(turn index, person, words per second of speech) per scoreable turn."""
+    out: list[tuple[int, str, float]] = []
+    for turn in ctx.turn_set.turns:
+        if turn.n_words >= 4 and turn.speech_duration > 0.75:
+            out.append((turn.index, turn.person,
+                        turn.n_words / turn.speech_duration))
+    return out
+
+
+@measure(
+    id="speech_rate_entrainment",
+    label="Articulation-rate entrainment",
+    description=(
+        "Correlation between a speaker's articulation rate on a turn and "
+        "their partner's rate on the immediately preceding turn, "
+        "standardized within speaker."
+    ),
+    unit="correlation",
+    level=DYAD_LEVEL,
+    family=FAMILY,
+    requires=("transcript", "turn_set"),
+    interpretation=(
+        "Speech rate is among the dimensions partners align on (Wynn & "
+        "Borrie 2022), and listeners use the partner's rate to time their "
+        "own turn entry (Corps, Gambi & Pickering 2020) -- so rate "
+        "tracking is machinery for smooth turn-taking, not just mimicry."
+    ),
+    references=(
+        "Wynn & Borrie (2022) J. Phonetics 94:101173 -- classifying "
+        "conversational entrainment of speech behavior",
+        "Levitan & Hirschberg (2011) Interspeech -- entrainment metrics",
+    ),
+)
+def speech_rate_entrainment(ctx: AnalysisContext) -> float:
+    prev, nxt = _adjacent_pairs(_rate_series(ctx))
+    if prev.size < ctx.config.prosody.entrainment_min_turns:
+        return float("nan")
+    if np.std(prev) < 1e-9 or np.std(nxt) < 1e-9:
+        return float("nan")
+    return float(np.corrcoef(prev, nxt)[0, 1])

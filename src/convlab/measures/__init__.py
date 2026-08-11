@@ -21,9 +21,12 @@ from convlab.measures.base import (
 from convlab.measures import turntaking as _turntaking  # noqa: F401
 from convlab.measures import interruption as _interruption  # noqa: F401
 from convlab.measures import backchannel as _backchannel  # noqa: F401
+from convlab.measures import repair as _repair  # noqa: F401
 from convlab.measures import lexical as _lexical  # noqa: F401
 from convlab.measures import prosodic as _prosodic  # noqa: F401
 from convlab.measures import semantic as _semantic  # noqa: F401
+from convlab.measures import rhythm as _rhythm  # noqa: F401
+from convlab.measures import structure as _structure  # noqa: F401
 from convlab.measures import visual as _visual  # noqa: F401
 from convlab.measures import affect as _affect  # noqa: F401
 from convlab.measures import laughter as _laughter  # noqa: F401
