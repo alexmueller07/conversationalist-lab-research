@@ -143,6 +143,112 @@ EMOTION_WORDS = frozenset(
 )
 
 # ----------------------------------------------------------------------
+# Repair
+# Schegloff, Jefferson & Sacks (1977), Language 53:361 -- the preference for
+# self-correction. Dingemanse, Kendrick & Enfield (2016), Open Linguistics
+# 2:35 -- a coding scheme for other-initiated repair across languages.
+# ----------------------------------------------------------------------
+
+OTHER_REPAIR_OPEN = frozenset(
+    ["huh", "what", "sorry", "pardon", "hm", "eh", "come again", "say again",
+     "say that again", "excuse me"]
+)
+"""Open-class other-initiated repair: signals trouble without locating it.
+The listener heard that something was said, not what."""
+
+OTHER_REPAIR_PHRASES = frozenset(
+    ["what do you mean", "what was that", "wait what", "you mean", "who is",
+     "who was", "which one", "what is that", "whats that", "im sorry what",
+     "hold on who", "hold on what", "wait who"]
+)
+"""Restricted-type repair initiators: locate the trouble source."""
+
+SELF_REPAIR_MARKERS = frozenset(
+    ["i mean", "or rather", "no wait", "wait no", "i meant", "sorry i mean",
+     "let me rephrase", "or no", "actually no", "no sorry", "or i guess",
+     "what am i saying", "thats not right", "not that"]
+)
+"""Explicit editing terms that flag a self-initiated self-repair. Cut-offs
+and restarts also mark self-repair but do not survive transcription, so the
+counts here are a lower bound (Levelt 1983)."""
+
+CHANGE_OF_STATE = frozenset(["oh", "ohh", "ooh", "oh wow", "oh really", "oh no",
+                             "oh okay", "oh right", "oh my god", "oh interesting"])
+"""'Oh' as a news receipt: the speaker's state of knowledge just changed
+(Heritage 1985). Matched at utterance start only, because a medial 'oh' is
+usually an intensifier rather than a receipt."""
+
+# ----------------------------------------------------------------------
+# Backchannel function classes
+# Jefferson (1984), Linguistics 17:197 -- acknowledgment tokens and
+# speakership incipiency. Stivers (2008), Res. Lang. Soc. Interact. 41:31 --
+# generic continuers vs. specific assessments. Bavelas, Coates & Johnson
+# (2000), J. Pers. Soc. Psychol. 79:941 -- specific responses shape the
+# speaker's narrative.
+# ----------------------------------------------------------------------
+
+BACKCHANNEL_GENERIC = frozenset(
+    "mhm mm mmm hmm hm uhhuh uhuh mmhm mhmm yeah yep yup yes ok okay right "
+    "sure true".split()
+)
+"""Generic continuers: context-free 'go on' signals. The same token list the
+turn builder treats as pure acknowledgment, minus anything evaluative."""
+
+BACKCHANNEL_SPECIFIC = frozenset(
+    "wow ohwow ohreally really exactly totally definitely absolutely nice "
+    "cool interesting thatsright gotcha isee makessense ofcourse aha "
+    "no nope noway god jesus damn geez crazy funny wild amazing awesome "
+    "seriously".split()
+)
+"""Specific assessments: tokens that comment on the content they follow.
+Withholding these -- not the generic ones -- is what measurably degrades a
+partner's storytelling (Bavelas et al. 2000)."""
+
+BACKCHANNEL_INCIPIENCY: dict[str, float] = (
+    {t: 0.0 for t in "mhm mm mmm hmm hm uhhuh uhuh mmhm mhmm".split()}
+    | {t: 1.0 for t in "yeah yep yup yes ok okay right sure true".split()}
+    | {t: 2.0 for t in "gotcha isee makessense ofcourse thatsright exactly "
+                       "totally absolutely".split()}
+)
+"""Position of a token on Jefferson's passive-recipiency to incipient-
+speakership gradient. 0 = pure continuer, 1 = ready to speak, 2 = moving to
+close the telling. Tokens absent from the map are assessments and carry no
+floor signal either way."""
+
+# ----------------------------------------------------------------------
+# Conversation structure: openings and closings
+# Schegloff (1968), Am. Anthropol. 70:1075 -- openings. Schegloff & Sacks
+# (1973), Semiotica 7:289 -- 'opening up closings': the pre-closing sequence.
+# ----------------------------------------------------------------------
+
+PRECLOSING_MARKERS = frozenset(
+    ["anyway", "anyways", "alright", "all right", "so yeah", "well anyway",
+     "okay so", "okay well", "i should", "i gotta", "i have to go",
+     "i should go", "it was nice", "nice talking", "nice meeting",
+     "good talking", "take care", "see you", "talk soon", "have a good"]
+)
+"""Tokens and phrases that project an ending without performing one. A
+closing is proposed, not announced -- both parties must let the pre-closing
+stand for the conversation to end (Schegloff & Sacks 1973)."""
+
+# ----------------------------------------------------------------------
+# Prosocial speech acts
+# Kumar & Epley (2018), Psychol. Sci. 29:1423 -- expressers systematically
+# undervalue gratitude. Boothby & Bohns (2021) -- compliments land better
+# than givers expect.
+# ----------------------------------------------------------------------
+
+COMPLIMENT_OPENERS = frozenset(
+    ["thats so", "thats really", "thats very", "youre so", "youre really",
+     "you are so", "i love that", "i love your", "i like your", "thats a great",
+     "you seem", "youre a", "what a great", "thats awesome", "thats amazing",
+     "thats incredible", "thats impressive", "how cool"]
+)
+"""Frames that introduce an evaluation of the partner or their material.
+Counted only when followed by positive vocabulary, so 'you seem tired' does
+not score."""
+
+# ----------------------------------------------------------------------
 # Questions
 # ----------------------------------------------------------------------
 

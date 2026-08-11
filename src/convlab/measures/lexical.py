@@ -553,3 +553,219 @@ def linguistic_style_matching(ctx: AnalysisContext) -> float:
         denom = pa + pb
         scores.append(1.0 - abs(pa - pb) / denom if denom > 0 else 1.0)
     return float(np.mean(scores))
+
+
+# ----------------------------------------------------------------------
+# Cooney & Wheatley (2025) additions: fillers by position, disclosure,
+# prosocial speech acts, dispreference markers
+# ----------------------------------------------------------------------
+
+
+@measure(
+    id="turn_initial_filler_proportion",
+    label="Turns opened with a filler",
+    description=(
+        "Proportion of this person's turns whose first word is a filled "
+        "pause ('um', 'uh'). Turn-initial fillers mark planning at the "
+        "point of taking the floor, as opposed to within-turn fillers, "
+        "which hold it."
+    ),
+    unit="proportion",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("transcript", "turn_set"),
+    interpretation=(
+        "'Uh' and 'um' are signals, not noise: speakers use them to "
+        "announce a delay while keeping their claim on the floor (Clark & "
+        "Fox Tree 2002). High turn-initial rates go with responses that "
+        "needed composing -- including dispreferred ones."
+    ),
+    references=(
+        "Clark & Fox Tree (2002) Cognition 84:73 -- using uh and um in "
+        "spontaneous speaking",
+    ),
+)
+def turn_initial_filler_proportion(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        turns = [t for t in ctx.turn_set.turns_of(p) if t.text.strip()]
+        if len(turns) < 5:
+            out[p] = float("nan")
+            continue
+        n = 0
+        for t in turns:
+            toks = lex.tokenize(t.text)
+            if toks and toks[0] in lex.FILLERS:
+                n += 1
+        out[p] = n / len(turns)
+    return out
+
+
+@measure(
+    id="self_disclosure_rate",
+    label="Self-disclosure rate",
+    description=(
+        "Clauses per 100 words in which a first-person-singular pronoun is "
+        "followed within two words by a cognition or emotion term ('I "
+        "think', 'I felt', 'I was nervous'). A lexical approximation: "
+        "self-disclosure detection is an open problem, named as a missing "
+        "detector by Cooney & Wheatley (2025)."
+    ),
+    unit="per 100 words",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("transcript",),
+    interpretation=(
+        "Deeper, more personal exchange predicts connection, and people "
+        "systematically underestimate how well going deeper will be "
+        "received (Kardas, Kumar & Epley 2022). Read alongside emotion "
+        "word rate: this counts disclosures about the self specifically."
+    ),
+    references=(
+        "Kardas, Kumar & Epley (2022) J. Pers. Soc. Psychol. 122:367 -- "
+        "miscalibrated expectations create a barrier to deeper conversation",
+        "Cooney & Wheatley (2025) Handbook of Social Psychology -- "
+        "self-disclosure named among missing mid-level detectors",
+    ),
+)
+def self_disclosure_rate(ctx: AnalysisContext) -> dict[str, float]:
+    disclosure_words = lex.COGNITIVE_VERBS | lex.EMOTION_WORDS
+    out = {}
+    for p in PERSONS:
+        tokens = _tokens(ctx, p)
+        if len(tokens) < 50:
+            out[p] = float("nan")
+            continue
+        n = 0
+        for i, tok in enumerate(tokens):
+            if tok in lex.FIRST_PERSON_SINGULAR:
+                if any(t in disclosure_words for t in tokens[i + 1 : i + 3]):
+                    n += 1
+        out[p] = 100.0 * n / len(tokens)
+    return out
+
+
+@measure(
+    id="gratitude_rate",
+    label="Gratitude expressions",
+    description="Gratitude tokens ('thanks', 'appreciate') per 100 words.",
+    unit="per 100 words",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("transcript",),
+    interpretation=(
+        "Expressers systematically undervalue what gratitude does to the "
+        "recipient (Kumar & Epley 2018), which makes the expressed rate "
+        "worth tracking separately from general politeness."
+    ),
+    references=(
+        "Kumar & Epley (2018) Psychol. Sci. 29:1423 -- undervaluing gratitude",
+    ),
+)
+def gratitude_rate(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        tokens = _tokens(ctx, p)
+        if len(tokens) < 50:
+            out[p] = float("nan")
+            continue
+        n = lex.count_in(tokens, lex.GRATITUDE)
+        out[p] = 100.0 * n / len(tokens)
+    return out
+
+
+@measure(
+    id="compliment_rate",
+    label="Compliments offered",
+    description=(
+        "Utterances per minute opening an evaluation of the partner or "
+        "their material ('that's so cool', 'I love that') followed by "
+        "positive vocabulary within four words."
+    ),
+    unit="per minute",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("transcript", "turn_set"),
+    interpretation=(
+        "Compliment givers underestimate how good compliments make "
+        "recipients feel and overestimate how awkward they will be "
+        "(Boothby & Bohns 2021) -- so observed rates likely sit below "
+        "what either partner would have enjoyed."
+    ),
+    references=(
+        "Boothby & Bohns (2021) Pers. Soc. Psychol. Bull. 47:826 -- "
+        "underestimating the positive impact of compliments",
+    ),
+)
+def compliment_rate(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        n = 0
+        for t in ctx.turn_set.turns_of(p):
+            if not t.text.strip():
+                continue
+            joined = " " + " ".join(lex.tokenize(t.text)) + " "
+            for opener in lex.COMPLIMENT_OPENERS:
+                needle = " " + " ".join(lex.tokenize(opener)) + " "
+                idx = joined.find(needle)
+                if idx == -1:
+                    continue
+                tail = joined[idx + len(needle) :].split()[:4]
+                if any(w in lex.POSITIVE for w in tail) or any(
+                    w in lex.POSITIVE for w in lex.tokenize(opener)
+                ):
+                    n += 1
+                    break
+        out[p] = per_minute(n, ctx.duration)
+    return out
+
+
+@measure(
+    id="dispreference_marker_rate",
+    label="Hedged-response rate",
+    description=(
+        "Proportion of this person's responses (turns answering the "
+        "partner) that open with the classic dispreference shape: a "
+        "filler or 'well', with a hedge or apology in the first eight "
+        "words. At least eight responses required."
+    ),
+    unit="proportion",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("transcript", "turn_set"),
+    interpretation=(
+        "Rejections and disagreements are delivered late and dressed in "
+        "delay markers, hedges and apologies (Pomerantz 1984; Kendrick & "
+        "Torreira 2015). A high rate means many responses carried that "
+        "shape -- more pushing-back, or more discomfort doing it."
+    ),
+    references=(
+        "Pomerantz (1984) in Structures of Social Action -- agreeing and "
+        "disagreeing with assessments",
+        "Kendrick & Torreira (2015) Discourse Process. 52:255 -- the "
+        "timing and construction of preference",
+    ),
+)
+def dispreference_marker_rate(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        responses = [
+            t for t in ctx.turn_set.turns_of(p)
+            if t.prev_person == ctx.other(p) and t.text.strip()
+        ]
+        if len(responses) < 8:
+            out[p] = float("nan")
+            continue
+        n = 0
+        for t in responses:
+            toks = lex.tokenize(t.text)
+            if not toks or toks[0] not in (lex.FILLERS | {"well", "hmm", "so"}):
+                continue
+            head = " ".join(toks[:8])
+            if (
+                lex.count_phrases(head, lex.HEDGES) > 0
+                or lex.count_in(toks[:8], lex.APOLOGY) > 0
+            ):
+                n += 1
+        out[p] = n / len(responses)
+    return out

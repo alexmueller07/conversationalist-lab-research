@@ -13,11 +13,15 @@ partner said little, must not be scored as unresponsive.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
+from convlab import lexicon as lex
 from convlab.context import AnalysisContext, per_minute
 from convlab.measures.base import DYAD_LEVEL, PERSON_LEVEL, measure
 from convlab.session import PERSONS
+from convlab.turns import normalize_token
 
 FAMILY = "backchannel"
 
@@ -57,7 +61,12 @@ def backchannel_rate(ctx: AnalysisContext) -> dict[str, float]:
 @measure(
     id="backchannel_count",
     label="Backchannel count",
-    description="Number of acknowledgment tokens this person produced.",
+    description=(
+        "Number of acknowledgment tokens this person produced. A lower "
+        "bound: short tokens spoken over the partner are the easiest thing "
+        "in the recording to miss, and the recognizer drops some outright. "
+        "Comparable across sessions processed the same way; not exhaustive."
+    ),
     unit="count",
     level=PERSON_LEVEL,
     family=FAMILY,
@@ -190,3 +199,182 @@ def backchannel_reciprocity(ctx: AnalysisContext) -> float:
     if total == 0:
         return float("nan")
     return float(1.0 - abs(counts["A"] - counts["B"]) / total)
+
+
+# ----------------------------------------------------------------------
+# Function classes: continuers vs. assessments
+# The distinction matters because the two kinds do different causal work.
+# Generic continuers ("mhm") license the speaker to keep going; specific
+# assessments ("wow", "exactly") shape what the speaker says next, and
+# withholding them -- not the generic ones -- measurably degrades the
+# partner's storytelling (Bavelas, Coates & Johnson 2000; Tolins & Fox
+# Tree 2014).
+# ----------------------------------------------------------------------
+
+_SUBTYPE_REF = (
+    "Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- "
+    "specific listener responses shape the speaker's narrative",
+    "Stivers (2008) Res. Lang. Soc. Interact. 41:31 -- generic continuers "
+    "vs. specific assessments",
+    "Tolins & Fox Tree (2014) J. Pragmatics 70:152 -- addressee "
+    "backchannels steer narrative development",
+)
+
+
+def _bc_key(text: str) -> str:
+    return "".join(normalize_token(t) for t in text.split())
+
+
+def _classify_bc(text: str) -> str:
+    """'generic', 'specific', or 'other' for one acknowledgment token."""
+    key = _bc_key(text)
+    if key in lex.BACKCHANNEL_SPECIFIC:
+        return "specific"
+    if key in lex.BACKCHANNEL_GENERIC:
+        return "generic"
+    return "other"
+
+
+@measure(
+    id="backchannel_specific_rate",
+    label="Specific-assessment rate",
+    description=(
+        "Acknowledgments that comment on the content they follow ('wow', "
+        "'exactly', 'no way') per minute of the partner's speaking time, as "
+        "opposed to generic continuers ('mhm', 'yeah')."
+    ),
+    unit="per minute of partner speech",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set", "transcript"),
+    interpretation=(
+        "The kind of listening that does causal work: when listeners were "
+        "experimentally distracted, it was specifically these responses "
+        "that disappeared, and speakers' stories measurably suffered "
+        "(Bavelas et al. 2000)."
+    ),
+    references=_SUBTYPE_REF,
+)
+def backchannel_specific_rate(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        partner_talk = ctx.turn_set.talk_time(ctx.other(p))
+        n = sum(
+            1 for u in ctx.turn_set.backchannels_of(p)
+            if u.text and _classify_bc(u.text) == "specific"
+        )
+        out[p] = per_minute(n, partner_talk) if partner_talk > 1.0 else float("nan")
+    return out
+
+
+@measure(
+    id="backchannel_specific_share",
+    label="Specific share of acknowledgments",
+    description=(
+        "Of this person's classifiable acknowledgments, the proportion that "
+        "were specific assessments rather than generic continuers. Requires "
+        "at least five classifiable tokens."
+    ),
+    unit="proportion",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set", "transcript"),
+    interpretation=(
+        "Distinguishes an engaged listener from a polite one at the same "
+        "overall backchannel rate. All-generic listening ('mhm...mhm') can "
+        "read as inattention (Gardner 2001)."
+    ),
+    references=_SUBTYPE_REF,
+)
+def backchannel_specific_share(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        kinds = [
+            _classify_bc(u.text)
+            for u in ctx.turn_set.backchannels_of(p) if u.text
+        ]
+        kinds = [k for k in kinds if k != "other"]
+        out[p] = (
+            sum(1 for k in kinds if k == "specific") / len(kinds)
+            if len(kinds) >= 5 else float("nan")
+        )
+    return out
+
+
+@measure(
+    id="backchannel_diversity",
+    label="Acknowledgment vocabulary diversity",
+    description=(
+        "Shannon entropy (bits) of this person's acknowledgment tokens, "
+        "over at least five tokens with transcribed text."
+    ),
+    unit="bits",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set", "transcript"),
+    interpretation=(
+        "Zero means the same token every time -- the repetitive 'mhm... "
+        "mhm... mhm' that speakers read as absent-mindedness (Gardner "
+        "2001). Higher values mean the listener's responses varied with "
+        "what they were responding to."
+    ),
+    references=(
+        "Gardner (2001) When Listeners Talk -- response tokens and "
+        "listener stance",
+    ),
+)
+def backchannel_diversity(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        keys = [_bc_key(u.text) for u in ctx.turn_set.backchannels_of(p) if u.text]
+        keys = [k for k in keys if k]
+        if len(keys) < 5:
+            out[p] = float("nan")
+            continue
+        counts: dict[str, int] = {}
+        for k in keys:
+            counts[k] = counts.get(k, 0) + 1
+        total = len(keys)
+        out[p] = -sum(
+            (c / total) * math.log2(c / total) for c in counts.values()
+        )
+    return out
+
+
+@measure(
+    id="backchannel_incipiency",
+    label="Floor-readiness of acknowledgments",
+    description=(
+        "Mean position of this person's acknowledgment tokens on the "
+        "passive-recipiency to incipient-speakership gradient: 0 for pure "
+        "continuers ('mhm'), 1 for floor-ready tokens ('yeah', 'okay'), 2 "
+        "for closure moves ('exactly', 'got it'). At least five scoreable "
+        "tokens required."
+    ),
+    unit="index (0-2)",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set", "transcript"),
+    interpretation=(
+        "Acknowledgment tokens are not interchangeable: 'mhm' cedes the "
+        "floor, 'yeah' projects readiness to take it (Jefferson 1984; "
+        "Drummond & Hopper 1993). A listener living near 0 is settled in; "
+        "one near 2 keeps signaling they are ready to wrap the telling up."
+    ),
+    references=(
+        "Jefferson (1984) -- acknowledgment tokens 'yeah' and 'mm hm' and "
+        "speakership incipiency",
+        "Drummond & Hopper (1993) Res. Lang. Soc. Interact. 26:157 -- "
+        "backchannels revisited",
+    ),
+)
+def backchannel_incipiency(ctx: AnalysisContext) -> dict[str, float]:
+    out = {}
+    for p in PERSONS:
+        scores = [
+            lex.BACKCHANNEL_INCIPIENCY[_bc_key(u.text)]
+            for u in ctx.turn_set.backchannels_of(p)
+            if u.text and _bc_key(u.text) in lex.BACKCHANNEL_INCIPIENCY
+        ]
+        out[p] = float(np.mean(scores)) if len(scores) >= 5 else float("nan")
+    return out

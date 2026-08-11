@@ -1,6 +1,6 @@
 # Measure catalogue
 
-132 measures across 14 families. Generated from the registry; do not edit by hand.
+161 measures across 17 families. Generated from the registry; do not edit by hand.
 
 ## Affect (11)
 
@@ -147,7 +147,7 @@ Mean facial valence during this person's own speech.
 - Hess & Fischer (2013) Pers. Soc. Psychol. Rev. 17:142 -- emotional mimicry as social regulation
 - Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
 
-## Backchannel (6)
+## Backchannel (10)
 
 ### `backchannel_count` -- Backchannel count
 
@@ -167,6 +167,29 @@ Share of the partner's turns longer than three seconds that received at least on
 
 - Yngve (1970) -- 'On getting a word in edgewise', the backchannel concept
 - Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- listener responses
+
+### `backchannel_diversity` -- Acknowledgment vocabulary diversity
+
+- **Level:** person &nbsp; **Unit:** bits
+- **Requires:** turn_set, transcript
+
+Shannon entropy (bits) of this person's acknowledgment tokens, over at least five tokens with transcribed text.
+
+*Interpretation.* Zero means the same token every time -- the repetitive 'mhm... mhm... mhm' that speakers read as absent-mindedness (Gardner 2001). Higher values mean the listener's responses varied with what they were responding to.
+
+- Gardner (2001) When Listeners Talk -- response tokens and listener stance
+
+### `backchannel_incipiency` -- Floor-readiness of acknowledgments
+
+- **Level:** person &nbsp; **Unit:** index (0-2)
+- **Requires:** turn_set, transcript
+
+Mean position of this person's acknowledgment tokens on the passive-recipiency to incipient-speakership gradient: 0 for pure continuers ('mhm'), 1 for floor-ready tokens ('yeah', 'okay'), 2 for closure moves ('exactly', 'got it'). At least five scoreable tokens required.
+
+*Interpretation.* Acknowledgment tokens are not interchangeable: 'mhm' cedes the floor, 'yeah' projects readiness to take it (Jefferson 1984; Drummond & Hopper 1993). A listener living near 0 is settled in; one near 2 keeps signaling they are ready to wrap the telling up.
+
+- Jefferson (1984) -- acknowledgment tokens 'yeah' and 'mm hm' and speakership incipiency
+- Drummond & Hopper (1993) Res. Lang. Soc. Interact. 26:157 -- backchannels revisited
 
 ### `backchannel_latency` -- Backchannel latency after partner pause
 
@@ -206,6 +229,32 @@ How evenly the two partners produced acknowledgments, as 1 minus the absolute di
 Where in the partner's turn this person's acknowledgments fall, as a fraction of the turn's length. 0 is the very start, 1 the very end.
 
 *Interpretation.* Values near 1 suggest the token is functioning as a turn-yielding signal rather than as continuous listenership.
+
+### `backchannel_specific_rate` -- Specific-assessment rate
+
+- **Level:** person &nbsp; **Unit:** per minute of partner speech
+- **Requires:** turn_set, transcript
+
+Acknowledgments that comment on the content they follow ('wow', 'exactly', 'no way') per minute of the partner's speaking time, as opposed to generic continuers ('mhm', 'yeah').
+
+*Interpretation.* The kind of listening that does causal work: when listeners were experimentally distracted, it was specifically these responses that disappeared, and speakers' stories measurably suffered (Bavelas et al. 2000).
+
+- Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- specific listener responses shape the speaker's narrative
+- Stivers (2008) Res. Lang. Soc. Interact. 41:31 -- generic continuers vs. specific assessments
+- Tolins & Fox Tree (2014) J. Pragmatics 70:152 -- addressee backchannels steer narrative development
+
+### `backchannel_specific_share` -- Specific share of acknowledgments
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** turn_set, transcript
+
+Of this person's classifiable acknowledgments, the proportion that were specific assessments rather than generic continuers. Requires at least five classifiable tokens.
+
+*Interpretation.* Distinguishes an engaged listener from a polite one at the same overall backchannel rate. All-generic listening ('mhm...mhm') can read as inattention (Gardner 2001).
+
+- Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- specific listener responses shape the speaker's narrative
+- Stivers (2008) Res. Lang. Soc. Interact. 41:31 -- generic continuers vs. specific assessments
+- Tolins & Fox Tree (2014) J. Pragmatics 70:152 -- addressee backchannels steer narrative development
 
 ## Body (3)
 
@@ -621,7 +670,7 @@ Episodes per minute in which both people laughed within 1.5 seconds of one anoth
 - Provine (1993) Ethology 95:291 -- laughter as a social, largely involuntary vocalisation
 - Smoski & Bachorowski (2003) Cognition & Emotion 17:327 -- antiphonal laughter between friends and strangers
 
-## Lexical (20)
+## Lexical (25)
 
 ### `agreement_rate` -- Explicit agreement rate
 
@@ -629,6 +678,17 @@ Episodes per minute in which both people laughed within 1.5 seconds of one anoth
 - **Requires:** transcript, turn_set
 
 Agreement tokens ('exactly', 'absolutely', 'of course') per 100 words, counted only inside floor-holding turns so that backchannels are not double-counted here.
+
+### `compliment_rate` -- Compliments offered
+
+- **Level:** person &nbsp; **Unit:** per minute
+- **Requires:** transcript, turn_set
+
+Utterances per minute opening an evaluation of the partner or their material ('that's so cool', 'I love that') followed by positive vocabulary within four words.
+
+*Interpretation.* Compliment givers underestimate how good compliments make recipients feel and overestimate how awkward they will be (Boothby & Bohns 2021) -- so observed rates likely sit below what either partner would have enjoyed.
+
+- Boothby & Bohns (2021) Pers. Soc. Psychol. Bull. 47:826 -- underestimating the positive impact of compliments
 
 ### `discourse_marker_rate` -- Discourse marker rate
 
@@ -641,6 +701,18 @@ Agreement tokens ('exactly', 'absolutely', 'of course') per 100 words, counted o
 
 - Schiffrin (1987) Discourse Markers
 - Fox Tree (2010) Lang. Linguist. Compass 4:269
+
+### `dispreference_marker_rate` -- Hedged-response rate
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** transcript, turn_set
+
+Proportion of this person's responses (turns answering the partner) that open with the classic dispreference shape: a filler or 'well', with a hedge or apology in the first eight words. At least eight responses required.
+
+*Interpretation.* Rejections and disagreements are delivered late and dressed in delay markers, hedges and apologies (Pomerantz 1984; Kendrick & Torreira 2015). A high rate means many responses carried that shape -- more pushing-back, or more discomfort doing it.
+
+- Pomerantz (1984) in Structures of Social Action -- agreeing and disagreeing with assessments
+- Kendrick & Torreira (2015) Discourse Process. 52:255 -- the timing and construction of preference
 
 ### `emotion_word_rate` -- Emotion word rate
 
@@ -675,6 +747,17 @@ Filled pauses ('um', 'uh') per 100 words, counted in the transcript. A lower bou
 'I', 'me', 'my' as a percentage of this person's words.
 
 *Interpretation.* Self-reference tracks self-focus and, in first meetings, self-disclosure.
+
+### `gratitude_rate` -- Gratitude expressions
+
+- **Level:** person &nbsp; **Unit:** per 100 words
+- **Requires:** transcript
+
+Gratitude tokens ('thanks', 'appreciate') per 100 words.
+
+*Interpretation.* Expressers systematically undervalue what gratitude does to the recipient (Kumar & Epley 2018), which makes the expressed rate worth tracking separately from general politeness.
+
+- Kumar & Epley (2018) Psychol. Sci. 29:1423 -- undervaluing gratitude
 
 ### `hedge_rate` -- Hedging rate
 
@@ -780,6 +863,18 @@ How evenly the two people asked questions, as 1 minus the absolute difference in
 
 *Interpretation.* Attention directed at the partner rather than at oneself.
 
+### `self_disclosure_rate` -- Self-disclosure rate
+
+- **Level:** person &nbsp; **Unit:** per 100 words
+- **Requires:** transcript
+
+Clauses per 100 words in which a first-person-singular pronoun is followed within two words by a cognition or emotion term ('I think', 'I felt', 'I was nervous'). A lexical approximation: self-disclosure detection is an open problem, named as a missing detector by Cooney & Wheatley (2025).
+
+*Interpretation.* Deeper, more personal exchange predicts connection, and people systematically underestimate how well going deeper will be received (Kardas, Kumar & Epley 2022). Read alongside emotion word rate: this counts disclosures about the self specifically.
+
+- Kardas, Kumar & Epley (2022) J. Pers. Soc. Psychol. 122:367 -- miscalibrated expectations create a barrier to deeper conversation
+- Cooney & Wheatley (2025) Handbook of Social Psychology -- self-disclosure named among missing mid-level detectors
+
 ### `speech_rate_wpm` -- Articulation rate
 
 - **Level:** person &nbsp; **Unit:** words per minute
@@ -788,6 +883,17 @@ How evenly the two people asked questions, as 1 minus the absolute difference in
 Words per minute of this person's actual speaking time, excluding silences. This is articulation rate rather than overall speaking rate, so a person who pauses often is not scored as slow.
 
 *Interpretation.* Faster articulation is associated with fluency and confidence, but it also varies with dialect and with how well the pair know one another.
+
+### `turn_initial_filler_proportion` -- Turns opened with a filler
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** transcript, turn_set
+
+Proportion of this person's turns whose first word is a filled pause ('um', 'uh'). Turn-initial fillers mark planning at the point of taking the floor, as opposed to within-turn fillers, which hold it.
+
+*Interpretation.* 'Uh' and 'um' are signals, not noise: speakers use them to announce a delay while keeping their claim on the floor (Clark & Fox Tree 2002). High turn-initial rates go with responses that needed composing -- including dispreferred ones.
+
+- Clark & Fox Tree (2002) Cognition 84:73 -- using uh and um in spontaneous speaking
 
 ### `word_count` -- Words spoken
 
@@ -803,7 +909,7 @@ Total words recognized for this person.
 
 Average number of words in this person's floor-holding turns.
 
-## Prosody (10)
+## Prosody (13)
 
 ### `f0_median` -- Median pitch
 
@@ -881,6 +987,41 @@ Standard deviation of this person's pitch in semitones. Semitones make the value
 
 *Interpretation.* The main acoustic correlate of vocal expressiveness. Flat delivery sits near 2 semitones, animated delivery above 4.
 
+### `speech_rate_entrainment` -- Articulation-rate entrainment
+
+- **Level:** dyad &nbsp; **Unit:** correlation
+- **Requires:** transcript, turn_set
+
+Correlation between a speaker's articulation rate on a turn and their partner's rate on the immediately preceding turn, standardized within speaker.
+
+*Interpretation.* Speech rate is among the dimensions partners align on (Wynn & Borrie 2022), and listeners use the partner's rate to time their own turn entry (Corps, Gambi & Pickering 2020) -- so rate tracking is machinery for smooth turn-taking, not just mimicry.
+
+- Wynn & Borrie (2022) J. Phonetics 94:101173 -- classifying conversational entrainment of speech behavior
+- Levitan & Hirschberg (2011) Interspeech -- entrainment metrics
+
+### `turn_final_pitch_drop` -- Turns ended with falling pitch
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** prosody, turn_set
+
+Proportion of this person's turns whose voiced pitch fell over the final 600 ms (slope below -1 semitone per second). Turns with too little voiced material in the window are skipped; at least eight scoreable turns required.
+
+*Interpretation.* The falling terminal contour is the classic turn-yielding cue (Duncan 1972): it tells the partner the floor is about to be free. Speakers who rarely produce it force their partners to guess at endings from syntax alone.
+
+- Duncan (1972) J. Pers. Soc. Psychol. 23:283 -- signals and rules for taking speaking turns
+- Bogels & Torreira (2015) J. Phonetics 52:46 -- intonational phrase boundaries in turn-end projection
+
+### `uptalk_rate` -- Rising ends on statements
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** prosody, turn_set, transcript
+
+Proportion of this person's non-question turns whose voiced pitch rose over the final 600 ms (slope above +2 semitones per second). At least eight scoreable statements required.
+
+*Interpretation.* A statement delivered with a terminal rise invites confirmation -- listeners parse uptalk as a check on shared understanding, not as a question (Tomlinson & Fox Tree 2011). High rates can signal engagement-seeking; they also complicate the partner's turn-end prediction, because rise no longer means 'question'.
+
+- Tomlinson & Fox Tree (2011) Cognition 119:58 -- listeners' comprehension of uptalk in spontaneous speech
+
 ### `voice_jitter` -- Jitter
 
 - **Level:** person &nbsp; **Unit:** proportion
@@ -897,7 +1038,99 @@ Local cycle-to-cycle variation in pitch period, a standard measure of vocal stab
 
 Local cycle-to-cycle variation in amplitude.
 
-## Semantic (13)
+## Repair (4)
+
+### `change_of_state_rate` -- News-receipt rate
+
+- **Level:** person &nbsp; **Unit:** per minute
+- **Requires:** turn_set, transcript
+
+Utterances per minute this person opened with 'oh' -- the token that marks a change in the speaker's state of knowledge.
+
+*Interpretation.* 'Oh' receipts news: it tells the partner their contribution changed what this person knows (Heritage 1985). Frequent receipts indicate the conversation is actually transmitting new information rather than circling shared ground.
+
+- Heritage (1985) in Structures of Social Action -- a change-of-state token and aspects of its sequential placement
+
+### `other_repair_rate` -- Other-initiated repair rate
+
+- **Level:** person &nbsp; **Unit:** per minute
+- **Requires:** turn_set, transcript
+
+Times per minute this person stopped the conversation to signal they had not heard or understood -- 'huh?', 'what?', 'what do you mean?'. Counted from transcript form, so a lower bound.
+
+*Interpretation.* Other-initiation is the listener's last resort (Schegloff et al. 1977). Cross-linguistically it occurs about once every 1.4 minutes (Dingemanse et al. 2015); rates far above that suggest the pair struggled to stay understood, far below that either effortless understanding or listeners letting trouble pass unaddressed.
+
+- Schegloff, Jefferson & Sacks (1977) Language 53:361 -- the preference for self-correction
+- Dingemanse, Roberts et al. (2015) PLoS One 10:e0136100 -- universal principles in the repair of communication problems
+- Cooney & Wheatley (2025) Handbook of Social Psychology ch. 'Conversation' -- repair as the stoplight system of intersubjectivity
+
+### `repair_balance` -- Repair balance
+
+- **Level:** dyad &nbsp; **Unit:** proportion
+- **Requires:** turn_set, transcript
+
+Dyad-level share of repair that was self-initiated: self-repairs divided by self-repairs plus other-initiations, both partners pooled.
+
+*Interpretation.* Near 1.0 the speakers catch their own trouble before it reaches the listener; lower values mean listeners are doing the repair work. The literature's strong expectation is a high value (Schegloff et al. 1977), so low values flag either genuine difficulty or a noisy transcript.
+
+- Schegloff, Jefferson & Sacks (1977) Language 53:361 -- the preference for self-correction
+- Dingemanse, Roberts et al. (2015) PLoS One 10:e0136100 -- universal principles in the repair of communication problems
+- Cooney & Wheatley (2025) Handbook of Social Psychology ch. 'Conversation' -- repair as the stoplight system of intersubjectivity
+
+### `self_repair_rate` -- Self-repair rate
+
+- **Level:** person &nbsp; **Unit:** per 100 words
+- **Requires:** turn_set, transcript
+
+Explicit self-corrections per 100 words -- 'I mean', 'or rather', 'no wait'. Cut-offs and restarts do not survive transcription, so this undercounts true self-repair.
+
+*Interpretation.* Speakers monitor their own talk and prefer to fix it themselves before the listener must ask (Schegloff et al. 1977; Levelt 1983). A moderate rate signals active self-monitoring; the absence of any self-repair in spontaneous speech usually means the transcript dropped it.
+
+- Levelt (1983) Cognition 14:41 -- monitoring and self-repair in speech
+- Schegloff, Jefferson & Sacks (1977) Language 53:361
+
+## Rhythm (3)
+
+### `activity_exchange_rate` -- Carry exchange rate
+
+- **Level:** dyad &nbsp; **Unit:** per 5 minutes
+- **Requires:** turn_set
+
+How many times per five minutes the role of 'the one doing most of the talking' flipped, measured as sign changes of the talk balance smoothed over fifteen seconds.
+
+*Interpretation.* Complementary to the cycle period: counts actual handovers of the carrying role rather than assuming a single stable rhythm. Very low values with unequal talk time indicate one person held the floor throughout.
+
+- Dabbs (1983) -- 'megaturns': aggregated blocks of vocal activity
+- Warner (1979) Lang. Speech 22:381; Warner (1992) Behav. Sci. 37:128 -- periodic rhythms in conversational speech
+- Warner, Malloy et al. (1987) J. Nonverbal Behav. 11:57 -- rhythmic organization predicts observer-rated positivity and involvement
+
+### `vocal_cycle_period` -- Vocal activity cycle period
+
+- **Level:** dyad &nbsp; **Unit:** s
+- **Requires:** turn_set
+
+Dominant period, in seconds, of the oscillation in which partner carries the talk -- found as the spectral peak of the second-by-second talk balance within a one-to-six-minute band. Withheld for conversations under five minutes.
+
+*Interpretation.* Dyads trade multi-minute blocks of vocal activity, typically every 2-5 minutes. The period says how long one person carries before the roles swap; whether faster cycling is better is genuinely open -- the classic literature disagreed (rapport, distress, and a U-shaped account all had backers; Crown 1991 reviews the fight).
+
+- Dabbs (1983) -- 'megaturns': aggregated blocks of vocal activity
+- Warner (1979) Lang. Speech 22:381; Warner (1992) Behav. Sci. 37:128 -- periodic rhythms in conversational speech
+- Warner, Malloy et al. (1987) J. Nonverbal Behav. 11:57 -- rhythmic organization predicts observer-rated positivity and involvement
+
+### `vocal_cycle_strength` -- Vocal activity cyclicity
+
+- **Level:** dyad &nbsp; **Unit:** proportion
+- **Requires:** turn_set
+
+Share of the talk balance's spectral power that falls in the one-to-six-minute band. High values mean the pair genuinely alternated long blocks of carrying the conversation; low values mean the balance wandered without periodic structure.
+
+*Interpretation.* The strength of the megaturn rhythm, independent of its period. Warner et al. (1987) found rhythmic organization predicted observer ratings of positive affect and involvement.
+
+- Dabbs (1983) -- 'megaturns': aggregated blocks of vocal activity
+- Warner (1979) Lang. Speech 22:381; Warner (1992) Behav. Sci. 37:128 -- periodic rhythms in conversational speech
+- Warner, Malloy et al. (1987) J. Nonverbal Behav. 11:57 -- rhythmic organization predicts observer-rated positivity and involvement
+
+## Semantic (16)
 
 ### `callback_max_lag` -- Longest callback reach
 
@@ -931,6 +1164,18 @@ Turns per minute in which this person revived a topic that had been dropped at l
 
 How evenly the two partners revived each other's earlier material, as 1 minus the absolute difference in their shares.
 
+### `followup_question_rate` -- Follow-up question rate
+
+- **Level:** person &nbsp; **Unit:** per minute
+- **Requires:** semantics, turn_set, transcript
+
+Questions per minute that stayed on the partner's ground: the turn is a question, it responds to the partner, and its meaning is close to the partner's preceding turn (adjacent-turn cosine of at least 0.30).
+
+*Interpretation.* It is specifically follow-up questions -- not questions in general -- that raise liking, because they show listening, understanding and care (Huang et al. 2017; Yeomans et al. 2019). The similarity threshold separates them from topic-switching questions, which do not carry the effect.
+
+- Huang, Yeomans, Brooks, Minson & Gino (2017) J. Pers. Soc. Psychol. 113:430 -- it doesn't hurt to ask
+- Yeomans, Brooks, Huang, Minson & Gino (2019) J. Pers. Soc. Psychol. 117:1139 -- the cumulative benefits of follow-up questions
+
 ### `mean_topic_duration` -- Mean topic duration
 
 - **Level:** dyad &nbsp; **Unit:** s
@@ -958,6 +1203,18 @@ Callbacks per minute in which this person revived something their *partner* had 
 
 *Interpretation.* Separated from self-directed callbacks because the two mean opposite things: one shows attention to the partner, the other shows a speaker returning to their own agenda.
 
+### `partner_semantic_similarity` -- Language similarity between partners
+
+- **Level:** dyad &nbsp; **Unit:** cosine similarity
+- **Requires:** semantics, turn_set
+
+Cosine similarity between the average meaning vector of each person's turns. At least five embedded turns per person required.
+
+*Interpretation.* Dyad-level semantic similarity of conversational language tracks the felt experience of shared reality -- thinking the same thoughts at the same time (Rossignac-Milon et al. 2021) -- and develops in initial unstructured interactions (Ta et al. 2017).
+
+- Rossignac-Milon, Bolger, Zee, Boothby & Higgins (2021) J. Pers. Soc. Psychol. 120:882 -- merged minds: generalized shared reality
+- Ta, Babcock & Ickes (2017) J. Lang. Soc. Psychol. 36:143 -- latent semantic similarity in initial interactions
+
 ### `semantic_coherence_mean` -- Response coherence
 
 - **Level:** person &nbsp; **Unit:** cosine similarity
@@ -975,6 +1232,17 @@ Mean cosine similarity between the meaning of this person's turns and their part
 Standard deviation of the turn-to-turn semantic similarity across the whole conversation.
 
 *Interpretation.* A conversation that stays uniformly on one subject scores low; one that alternates between deep engagement and abrupt changes scores high.
+
+### `semantic_similarity_trend` -- Language convergence over time
+
+- **Level:** dyad &nbsp; **Unit:** difference in cosine similarity
+- **Requires:** semantics, turn_set
+
+Partner language similarity in the final third of the conversation minus the first third. Positive values mean the two people's language grew more alike as they talked.
+
+*Interpretation.* Shared reality is constructed during interaction, not imported into it (Rossignac-Milon et al. 2021). Convergence over the session is the trace of that construction; divergence means the pair pulled toward separate frames.
+
+- Rossignac-Milon, Bolger, Zee, Boothby & Higgins (2021) J. Pers. Soc. Psychol. 120:882
 
 ### `topic_count` -- Number of topics
 
@@ -1007,6 +1275,43 @@ Number of topic changes per minute.
 Number of topic segments whose first turn belongs to this person.
 
 *Interpretation.* Who moved the conversation on. Boundaries come from a drop in lexical cohesion between neighboring blocks of turns, so a 'topic' here is a stretch that hangs together, not a subject a human coder would name -- and the person credited is whoever spoke first after the boundary, which is usually but not always the one who introduced it.
+
+## Structure (3)
+
+### `ending_negotiation_duration` -- Landing time
+
+- **Level:** dyad &nbsp; **Unit:** s
+- **Requires:** turn_set, transcript
+
+Seconds from the first pre-closing signal (in the final quarter) to the actual end of the conversation. Unavailable when no pre-closing was detected -- common in lab sessions ended by the experimenter.
+
+*Interpretation.* How long the pair took to land once someone signaled the approach. Long negotiations can mean reluctance to go -- or repeated missed exits; read together with preclosing_count.
+
+- Schegloff & Sacks (1973) Semiotica 7:289 -- opening up closings
+- Mastroianni, Gilbert, Cooney & Wilson (2021) PNAS 118:e2011809118 -- do conversations end when people want them to?
+
+### `greeted_at_open` -- Greeted at the open
+
+- **Level:** person &nbsp; **Unit:** binary
+- **Requires:** turn_set, transcript
+
+Whether this person produced a greeting token ('hi', 'hey', 'hello') in the first thirty seconds. 1 or 0.
+
+*Interpretation.* Openings set the encounter's commitment level (Schegloff 1968). In lab sessions the greeting often happens before recording starts, so absence here describes the recording, not the person's manners.
+
+- Schegloff (1968) Am. Anthropol. 70:1075 -- sequencing in conversational openings
+
+### `preclosing_count` -- Exit signals offered
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** turn_set, transcript
+
+Pre-closing moves this person made in the final quarter of the conversation -- 'anyway', 'well, it was nice talking', 'I should go'. The offers, not the acceptance.
+
+*Interpretation.* Endings are proposed and ratified, not announced (Schegloff & Sacks 1973). Repeated offers from one person that the conversation keeps outliving are the classic footprint of an ending the other party did not take up -- the mismatch Mastroianni et al. (2021) showed is the norm.
+
+- Schegloff & Sacks (1973) Semiotica 7:289 -- opening up closings
+- Mastroianni, Gilbert, Cooney & Wilson (2021) PNAS 118:e2011809118 -- do conversations end when people want them to?
 
 ## Synchrony (7)
 
@@ -1090,7 +1395,7 @@ Standard deviations by which the observed smile synchrony exceeds its surrogate 
 - Boker, Xu, Rotondo & King (2002) Psychol. Methods 7:338 -- windowed cross-correlation for irregular coupled series
 - Moulder et al. (2018) Psychol. Methods 23:757 -- surrogate testing for interpersonal synchrony
 
-## Turn Taking (22)
+## Turn Taking (26)
 
 ### `fast_response_proportion` -- Proportion of fast responses
 
@@ -1099,10 +1404,12 @@ Standard deviations by which the observed smile synchrony exceeds its surrogate 
 
 Share of this person's responses that begin within 200 ms of the partner finishing, including those that begin slightly early.
 
-*Interpretation.* A response inside 200 ms cannot have been planned after the partner stopped, so a high share indicates the person is projecting turn ends rather than reacting to them.
+*Interpretation.* A response inside 200 ms cannot have been planned after the partner stopped -- single-word production alone takes 400-600 ms (Indefrey 2011) -- so a high share indicates the person is projecting turn ends rather than reacting to them. Fast responses are read as connection by both partners and outside observers (Templeton et al. 2022).
 
 - Stivers et al. (2009) PNAS 106:10587 -- universality of ~200 ms turn transitions
 - Heldner & Edlund (2010) J. Phonetics 38:555 -- pauses, gaps and overlaps
+- Templeton, Chang, Reynolds, Cone LeBeaumont & Wheatley (2022) PNAS 119:e2116915119 -- fast response times signal social connection
+- Indefrey (2011) Front. Psychol. 2:255 -- the time course of word production
 
 ### `listening_time` -- Time spent listening
 
@@ -1112,6 +1419,18 @@ Share of this person's responses that begin within 200 ms of the partner finishi
 Seconds during which the partner held the floor and this person was not speaking.
 
 *Interpretation.* Silence with the partner talking, as opposed to silence with nobody talking. This is the denominator the listening behaviors -- nodding, gaze, backchannels -- should be read against.
+
+### `long_gap_rate` -- Long-gap transitions
+
+- **Level:** dyad &nbsp; **Unit:** proportion
+- **Requires:** turn_set
+
+Proportion of floor transfers preceded by more than two seconds of shared silence.
+
+*Interpretation.* Direction depends on the relationship: long gaps read as awkward between strangers but not between friends, where they can accompany comfortable reflection (Templeton et al. 2023). For first-meeting dyads -- this lab's design -- higher values lean toward disfluency.
+
+- Templeton, Chang, Reynolds, Cone LeBeaumont & Wheatley (2023) Phil. Trans. R. Soc. B 378:20210471 -- long gaps are awkward for strangers but not friends
+- Koudenburg, Postmes & Gordijn (2011) J. Exp. Soc. Psychol. 47:512 -- brief silences disrupt felt belonging
 
 ### `longest_silence` -- Longest mutual silence
 
@@ -1145,6 +1464,18 @@ Median duration of this person's floor-holding turns.
 
 *Interpretation.* Median rather than mean: turn lengths are strongly skewed, and one long story would move a mean by more than the rest of the conversation combined.
 
+### `normative_transition_proportion` -- Transitions in the normal band
+
+- **Level:** dyad &nbsp; **Unit:** proportion
+- **Requires:** turn_set
+
+Proportion of floor transfers whose offset falls within one second of zero -- the band that contains the vast majority of transitions in every language studied.
+
+*Interpretation.* Low values mean the conversation ran outside the timing envelope conversation normally lives in -- long silences, heavy overlap, or both. Check the gap and overlap measures to see which.
+
+- Stivers et al. (2009) PNAS 106:10587 -- universals and cultural variation in turn-taking
+- Heldner & Edlund (2010) J. Phonetics 38:555 -- pauses, gaps and overlaps in conversations
+
 ### `overlap_proportion` -- Proportion of simultaneous speech
 
 - **Level:** dyad &nbsp; **Unit:** proportion
@@ -1153,6 +1484,18 @@ Median duration of this person's floor-holding turns.
 Share of the conversation in which both people were speaking at once.
 
 *Interpretation.* Includes both competitive interruption and collaborative overlap, which the interruption measures separate.
+
+### `question_response_latency` -- Response latency after questions
+
+- **Level:** person &nbsp; **Unit:** s
+- **Requires:** turn_set, transcript
+
+Median floor-transfer offset of this person's responses to turns the partner ended as a question. At least five question-responses required; compare against response_latency_median to see the mobilization effect.
+
+*Interpretation.* Questions mobilize response (Stivers & Rossano 2010): latencies after questions run shorter than after statements, and answers delivered slowly are heard as unwilling or uncertain (Kendrick & Torreira 2015). Compare with the person's overall median latency.
+
+- Stivers & Rossano (2010) Res. Lang. Soc. Interact. 43:3 -- mobilizing response
+- Kendrick & Torreira (2015) Discourse Process. 52:255
 
 ### `response_latency_asymmetry` -- Response latency asymmetry
 
@@ -1182,10 +1525,12 @@ Interquartile range of this person's floor transfer offsets. Measures how consis
 
 Median floor transfer offset for turns in which this person is the responder: the signed interval between the partner's turn ending and this person starting. Negative values mean they began before the partner finished.
 
-*Interpretation.* Shorter latencies indicate tighter coordination and typically accompany agreement and engagement; markedly long latencies precede dispreferred responses. Neither extreme is simply better.
+*Interpretation.* Shorter latencies indicate tighter coordination and typically accompany agreement and engagement; markedly long latencies precede dispreferred responses. Neither extreme is simply better. Faster responding predicts felt connection between strangers (Templeton et al. 2022), but long gaps lose that negative meaning between friends (Templeton et al. 2023) -- interpret against relationship.
 
 - Stivers et al. (2009) PNAS 106:10587 -- universality of ~200 ms turn transitions
 - Heldner & Edlund (2010) J. Phonetics 38:555 -- pauses, gaps and overlaps
+- Templeton, Chang, Reynolds, Cone LeBeaumont & Wheatley (2022) PNAS 119:e2116915119 -- fast response times signal social connection
+- Templeton et al. (2023) Phil. Trans. R. Soc. B 378:20210471 -- long gaps are awkward for strangers but not friends
 
 ### `silence_proportion` -- Proportion of mutual silence
 
@@ -1246,7 +1591,11 @@ How evenly speaking time was shared, as 1 minus the absolute difference in share
 
 This person's total speaking time divided by the total speaking time of both participants. Sums to 1 across the dyad.
 
-*Interpretation.* 0.5 is an even split; values far from it indicate one person dominated.
+*Interpretation.* 0.5 is an even split; values far from it indicate one person dominated. Speaking time is the strongest single predictor of being seen as the leader (the 'babble hypothesis'; MacLaren et al. 2020; Schmid Mast 2002), but liking peaks nearer balance -- the heaviest talkers are not the best liked (Hayes & Meltzer 1972).
+
+- Schmid Mast (2002) Human Comm. Res. 28:420 -- dominance and speaking time, a meta-analysis
+- MacLaren et al. (2020) Leadership Q. 31:101409 -- the babble hypothesis
+- Hayes & Meltzer (1972) Sociometry 35:538 -- interpersonal judgments based on talkativeness
 
 ### `turn_count` -- Number of turns
 
@@ -1254,6 +1603,18 @@ This person's total speaking time divided by the total speaking time of both par
 - **Requires:** turn_set
 
 Count of floor-holding turns taken by this person.
+
+### `turn_duration_matching` -- Turn-length coupling
+
+- **Level:** dyad &nbsp; **Unit:** correlation
+- **Requires:** turn_set
+
+Correlation between the length of one partner's turn and the length of the other's immediate response, across all adjacent turn pairs. Positive is matching, negative is compensation. At least ten pairs required.
+
+*Interpretation.* Little questions get little answers: interviewees track an interviewer's utterance lengths (Matarazzo et al. 1963). But naturalistic dyads also show the opposite -- a quiet partner ceding room to a talkative one (Cappella & Planalp 1981) -- so the sign is reported, not assumed.
+
+- Matarazzo, Weitman, Saslow & Wiens (1963) J. Verbal Learning Verbal Behav. 1:451 -- interviewer influence on speech durations
+- Cappella & Planalp (1981) Human Comm. Res. 7:117 -- talk and silence sequences: mutual influence and compensation
 
 ### `turn_duration_variability` -- Turn duration variability
 

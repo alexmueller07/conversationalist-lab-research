@@ -48,6 +48,10 @@ BACKCHANNEL_LEXICON: frozenset[str] = frozenset(
         "really", "definitely", "absolutely", "gotcha", "isee", "ohwow",
         "ohreally", "thatsright", "ofcourse", "makessense", "interesting",
         "no", "nope", "god", "jesus", "damn", "geez",
+        # Recognizer spelling variants. Whisper renders the same vocalization
+        # as "mm-hmm", "mhm" or "um-hum" depending on context, and a variant
+        # missing here silently demotes a real acknowledgment to a turn.
+        "mmhmm", "umhum", "umhmm", "yea", "gotit", "ohyeah", "ohokay",
     }
 )
 """Tokens that count as acknowledgment when produced inside a partner's turn.

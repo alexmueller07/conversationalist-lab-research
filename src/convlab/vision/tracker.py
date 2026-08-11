@@ -160,7 +160,7 @@ def track_face(
         min_tracking_confidence=cfg.min_tracking_confidence,
     )
 
-    reader = VideoReader(video_path, target_fps=cfg.fps, max_side=640)
+    reader = VideoReader(video_path, target_fps=cfg.fps, max_side=cfg.max_side)
     times: list[float] = []
     shapes: list[np.ndarray] = []
     angles: list[tuple[float, float, float]] = []
@@ -263,7 +263,8 @@ def track_body(
         min_tracking_confidence=cfg.min_tracking_confidence,
     )
 
-    reader = VideoReader(video_path, target_fps=cfg.fps, max_side=640)
+    body_fps = cfg.body_fps if cfg.body_fps > 0 else cfg.fps
+    reader = VideoReader(video_path, target_fps=body_fps, max_side=cfg.max_side)
     times: list[float] = []
     torso: list[tuple[float, float]] = []
     widths: list[float] = []
@@ -275,7 +276,7 @@ def track_body(
     landmarker = vision.PoseLandmarker.create_from_options(options)
     try:
         stamp = 0
-        step = max(1, int(round(1000.0 / max(cfg.fps, 1.0))))
+        step = max(1, int(round(1000.0 / max(body_fps, 1.0))))
         for t, frame in reader:
             stamp += step
             image = mp.Image(

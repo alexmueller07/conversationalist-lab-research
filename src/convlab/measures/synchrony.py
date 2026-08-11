@@ -6,6 +6,14 @@ produce correlations around 0.3 on these signals simply because behavioral
 time series are autocorrelated. Only the amount by which an observed value
 exceeds its own shuffled baseline carries information, and the accompanying
 z score says whether it does so at all.
+
+A direction caveat that applies to the whole family: more synchrony is not
+automatically better. Alignment predicts good outcomes in affiliative
+conversation but can predict *worse* outcomes in task-focused talk
+(Dideriksen et al. 2023), and flexible movement in and out of synchrony
+beats constant lockstep (Mayo & Gordon 2020). These are dyads meeting to
+connect, so the affiliative reading usually applies -- but the codebook
+deliberately leaves higher_is_better unset.
 """
 
 from __future__ import annotations

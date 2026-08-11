@@ -1,7 +1,7 @@
 # How convlab works
 
 A complete walkthrough: what goes in, what comes out, every stage in
-between, and how each of the 132 measures is defined.
+between, and how each of the 161 measures is defined.
 
 This is the explanatory document. [`METHODS.md`](METHODS.md) holds the
 algorithmic detail and the justification for each threshold;
@@ -40,7 +40,7 @@ results/
 ├── index.html              the whole run: verdicts, links, distributions
 ├── measures_all.csv        one row per session x person x measure
 ├── measures_all_wide.csv   pivoted, for eyeballing
-├── codebook.csv            all 132 measures defined
+├── codebook.csv            all 161 measures defined
 ├── session_summary.csv     pass / review / fail per session
 └── <session_id>/
     ├── dashboard.html      visual report with synchronized video review
@@ -78,7 +78,7 @@ probe -> decode audio -> align cameras -> voice activity
       -> recording quality -> face tracking -> speaker attribution
       -> turns -> transcription -> turns again -> prosody -> semantics
       -> face signals -> body -> hesitations -> laughter
-      -> 132 measures -> tables, codebook, quality control, dashboard
+      -> 161 measures -> tables, codebook, quality control, dashboard
 ```
 
 Two orderings are deliberate and worth explaining:
@@ -551,7 +551,7 @@ which measures to discount, not to discard the session.
 
 ## 4. The measures
 
-132 measures across 14 families. Each is a registered function with a
+161 measures across 17 families. Each is a registered function with a
 declared identifier, unit, level of analysis and upstream requirements; the
 codebook is generated from that registry, so a column in the output can never
 be undocumented.
@@ -970,6 +970,29 @@ that the path from a known event to a reported number is arithmetically
 correct, which is where silent errors live: a sign flip, a boundary
 convention that shifts every latency by a frame, a threshold that suppresses
 a whole class of event.
+
+### The benchmark
+
+`convlab benchmark` extends validation with the three numbers it never
+produced, written to `workspace/benchmark/` as CSVs plus a readable
+`BENCHMARK.md`:
+
+- **Word error rate.** The synthetic scripts are known to the letter, so the
+  recognizer can be scored as a recognizer. First measurement: **WER 0.043**
+  on the TTS voices — the clean-speech ceiling, not field performance.
+- **End-to-end truth scoring.** The full pipeline runs on real .mp4
+  containers and the measured values are compared against the script's
+  answer key. First measurement: turn count exact, median response latency
+  within 10 ms, planted questions all detected. Backchannel counts came out
+  at a fraction of truth — not a pipeline bug but a transcription reality:
+  short tokens spoken over the partner often never reach the transcript, so
+  the count is documented as a **lower bound** in the codebook and the
+  benchmark checks a bracket (no inflation; bounded undercount) rather than
+  pretending precision it does not have.
+- **Runtime, cold and warm.** Every stage timed with an empty cache and
+  again with a warm one. First measurement: 95 s of media took 132 s cold
+  (with placeholder video, so vision is undercosted) and **10 s warm** —
+  the caches turn a re-analysis into seconds.
 
 ---
 

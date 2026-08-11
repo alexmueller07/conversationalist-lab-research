@@ -328,3 +328,169 @@ def median_topic_duration(ctx: AnalysisContext) -> float:
     if not topics:
         return float("nan")
     return float(np.median([t.duration for t in topics]))
+
+
+# ----------------------------------------------------------------------
+# Shared reality and follow-up questions
+# ----------------------------------------------------------------------
+
+
+def _turn_embedding_map(ctx: AnalysisContext) -> dict[int, np.ndarray]:
+    """Turn index -> embedding row, or empty when embeddings are absent."""
+    sem = ctx.semantics
+    if sem is None or sem.embeddings is None or not len(sem.turn_indices):
+        return {}
+    return {idx: sem.embeddings[i] for i, idx in enumerate(sem.turn_indices)}
+
+
+def _mean_unit(vectors: list[np.ndarray]) -> np.ndarray | None:
+    if not vectors:
+        return None
+    mean = np.mean(np.stack(vectors), axis=0)
+    norm = np.linalg.norm(mean)
+    return mean / norm if norm > 1e-9 else None
+
+
+@measure(
+    id="partner_semantic_similarity",
+    label="Language similarity between partners",
+    description=(
+        "Cosine similarity between the average meaning vector of each "
+        "person's turns. At least five embedded turns per person required."
+    ),
+    unit="cosine similarity",
+    level=DYAD_LEVEL,
+    family=FAMILY,
+    requires=("semantics", "turn_set"),
+    interpretation=(
+        "Dyad-level semantic similarity of conversational language tracks "
+        "the felt experience of shared reality -- thinking the same "
+        "thoughts at the same time (Rossignac-Milon et al. 2021) -- and "
+        "develops in initial unstructured interactions (Ta et al. 2017)."
+    ),
+    references=(
+        "Rossignac-Milon, Bolger, Zee, Boothby & Higgins (2021) J. Pers. "
+        "Soc. Psychol. 120:882 -- merged minds: generalized shared reality",
+        "Ta, Babcock & Ickes (2017) J. Lang. Soc. Psychol. 36:143 -- "
+        "latent semantic similarity in initial interactions",
+    ),
+)
+def partner_semantic_similarity(ctx: AnalysisContext) -> float:
+    emb = _turn_embedding_map(ctx)
+    persons = _turn_person(ctx)
+    by_person: dict[str, list[np.ndarray]] = {p: [] for p in PERSONS}
+    for idx, vec in emb.items():
+        person = persons.get(idx)
+        if person in by_person:
+            by_person[person].append(vec)
+    if any(len(v) < 5 for v in by_person.values()):
+        return float("nan")
+    means = {p: _mean_unit(v) for p, v in by_person.items()}
+    if any(m is None for m in means.values()):
+        return float("nan")
+    return float(np.dot(means["A"], means["B"]))
+
+
+@measure(
+    id="semantic_similarity_trend",
+    label="Language convergence over time",
+    description=(
+        "Partner language similarity in the final third of the "
+        "conversation minus the first third. Positive values mean the two "
+        "people's language grew more alike as they talked."
+    ),
+    unit="difference in cosine similarity",
+    level=DYAD_LEVEL,
+    family=FAMILY,
+    requires=("semantics", "turn_set"),
+    interpretation=(
+        "Shared reality is constructed during interaction, not imported "
+        "into it (Rossignac-Milon et al. 2021). Convergence over the "
+        "session is the trace of that construction; divergence means the "
+        "pair pulled toward separate frames."
+    ),
+    references=(
+        "Rossignac-Milon, Bolger, Zee, Boothby & Higgins (2021) J. Pers. "
+        "Soc. Psychol. 120:882",
+    ),
+)
+def semantic_similarity_trend(ctx: AnalysisContext) -> float:
+    emb = _turn_embedding_map(ctx)
+    if not emb:
+        return float("nan")
+    persons = _turn_person(ctx)
+    starts = {t.index: t.start for t in ctx.turn_set.turns}
+    third = ctx.duration / 3.0
+
+    def window_similarity(t0: float, t1: float) -> float | None:
+        by_person: dict[str, list[np.ndarray]] = {p: [] for p in PERSONS}
+        for idx, vec in emb.items():
+            start = starts.get(idx)
+            person = persons.get(idx)
+            if start is None or person not in by_person:
+                continue
+            if t0 <= start < t1:
+                by_person[person].append(vec)
+        if any(len(v) < 3 for v in by_person.values()):
+            return None
+        means = {p: _mean_unit(v) for p, v in by_person.items()}
+        if any(m is None for m in means.values()):
+            return None
+        return float(np.dot(means["A"], means["B"]))
+
+    first = window_similarity(0.0, third)
+    last = window_similarity(2.0 * third, ctx.duration + 1.0)
+    if first is None or last is None:
+        return float("nan")
+    return last - first
+
+
+@measure(
+    id="followup_question_rate",
+    label="Follow-up question rate",
+    description=(
+        "Questions per minute that stayed on the partner's ground: the "
+        "turn is a question, it responds to the partner, and its meaning "
+        "is close to the partner's preceding turn (adjacent-turn cosine "
+        "of at least 0.30)."
+    ),
+    unit="per minute",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("semantics", "turn_set", "transcript"),
+    interpretation=(
+        "It is specifically follow-up questions -- not questions in "
+        "general -- that raise liking, because they show listening, "
+        "understanding and care (Huang et al. 2017; Yeomans et al. 2019). "
+        "The similarity threshold separates them from topic-switching "
+        "questions, which do not carry the effect."
+    ),
+    references=(
+        "Huang, Yeomans, Brooks, Minson & Gino (2017) J. Pers. Soc. "
+        "Psychol. 113:430 -- it doesn't hurt to ask",
+        "Yeomans, Brooks, Huang, Minson & Gino (2019) J. Pers. Soc. "
+        "Psychol. 117:1139 -- the cumulative benefits of follow-up "
+        "questions",
+    ),
+)
+def followup_question_rate(ctx: AnalysisContext) -> dict[str, float]:
+    from convlab import lexicon as lex
+
+    persons = _turn_person(ctx)
+    coherence = {i: v for i, v in ctx.semantics.adjacent_coherence}
+    turns_by_index = {t.index: t for t in ctx.turn_set.turns}
+    out = {}
+    for p in PERSONS:
+        n = 0
+        for idx, value in coherence.items():
+            turn = turns_by_index.get(idx)
+            if turn is None or persons.get(idx) != p:
+                continue
+            if turn.prev_person != ctx.other(p) or not turn.text.strip():
+                continue
+            if value >= 0.30 and lex.classify_question(turn.text) in (
+                "wh", "yes_no", "tag", "declarative",
+            ):
+                n += 1
+        out[p] = per_minute(n, ctx.duration)
+    return out

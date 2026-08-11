@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from convlab import lexicon as lex
 from convlab.context import AnalysisContext, per_minute
 from convlab.measures.base import DYAD_LEVEL, PERSON_LEVEL, measure
 from convlab.session import PERSONS
@@ -57,9 +58,18 @@ def _finite(x: np.ndarray) -> np.ndarray:
     interpretation=(
         "Shorter latencies indicate tighter coordination and typically "
         "accompany agreement and engagement; markedly long latencies precede "
-        "dispreferred responses. Neither extreme is simply better."
+        "dispreferred responses. Neither extreme is simply better. Faster "
+        "responding predicts felt connection between strangers (Templeton "
+        "et al. 2022), but long gaps lose that negative meaning between "
+        "friends (Templeton et al. 2023) -- interpret against relationship."
     ),
-    references=_FTO_REF,
+    references=_FTO_REF + (
+        "Templeton, Chang, Reynolds, Cone LeBeaumont & Wheatley (2022) "
+        "PNAS 119:e2116915119 -- fast response times signal social "
+        "connection",
+        "Templeton et al. (2023) Phil. Trans. R. Soc. B 378:20210471 -- "
+        "long gaps are awkward for strangers but not friends",
+    ),
 )
 def response_latency_median(ctx: AnalysisContext) -> dict[str, float]:
     return {
@@ -133,10 +143,19 @@ def response_latency_asymmetry(ctx: AnalysisContext) -> float:
     requires=("turn_set",),
     interpretation=(
         "A response inside 200 ms cannot have been planned after the partner "
-        "stopped, so a high share indicates the person is projecting turn "
-        "ends rather than reacting to them."
+        "stopped -- single-word production alone takes 400-600 ms (Indefrey "
+        "2011) -- so a high share indicates the person is projecting turn "
+        "ends rather than reacting to them. Fast responses are read as "
+        "connection by both partners and outside observers (Templeton et "
+        "al. 2022)."
     ),
-    references=_FTO_REF,
+    references=_FTO_REF + (
+        "Templeton, Chang, Reynolds, Cone LeBeaumont & Wheatley (2022) "
+        "PNAS 119:e2116915119 -- fast response times signal social "
+        "connection",
+        "Indefrey (2011) Front. Psychol. 2:255 -- the time course of word "
+        "production",
+    ),
 )
 def fast_response_proportion(ctx: AnalysisContext) -> dict[str, float]:
     out = {}
@@ -162,7 +181,22 @@ def fast_response_proportion(ctx: AnalysisContext) -> dict[str, float]:
     level=PERSON_LEVEL,
     family=FAMILY,
     requires=("turn_set",),
-    interpretation="0.5 is an even split; values far from it indicate one person dominated.",
+    interpretation=(
+        "0.5 is an even split; values far from it indicate one person "
+        "dominated. Speaking time is the strongest single predictor of "
+        "being seen as the leader (the 'babble hypothesis'; MacLaren et "
+        "al. 2020; Schmid Mast 2002), but liking peaks nearer balance -- "
+        "the heaviest talkers are not the best liked (Hayes & Meltzer "
+        "1972)."
+    ),
+    references=(
+        "Schmid Mast (2002) Human Comm. Res. 28:420 -- dominance and "
+        "speaking time, a meta-analysis",
+        "MacLaren et al. (2020) Leadership Q. 31:101409 -- the babble "
+        "hypothesis",
+        "Hayes & Meltzer (1972) Sociometry 35:538 -- interpersonal "
+        "judgments based on talkativeness",
+    ),
 )
 def talk_time_share(ctx: AnalysisContext) -> dict[str, float]:
     totals = {p: ctx.turn_set.talk_time(p) for p in PERSONS}
@@ -533,4 +567,169 @@ def median_turn_duration(ctx: AnalysisContext) -> dict[str, float]:
     for p in PERSONS:
         durations = [t.duration for t in ctx.turn_set.turns_of(p)]
         out[p] = float(np.median(durations)) if durations else float("nan")
+    return out
+
+
+# ----------------------------------------------------------------------
+# Gap-distribution norms and duration coupling
+# The cross-linguistic reference distribution: modal floor transfers of
+# roughly 100-200 ms, with the vast majority of transitions within one
+# second of zero (Stivers et al. 2009; Heldner & Edlund 2010). Reporting
+# how a session sits against that norm is more informative than another
+# central tendency.
+# ----------------------------------------------------------------------
+
+_NORM_REF = (
+    "Stivers et al. (2009) PNAS 106:10587 -- universals and cultural "
+    "variation in turn-taking",
+    "Heldner & Edlund (2010) J. Phonetics 38:555 -- pauses, gaps and "
+    "overlaps in conversations",
+)
+
+
+@measure(
+    id="normative_transition_proportion",
+    label="Transitions in the normal band",
+    description=(
+        "Proportion of floor transfers whose offset falls within one second "
+        "of zero -- the band that contains the vast majority of transitions "
+        "in every language studied."
+    ),
+    unit="proportion",
+    level=DYAD_LEVEL,
+    family=FAMILY,
+    requires=("turn_set",),
+    interpretation=(
+        "Low values mean the conversation ran outside the timing envelope "
+        "conversation normally lives in -- long silences, heavy overlap, or "
+        "both. Check the gap and overlap measures to see which."
+    ),
+    references=_NORM_REF,
+)
+def normative_transition_proportion(ctx: AnalysisContext) -> float:
+    ftos = ctx.turn_set.all_ftos()
+    if ftos.size < 5:
+        return float("nan")
+    return float(np.mean(np.abs(ftos) <= 1.0))
+
+
+@measure(
+    id="long_gap_rate",
+    label="Long-gap transitions",
+    description=(
+        "Proportion of floor transfers preceded by more than two seconds "
+        "of shared silence."
+    ),
+    unit="proportion",
+    level=DYAD_LEVEL,
+    family=FAMILY,
+    requires=("turn_set",),
+    interpretation=(
+        "Direction depends on the relationship: long gaps read as awkward "
+        "between strangers but not between friends, where they can "
+        "accompany comfortable reflection (Templeton et al. 2023). For "
+        "first-meeting dyads -- this lab's design -- higher values lean "
+        "toward disfluency."
+    ),
+    references=(
+        "Templeton, Chang, Reynolds, Cone LeBeaumont & Wheatley (2023) "
+        "Phil. Trans. R. Soc. B 378:20210471 -- long gaps are awkward for "
+        "strangers but not friends",
+        "Koudenburg, Postmes & Gordijn (2011) J. Exp. Soc. Psychol. 47:512 "
+        "-- brief silences disrupt felt belonging",
+    ),
+)
+def long_gap_rate(ctx: AnalysisContext) -> float:
+    ftos = ctx.turn_set.all_ftos()
+    if ftos.size < 5:
+        return float("nan")
+    return float(np.mean(ftos > 2.0))
+
+
+@measure(
+    id="turn_duration_matching",
+    label="Turn-length coupling",
+    description=(
+        "Correlation between the length of one partner's turn and the "
+        "length of the other's immediate response, across all adjacent "
+        "turn pairs. Positive is matching, negative is compensation. At "
+        "least ten pairs required."
+    ),
+    unit="correlation",
+    level=DYAD_LEVEL,
+    family=FAMILY,
+    requires=("turn_set",),
+    interpretation=(
+        "Little questions get little answers: interviewees track an "
+        "interviewer's utterance lengths (Matarazzo et al. 1963). But "
+        "naturalistic dyads also show the opposite -- a quiet partner "
+        "ceding room to a talkative one (Cappella & Planalp 1981) -- so "
+        "the sign is reported, not assumed."
+    ),
+    references=(
+        "Matarazzo, Weitman, Saslow & Wiens (1963) J. Verbal Learning "
+        "Verbal Behav. 1:451 -- interviewer influence on speech durations",
+        "Cappella & Planalp (1981) Human Comm. Res. 7:117 -- talk and "
+        "silence sequences: mutual influence and compensation",
+    ),
+)
+def turn_duration_matching(ctx: AnalysisContext) -> float:
+    turns = ctx.turn_set.turns
+    prev_durations: list[float] = []
+    next_durations: list[float] = []
+    for i in range(1, len(turns)):
+        if turns[i].person != turns[i - 1].person and turns[i].fto is not None:
+            prev_durations.append(turns[i - 1].duration)
+            next_durations.append(turns[i].duration)
+    if len(prev_durations) < 10:
+        return float("nan")
+    a = np.asarray(prev_durations)
+    b = np.asarray(next_durations)
+    if a.std() < 1e-9 or b.std() < 1e-9:
+        return float("nan")
+    return float(np.corrcoef(a, b)[0, 1])
+
+
+@measure(
+    id="question_response_latency",
+    label="Response latency after questions",
+    description=(
+        "Median floor-transfer offset of this person's responses to turns "
+        "the partner ended as a question. At least five question-responses "
+        "required; compare against response_latency_median to see the "
+        "mobilization effect."
+    ),
+    unit="s",
+    level=PERSON_LEVEL,
+    family=FAMILY,
+    requires=("turn_set", "transcript"),
+    interpretation=(
+        "Questions mobilize response (Stivers & Rossano 2010): latencies "
+        "after questions run shorter than after statements, and answers "
+        "delivered slowly are heard as unwilling or uncertain (Kendrick & "
+        "Torreira 2015). Compare with the person's overall median latency."
+    ),
+    references=(
+        "Stivers & Rossano (2010) Res. Lang. Soc. Interact. 43:3 -- "
+        "mobilizing response",
+        "Kendrick & Torreira (2015) Discourse Process. 52:255",
+    ),
+)
+def question_response_latency(ctx: AnalysisContext) -> dict[str, float]:
+    turns = ctx.turn_set.turns
+    out = {}
+    for p in PERSONS:
+        latencies: list[float] = []
+        for i in range(1, len(turns)):
+            t = turns[i]
+            prev = turns[i - 1]
+            if (
+                t.person == p
+                and prev.person == ctx.other(p)
+                and t.fto is not None
+                and prev.text.strip()
+                and lex.classify_question(prev.text) in ("wh", "yes_no", "tag")
+            ):
+                latencies.append(t.fto)
+        out[p] = float(np.median(latencies)) if len(latencies) >= 5 else float("nan")
     return out

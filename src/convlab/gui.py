@@ -3,7 +3,9 @@
 Built on Tkinter deliberately. It ships with Python on every platform, so
 the application adds nothing to the install that a research assistant has to
 troubleshoot -- which matters far more here than a more fashionable toolkit
-would. The window is plain; the work it drives is not.
+would. The window reads as a three-step form -- recordings, measures,
+analyze -- because that is the whole job; the results table and activity
+log below it report on how the job went.
 
 Three rules shape the implementation:
 
@@ -21,6 +23,7 @@ Three rules shape the implementation:
 
 from __future__ import annotations
 
+import os
 import queue
 import sys
 import threading
@@ -33,6 +36,7 @@ from typing import Any, Callable
 try:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
+    from tkinter import font as tkfont
 except ImportError as exc:  # pragma: no cover - headless install
     raise SystemExit(
         "convlab gui needs Tkinter, which is missing from this Python install.\n"
@@ -40,22 +44,29 @@ except ImportError as exc:  # pragma: no cover - headless install
         "Ubuntu run: sudo apt install python3-tk"
     ) from exc
 
-APP_TITLE = "convlab - conversation analysis"
+APP_NAME = "Conversationalist"
+APP_TAGLINE = "Conversation analysis for dyadic studies — Niedenthal Emotions Lab"
+APP_TITLE = f"{APP_NAME} — conversation analysis for dyadic studies"
 
 MODEL_DIR = Path.home() / ".convlab" / "models"
 """One model cache per user. Keeping it out of the results folder means
 changing where results go never re-downloads 27 MB of weights."""
 
 PALETTE = {
-    "bg": "#f6f7f9",
-    "panel": "#ffffff",
-    "text": "#0f172a",
-    "muted": "#64748b",
-    "accent": "#0f766e",
-    "ok": "#15803d",
-    "warn": "#b45309",
-    "fail": "#b91c1c",
-    "line": "#dfe3e8",
+    # Warm near-white ground with ink text, one badger-red accent for the
+    # UW lab identity, and verdict colors kept dark enough to stay legible
+    # against the white cards.
+    "bg": "#FAFAF7",
+    "panel": "#FFFFFF",
+    "text": "#1A1E23",
+    "muted": "#6B7280",
+    "accent": "#B0392E",
+    "accent_dark": "#8E2E25",
+    "accent_faint": "#F4E3E1",
+    "ok": "#166534",
+    "warn": "#B45309",
+    "fail": "#B91C1C",
+    "line": "#E5E1DA",
 }
 
 SKIPPABLE = (
@@ -66,6 +77,41 @@ SKIPPABLE = (
     ("semantics", "Analyze meaning", "Topics, coherence and long-range callbacks"),
     ("laughter", "Detect laughter", "Laughter and shared laughter"),
 )
+
+
+def _draw_icon(size: int = 32) -> tk.PhotoImage:
+    """Two overlapping speech bubbles in the accent color.
+
+    Drawn pixel-by-pixel with ``PhotoImage.put`` so the app carries no image
+    files and no imaging dependency. 32x32 is what title bars and taskbars
+    actually display, so nothing finer would survive scaling anyway.
+    """
+    image = tk.PhotoImage(width=size, height=size)
+
+    def bubble(x0: int, y0: int, x1: int, y1: int, color: str) -> None:
+        radius = 4
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                dx = max(x0 + radius - x, x - (x1 - 1 - radius), 0)
+                dy = max(y0 + radius - y, y - (y1 - 1 - radius), 0)
+                if dx * dx + dy * dy <= radius * radius + radius:
+                    image.put(color, (x, y))
+
+    def tail(x: int, y: int, color: str, leftward: bool) -> None:
+        for step, width in enumerate((4, 3, 2, 1)):
+            if leftward:
+                image.put(color, to=(x, y + step, x + width, y + step + 1))
+            else:
+                image.put(color, to=(x - width, y + step, x, y + step + 1))
+
+    # The partner's bubble sits behind in a lighter tint, ours in front in
+    # the full accent -- a two-voice mark for a two-person tool.
+    faded = "#D08C84"
+    bubble(2, 2, 20, 15, faded)
+    tail(5, 15, faded, leftward=True)
+    bubble(12, 12, 30, 25, PALETTE["accent"])
+    tail(27, 25, PALETTE["accent"], leftward=False)
+    return image
 
 
 # ----------------------------------------------------------------------
@@ -317,12 +363,19 @@ class App:
         self.worker: Worker | None = None
         self.dashboards: dict[str, str] = {}
         self.report_path: str = ""
+        self.verdicts: dict[str, str] = {}
 
         root.title(APP_TITLE)
         root.geometry("1180x900")
-        root.minsize(980, 700)
-        root.minsize(820, 620)
+        root.minsize(880, 640)
         root.configure(bg=PALETTE["bg"])
+        try:
+            # Kept as an attribute deliberately: Tk holds no reference of
+            # its own, and a garbage-collected PhotoImage blanks the icon.
+            self._icon = _draw_icon()
+            root.iconphoto(True, self._icon)
+        except tk.TclError:  # pragma: no cover - display without RGBA icons
+            pass
 
         self._init_style()
         self._build()
@@ -336,116 +389,229 @@ class App:
         # honours color options; the native themes ignore most of them.
         if "clam" in style.theme_names():
             style.theme_use("clam")
-        style.configure(".", background=PALETTE["bg"], foreground=PALETTE["text"])
+
+        # Segoe UI is the Windows system face and the lab machines run
+        # Windows; elsewhere the toolkit's own defaults keep the app from
+        # requesting a font the platform does not ship.
+        if sys.platform == "win32":
+            self.font_family, self.font_mono = "Segoe UI", "Consolas"
+        else:
+            self.font_family = tkfont.nametofont("TkDefaultFont").actual("family")
+            self.font_mono = tkfont.nametofont("TkFixedFont").actual("family")
+        family = self.font_family
+
+        style.configure(".", background=PALETTE["bg"],
+                        foreground=PALETTE["text"], font=(family, 10))
         style.configure("TFrame", background=PALETTE["bg"])
-        style.configure("Panel.TFrame", background=PALETTE["panel"],
-                        relief="solid", borderwidth=1)
-        style.configure("TLabel", background=PALETTE["bg"], font=("Segoe UI", 10))
-        style.configure("Panel.TLabel", background=PALETTE["panel"])
-        style.configure("H1.TLabel", font=("Segoe UI Semibold", 16))
-        style.configure("Muted.TLabel", foreground=PALETTE["muted"], font=("Segoe UI", 9))
-        style.configure("Section.TLabel", font=("Segoe UI Semibold", 10))
-        style.configure("TButton", font=("Segoe UI", 10), padding=(12, 6))
-        style.configure("Accent.TButton", font=("Segoe UI Semibold", 10),
-                        foreground="#ffffff", background=PALETTE["accent"],
-                        padding=(18, 8))
-        style.map("Accent.TButton",
-                  background=[("active", "#115e59"), ("disabled", "#94a3b8")])
-        style.configure("TCheckbutton", background=PALETTE["bg"], font=("Segoe UI", 10),
-                        indicatorbackground=PALETTE["panel"],
-                        indicatorforeground=PALETTE["accent"], focuscolor=PALETTE["bg"])
+        style.configure("Card.TFrame", background=PALETTE["panel"])
+        style.configure("TLabel", background=PALETTE["bg"], font=(family, 10))
+        style.configure("Wordmark.TLabel", font=(family, 20, "bold"))
+        style.configure("Muted.TLabel", foreground=PALETTE["muted"],
+                        font=(family, 9))
+        style.configure("Card.TLabel", background=PALETTE["panel"],
+                        font=(family, 10))
+        style.configure("CardHint.TLabel", background=PALETTE["panel"],
+                        foreground=PALETTE["muted"], font=(family, 9))
+        style.configure("Summary.TLabel", background=PALETTE["panel"],
+                        foreground=PALETTE["muted"], font=(family, 10))
+        # The step number renders as a small accent chip: padding turns the
+        # label's own background into the badge, no canvas drawing needed.
+        style.configure("StepNumber.TLabel", background=PALETTE["accent"],
+                        foreground="#FFFFFF", font=(family, 10, "bold"),
+                        padding=(7, 1))
+        style.configure("StepTitle.TLabel", background=PALETTE["panel"],
+                        font=(family, 11, "bold"))
+        style.configure("TButton", font=(family, 10), padding=(12, 6))
+        style.configure("Ghost.TButton", font=(family, 9), padding=(8, 3))
+        style.configure("Card.TCheckbutton", background=PALETTE["panel"],
+                        font=(family, 10),
+                        indicatorbackground="#FFFFFF",
+                        indicatorforeground=PALETTE["accent"],
+                        focuscolor=PALETTE["panel"])
         style.map(
-            "TCheckbutton",
+            "Card.TCheckbutton",
+            background=[("active", PALETTE["panel"])],
             indicatorbackground=[("selected", PALETTE["accent"]),
-                                 ("active", "#e6efee")],
-            indicatorforeground=[("selected", "#ffffff")],
+                                 ("active", PALETTE["accent_faint"])],
+            indicatorforeground=[("selected", "#FFFFFF")],
         )
-        style.configure("TEntry", padding=6)
+        style.configure("TEntry", padding=6, fieldbackground="#FFFFFF",
+                        bordercolor=PALETTE["line"],
+                        lightcolor=PALETTE["line"], darkcolor=PALETTE["line"])
+        style.map("TEntry", bordercolor=[("focus", PALETTE["accent"])],
+                  lightcolor=[("focus", PALETTE["accent"])],
+                  darkcolor=[("focus", PALETTE["accent"])])
         style.configure("Treeview", background=PALETTE["panel"],
                         fieldbackground=PALETTE["panel"],
                         foreground=PALETTE["text"], borderwidth=0,
-                        rowheight=24, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background=PALETTE["bg"],
+                        rowheight=26, font=(family, 9))
+        style.configure("Treeview.Heading", background=PALETTE["panel"],
                         foreground=PALETTE["muted"], borderwidth=0,
-                        font=("Segoe UI", 9, "bold"))
+                        relief="flat", font=(family, 9, "bold"))
+        style.map("Treeview.Heading",
+                  background=[("active", PALETTE["panel"])])
         style.map("Treeview", background=[("selected", PALETTE["accent"])],
-                  foreground=[("selected", "#ffffff")])
-        style.configure("Horizontal.TProgressbar", background=PALETTE["accent"],
-                        troughcolor="#e2e8f0", borderwidth=0, thickness=10)
+                  foreground=[("selected", "#FFFFFF")])
+        style.configure("Horizontal.TProgressbar",
+                        background=PALETTE["accent"],
+                        troughcolor="#ECE9E2", borderwidth=0, thickness=8)
+        style.configure("Vertical.TScrollbar", background="#D8D4CB",
+                        troughcolor=PALETTE["bg"], bordercolor=PALETTE["bg"],
+                        arrowcolor=PALETTE["muted"])
 
     # -- layout --------------------------------------------------------
+    def _build_menu(self) -> None:
+        """Every entry reuses a button's command; the menu adds no logic."""
+        menubar = tk.Menu(self.root)
+
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Choose recordings…", command=self._pick_input)
+        file_menu.add_command(label="Choose results folder…",
+                              command=self._pick_output)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self._on_close)
+        menubar.add_cascade(label="File", menu=file_menu)
+
+        tools = tk.Menu(menubar, tearoff=0)
+        tools.add_command(label="Analyze", command=self._start)
+        tools.add_command(label="Stop", command=self._stop)
+        tools.add_separator()
+        tools.add_command(label="Build demo session", command=self._make_demo)
+        tools.add_command(label="Open results folder", command=self._open_output)
+        tools.add_command(label="Open latest report", command=self._open_dashboard)
+        menubar.add_cascade(label="Tools", menu=tools)
+
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="How it works", command=self._open_docs)
+        help_menu.add_command(label=f"About {APP_NAME}", command=self._show_about)
+        menubar.add_cascade(label="Help", menu=help_menu)
+
+        self.root.configure(menu=menubar)
+
+    def _card(self, parent: ttk.Frame, row: int, title: str,
+              number: str | None = None,
+              pady: tuple[int, int] = (0, 10)) -> ttk.Frame:
+        """A bordered white panel with a heading; returns its content frame.
+
+        The border is tk's highlight ring rather than a themed relief
+        because it is the one 1px border whose color every platform that
+        runs clam actually honours.
+        """
+        shell = tk.Frame(
+            parent, bg=PALETTE["panel"],
+            highlightbackground=PALETTE["line"],
+            highlightcolor=PALETTE["line"], highlightthickness=1)
+        shell.grid(row=row, column=0, sticky="nsew", pady=pady)
+        shell.columnconfigure(0, weight=1)
+        shell.rowconfigure(0, weight=1)
+
+        body = ttk.Frame(shell, style="Card.TFrame", padding=14)
+        body.grid(row=0, column=0, sticky="nsew")
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(1, weight=1)
+
+        head = ttk.Frame(body, style="Card.TFrame")
+        head.grid(row=0, column=0, sticky="w", pady=(0, 8))
+        if number:
+            ttk.Label(head, text=number, style="StepNumber.TLabel").pack(side="left")
+        ttk.Label(head, text=title, style="StepTitle.TLabel").pack(
+            side="left", padx=(8 if number else 0, 0))
+
+        content = ttk.Frame(body, style="Card.TFrame")
+        content.grid(row=1, column=0, sticky="nsew")
+        content.columnconfigure(0, weight=1)
+        return content
+
     def _build(self) -> None:
-        outer = ttk.Frame(self.root, padding=18)
+        self._build_menu()
+
+        outer = ttk.Frame(self.root, padding=16)
         outer.pack(fill="both", expand=True)
         outer.columnconfigure(0, weight=1)
-        outer.rowconfigure(4, weight=1)
+        self.outer = outer
 
+        # -- identity ----------------------------------------------------
         header = ttk.Frame(outer)
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
-        ttk.Label(header, text="Conversation analysis", style="H1.TLabel").pack(anchor="w")
-        ttk.Label(
-            header,
-            text="Point this at a folder of recordings. Each conversation is "
-                 "two videos - one showing each person's face. Both will "
-                 "contain both voices; that is expected.",
-            style="Muted.TLabel",
-            # Without a wrap length this label is a single long line, and its
-            # requested width becomes the window's minimum -- which pushed the
-            # buttons on the right off the edge of the window.
-            wraplength=940,
-            justify="left",
-        ).pack(anchor="w", pady=(2, 0))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        ttk.Label(header, text=APP_NAME, style="Wordmark.TLabel").pack(anchor="w")
+        ttk.Label(header, text=APP_TAGLINE, style="Muted.TLabel").pack(
+            anchor="w", pady=(1, 0))
 
-        # -- paths ------------------------------------------------------
-        paths = ttk.Frame(outer)
-        paths.grid(row=1, column=0, sticky="ew")
+        # -- step 1: recordings -------------------------------------------
+        paths = self._card(outer, row=1, number="1", title="Recordings")
         paths.columnconfigure(1, weight=1)
 
         self.input_var = tk.StringVar()
         self.output_var = tk.StringVar(value=str(Path.home() / "convlab-results"))
 
-        ttk.Label(paths, text="Recordings").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Label(paths, text="Videos folder", style="Card.TLabel").grid(
+            row=0, column=0, sticky="w", pady=4)
         ttk.Entry(paths, textvariable=self.input_var).grid(
             row=0, column=1, sticky="ew", padx=10)
-        ttk.Button(paths, text="Browse...", command=self._pick_input).grid(row=0, column=2)
+        ttk.Button(paths, text="Browse...", command=self._pick_input).grid(
+            row=0, column=2)
         ttk.Button(paths, text="Use demo data", command=self._make_demo).grid(
             row=0, column=3, padx=(6, 0))
 
-        ttk.Label(paths, text="Results").grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Label(paths, text="Results folder", style="Card.TLabel").grid(
+            row=1, column=0, sticky="w", pady=4)
         ttk.Entry(paths, textvariable=self.output_var).grid(
             row=1, column=1, sticky="ew", padx=10)
-        ttk.Button(paths, text="Browse...", command=self._pick_output).grid(row=1, column=2)
+        ttk.Button(paths, text="Browse...", command=self._pick_output).grid(
+            row=1, column=2)
 
         ttk.Label(
             paths,
-            text="Name the two files with a shared id and a person token, "
-                 "e.g.  dyad012_close_a.mp4  and  dyad012_close_b.mp4",
-            style="Muted.TLabel",
-        ).grid(row=2, column=1, columnspan=3, sticky="w", padx=10, pady=(0, 4))
+            text="Each conversation is two videos -- one close-up per person; "
+                 "both carry both voices, which is expected. Name the pair "
+                 "with a shared id and a person token, e.g. "
+                 "dyad012_close_a.mp4 and dyad012_close_b.mp4",
+            style="CardHint.TLabel",
+            # Without a wrap length this label is a single long line, and its
+            # requested width becomes the window's minimum -- which pushed the
+            # buttons on the right off the edge of the window.
+            wraplength=880,
+            justify="left",
+        ).grid(row=2, column=1, columnspan=3, sticky="w", padx=10, pady=(2, 0))
 
-        # -- options ----------------------------------------------------
-        options = ttk.Labelframe(outer, text=" What to measure ", padding=12)
-        options.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        # -- step 2: what to measure ---------------------------------------
+        options = self._card(outer, row=2, number="2", title="What to measure")
         self.stage_vars: dict[str, tk.BooleanVar] = {}
         for i, (key, label, hint) in enumerate(SKIPPABLE):
             var = tk.BooleanVar(value=True)
             self.stage_vars[key] = var
             row, col = divmod(i, 2)
-            cell = ttk.Frame(options)
-            cell.grid(row=row, column=col, sticky="w", padx=(0, 30), pady=3)
-            ttk.Checkbutton(cell, text=label, variable=var).pack(anchor="w")
-            ttk.Label(cell, text=hint, style="Muted.TLabel").pack(anchor="w", padx=(22, 0))
+            options.columnconfigure(col, weight=1, uniform="measure")
+            cell = ttk.Frame(options, style="Card.TFrame")
+            cell.grid(row=row, column=col, sticky="w", padx=(0, 24), pady=4)
+            ttk.Checkbutton(cell, text=label, variable=var,
+                            style="Card.TCheckbutton").pack(anchor="w")
+            ttk.Label(cell, text=hint, style="CardHint.TLabel").pack(
+                anchor="w", padx=(24, 0))
 
-        # -- actions ----------------------------------------------------
-        actions = ttk.Frame(outer)
-        actions.grid(row=3, column=0, sticky="ew", pady=(14, 8))
-        self.run_button = ttk.Button(
-            actions, text="Analyze", style="Accent.TButton", command=self._start)
+        # -- step 3: analyze -----------------------------------------------
+        run = self._card(outer, row=3, number="3", title="Analyze")
+        actions = ttk.Frame(run, style="Card.TFrame")
+        actions.grid(row=0, column=0, sticky="ew")
+
+        # A plain tk.Button rather than ttk: the themed engines quietly
+        # ignore background requests on half the platforms, and the one
+        # button that starts the run is the one place the accent must
+        # actually show up.
+        self.run_button = tk.Button(
+            actions, text="Analyze", command=self._start,
+            background=PALETTE["accent"], foreground="#FFFFFF",
+            activebackground=PALETTE["accent_dark"], activeforeground="#FFFFFF",
+            disabledforeground="#E4B9B4",
+            font=(self.font_family, 12, "bold"),
+            relief="flat", borderwidth=0, cursor="hand2",
+            padx=32, pady=8,
+        )
         self.run_button.pack(side="left")
         self.stop_button = ttk.Button(
             actions, text="Stop", command=self._stop, state="disabled")
-        self.stop_button.pack(side="left", padx=8)
-        ttk.Button(actions, text="Results folder",
+        self.stop_button.pack(side="left", padx=(12, 0))
+        ttk.Button(actions, text="Open results folder",
                    command=self._open_output).pack(side="left", padx=(8, 0))
         # The one thing worth doing after a run, so it sits alone on the right
         # where nothing can crowd it off the edge of the window.
@@ -453,25 +619,35 @@ class App:
             actions, text="Open report", command=self._open_dashboard, state="disabled")
         self.dashboard_button.pack(side="right")
 
-        self.progress = ttk.Progressbar(outer, mode="determinate", maximum=100)
-        self.progress.grid(row=4, column=0, sticky="ew")
+        self.progress = ttk.Progressbar(run, mode="determinate", maximum=100)
+        self.progress.grid(row=1, column=0, sticky="ew", pady=(12, 0))
         self.status_var = tk.StringVar(value="Ready.")
-        ttk.Label(outer, textvariable=self.status_var, style="Muted.TLabel").grid(
-            row=5, column=0, sticky="w", pady=(4, 10))
+        ttk.Label(run, textvariable=self.status_var, style="CardHint.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(4, 0))
 
         # -- results ----------------------------------------------------
         #
         # A running log is the right place for detail and the wrong place for
         # state: by the time eight sessions have finished, "which ones came
         # out badly" has scrolled away. The table holds the answer to that
-        # question and stays put; the log keeps the detail underneath.
-        results = ttk.Frame(outer, style="Panel.TFrame")
-        results.grid(row=6, column=0, sticky="nsew", pady=(0, 8))
-        results.columnconfigure(0, weight=1)
-        results.rowconfigure(0, weight=1)
+        # question and stays put; the summary line above it answers it in one
+        # glance; the log keeps the detail underneath, folded away.
+        outer.rowconfigure(4, weight=3)
+        results_card = self._card(outer, row=4, title="Results", pady=(0, 0))
+        results_card.rowconfigure(1, weight=1)
+
+        self.summary_var = tk.StringVar(value="No sessions analyzed yet.")
+        ttk.Label(results_card, textvariable=self.summary_var,
+                  style="Summary.TLabel").grid(row=0, column=0, sticky="w",
+                                               pady=(0, 6))
+
+        table = ttk.Frame(results_card, style="Card.TFrame")
+        table.grid(row=1, column=0, sticky="nsew")
+        table.columnconfigure(0, weight=1)
+        table.rowconfigure(0, weight=1)
         columns = ("verdict", "minutes", "turns", "values", "note")
         self.results = ttk.Treeview(
-            results, columns=columns, show="tree headings", height=7,
+            table, columns=columns, show="tree headings", height=6,
             selectmode="browse",
         )
         self.results.heading("#0", text="Session")
@@ -487,30 +663,43 @@ class App:
             self.results.column(key, width=width, anchor=anchor,
                                 stretch=(key == "note"))
         self.results.grid(row=0, column=0, sticky="nsew")
-        rscroll = ttk.Scrollbar(results, orient="vertical",
+        rscroll = ttk.Scrollbar(table, orient="vertical",
                                 command=self.results.yview)
         rscroll.grid(row=0, column=1, sticky="ns")
         self.results.configure(yscrollcommand=rscroll.set)
         self.results.tag_configure("pass", foreground=PALETTE["ok"])
         self.results.tag_configure("review", foreground=PALETTE["warn"])
         self.results.tag_configure("fail", foreground=PALETTE["fail"])
+        # The worker reports a crashed session as "failed"; without a tag of
+        # its own those rows would render in plain ink and look healthy.
+        self.results.tag_configure("failed", foreground=PALETTE["fail"])
         self.results.tag_configure("running", foreground=PALETTE["muted"])
         # Double-clicking a row opens that session's own report.
         self.results.bind("<Double-1>", self._open_selected)
 
-        outer.rowconfigure(7, weight=1)
-        log_frame = ttk.Frame(outer, style="Panel.TFrame")
-        log_frame.grid(row=7, column=0, sticky="nsew")
-        log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1)
+        # -- activity log -------------------------------------------------
+        self._log_row = 6
+        self.log_toggle = ttk.Button(
+            outer, text="Hide activity log", command=self._toggle_log,
+            style="Ghost.TButton")
+        self.log_toggle.grid(row=5, column=0, sticky="w", pady=(10, 4))
+
+        self.log_shell = tk.Frame(
+            outer, bg=PALETTE["panel"],
+            highlightbackground=PALETTE["line"],
+            highlightcolor=PALETTE["line"], highlightthickness=1)
+        self.log_shell.grid(row=self._log_row, column=0, sticky="nsew")
+        self.log_shell.columnconfigure(0, weight=1)
+        self.log_shell.rowconfigure(0, weight=1)
 
         self.log = tk.Text(
-            log_frame, wrap="word", height=14, borderwidth=0,
-            font=("Consolas", 9), background=PALETTE["panel"],
+            self.log_shell, wrap="word", height=10, borderwidth=0,
+            font=(self.font_mono, 9), background=PALETTE["panel"],
             foreground=PALETTE["text"], padx=12, pady=10, state="disabled",
         )
         self.log.grid(row=0, column=0, sticky="nsew")
-        scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log.yview)
+        scroll = ttk.Scrollbar(self.log_shell, orient="vertical",
+                               command=self.log.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         self.log.configure(yscrollcommand=scroll.set)
 
@@ -518,10 +707,34 @@ class App:
                             ("fail", PALETTE["fail"]), ("accent", PALETTE["accent"]),
                             ("info", PALETTE["text"])):
             self.log.tag_configure(tag, foreground=color)
-        self.log.tag_configure("accent", font=("Consolas", 9, "bold"))
+        self.log.tag_configure("accent", font=(self.font_mono, 9, "bold"))
+
+        # Collapsed by default so the resting view stays calm. Toggling down
+        # from the built (shown) state also puts the right label on the
+        # button, so there is exactly one code path for both directions.
+        self._log_visible = True
+        self._toggle_log()
 
         self._log("Ready. Choose a folder of recordings, or click "
                   "'Use demo data' to try it without any.", "muted")
+
+    def _toggle_log(self) -> None:
+        """Fold the log away; hiding is geometric, nothing is lost.
+
+        The Text widget always exists and always receives lines, so tests
+        and the queue pump never care whether it is on screen. The row
+        weight has to move with it: an empty weighted row would otherwise
+        hold a blank band of window where the log used to be.
+        """
+        if self._log_visible:
+            self.log_shell.grid_remove()
+            self.outer.rowconfigure(self._log_row, weight=0)
+            self.log_toggle.configure(text="Show activity log")
+        else:
+            self.log_shell.grid()
+            self.outer.rowconfigure(self._log_row, weight=2)
+            self.log_toggle.configure(text="Hide activity log")
+        self._log_visible = not self._log_visible
 
     # -- actions -------------------------------------------------------
     def _pick_input(self) -> None:
@@ -543,10 +756,12 @@ class App:
             sessions = list(iter_sessions(path, strict=False))
         except SessionError as exc:
             self._log(f"Could not read that folder: {exc}", "fail")
+            self.status_var.set("Could not read that folder.")
             return
 
         if not sessions:
             self._log("No video files found in that folder.", "warn")
+            self.status_var.set("No video files found in that folder.")
             return
 
         complete = [s for s in sessions if s.has_close_pair]
@@ -566,6 +781,12 @@ class App:
                 "view and will be skipped. Speaker attribution needs both.",
                 "warn",
             )
+
+        # The log is collapsed by default, so the scan's verdict has to
+        # reach the always-visible status line as well.
+        self.status_var.set(
+            f"Found {len(sessions)} session(s); {len(complete)} ready to analyze."
+        )
 
     def _pick_output(self) -> None:
         path = filedialog.askdirectory(title="Where to write results")
@@ -623,6 +844,8 @@ class App:
         skip = tuple(k for k, var in self.stage_vars.items() if not var.get())
         self.dashboards.clear()
         self.report_path = ""
+        self.verdicts.clear()
+        self._update_summary()
         for row in self.results.get_children():
             self.results.delete(row)
         self.dashboard_button.configure(state="disabled")
@@ -676,6 +899,42 @@ class App:
         if target:
             webbrowser.open(Path(target).as_uri())
 
+    def _open_docs(self) -> None:
+        """Open the plain-language guide that ships beside the source.
+
+        ``os.startfile`` hands the file to whatever the user actually reads
+        Markdown with; a browser tab is the fallback that exists everywhere
+        else. Wheel installs do not carry docs/, so a missing file is
+        reported rather than raised.
+        """
+        doc = Path(__file__).resolve().parents[2] / "docs" / "HOW-IT-WORKS.md"
+        if not doc.exists():
+            messagebox.showinfo(
+                "Guide not found",
+                "HOW-IT-WORKS.md was not found beside this install.\n\n"
+                f"Expected at:\n{doc}",
+            )
+            return
+        try:
+            os.startfile(doc)  # type: ignore[attr-defined]  # Windows only
+        except (AttributeError, OSError):
+            webbrowser.open(doc.as_uri())
+
+    def _show_about(self) -> None:
+        # Imported here, not at module top: the package __init__ pulls in
+        # config and session, which the GUI otherwise defers to the worker.
+        from convlab import __version__
+
+        messagebox.showinfo(
+            f"About {APP_NAME}",
+            f"{APP_NAME} {__version__}\n\n"
+            "Turns paired close-up recordings of a two-person conversation "
+            "into a documented table of behavioral measures.\n\n"
+            f"{APP_TAGLINE}\n\n"
+            "Built on faster-whisper, Silero VAD, MediaPipe, "
+            "Praat/parselmouth, sentence-transformers.",
+        )
+
     def _on_close(self) -> None:
         if self.worker and self.worker.is_alive():
             if not messagebox.askokcancel(
@@ -684,6 +943,25 @@ class App:
                 return
             self.worker.request_stop()
         self.root.destroy()
+
+    def _update_summary(self) -> None:
+        """One line above the table so "how did the run go" needs no scan."""
+        if not self.verdicts:
+            self.summary_var.set("No sessions analyzed yet.")
+            return
+        counts: dict[str, int] = {}
+        for verdict in self.verdicts.values():
+            # The worker says "failed" for a crashed session and "fail" for
+            # a quality verdict; the distinction matters in the row's note,
+            # not in a headcount.
+            key = "fail" if verdict == "failed" else verdict
+            counts[key] = counts.get(key, 0) + 1
+        total = len(self.verdicts)
+        parts = [f"{counts[key]} {key}"
+                 for key in ("pass", "review", "fail", "running")
+                 if counts.get(key)]
+        noun = "session" if total == 1 else "sessions"
+        self.summary_var.set(f"{total} {noun} — " + ", ".join(parts))
 
     # -- queue pump ----------------------------------------------------
     def _log(self, text: str, level: str = "info") -> None:
@@ -727,6 +1005,8 @@ class App:
                     values=values, tags=(verdict,),
                 )
             self.results.see(session_id)
+            self.verdicts[session_id] = verdict
+            self._update_summary()
             dashboard = info.get("dashboard")
             if dashboard:
                 self.dashboards[session_id] = dashboard
