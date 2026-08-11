@@ -7,7 +7,7 @@ per person**. It works out who
 spoke when, how quickly each replied, what they looked at, when they nodded,
 smiled and laughed, how pleasant they looked and how much that followed
 their partner, how their speech and movement tracked one another, and how all
-of that changed as the conversation went on — **132 measures**, each
+of that changed as the conversation went on — **161 measures**, each
 defined and unit-labeled in a codebook, plus a visual report per pair.
 
 ![The convlab desktop application](docs/images/app.png)
@@ -159,10 +159,20 @@ is safe at any point — it finishes the current step and leaves valid output.
 
 ## How long it takes
 
-Roughly **four times the length of the recording**, on a normal laptop with no
-graphics card. A 10-minute conversation takes about 35–40 minutes; a 118-pair
-study is an overnight job. Re-running after changing a setting takes seconds,
-because the slow steps are cached.
+Roughly **two to four times the length of the recording** on a normal laptop
+with no graphics card, depending on memory. Body tracking samples at
+12.5 Hz by default (gesture and posture live below 3 Hz), which halves the
+pose landmarker's work with oversampling to spare. On a machine with free
+memory for two MediaPipe processes, the two participants' videos are
+tracked concurrently, roughly halving the vision stages — the pipeline's
+dominant cost. Both knobs are in the config (`vision.body_fps`,
+`parallel_tracking`); `convlab benchmark` measures the runtime on your
+machine.
+
+Re-running is much faster than the first pass, because every slow stage is
+cached — face and body tracks, the transcript, voice activity, prosody and
+laughter. Adding a measure and re-running a corpus costs seconds per
+session, not minutes.
 
 ---
 
@@ -173,7 +183,7 @@ results/
 ├── measures_all.csv        every pair, every measure — this is the one to analyze
 ├── index.html              open this first: every session, what passed,
 │                          what was withheld, and every distribution
-├── codebook.csv            what all 132 measures mean
+├── codebook.csv            what all 161 measures mean
 ├── session_summary.csv     pass / review / fail per pair
 └── dyad012/
     ├── dashboard.html      the visual report
@@ -307,6 +317,51 @@ the real detectors on it, and scores them. All 29 checks pass:
 | Synchrony false positive | \|z\| 1.06 on independent signals (raw r was 0.32) |
 | Synchrony sensitivity | z 10.1, lag recovered exactly |
 
+## Benchmark
+
+`convlab benchmark` goes further than validation: it measures the
+recognizer's **word error rate** against scripted synthetic speech, runs the
+full pipeline end-to-end on real .mp4 files and scores the measured turn
+counts, backchannel counts, response latencies and question detection
+against the script's exact answer key, and times every stage with a cold
+and a warm cache. Results land in `workspace/benchmark/` as four CSVs and a
+readable `BENCHMARK.md`.
+
+Two honesty notes, stated in the report itself: synthetic speech is the
+system's *ceiling*, not its field performance, and the open measurement
+remains agreement with human coders on real dyads.
+
+---
+
+# Where the measures come from
+
+The catalogue is grounded in the conversation-science literature, most
+directly Cooney & Wheatley's *Conversation* chapter in the Handbook of
+Social Psychology (6th ed., 2025), which organizes the field's measurable
+constructs. Every measure's codebook entry carries its source citations, so
+a number in `measures_all.csv` traces to the paper that defined the
+construct. Among the constructs implemented from that review:
+
+- **Turn-gap norms** — the cross-linguistic ~200 ms modal gap and the ±1 s
+  band that contains nearly all transitions (Stivers et al. 2009; Heldner &
+  Edlund 2010), and fast responses as a connection signal (Templeton et
+  al. 2022, 2023).
+- **Backchannel function classes** — generic continuers vs. the specific
+  assessments that causally shape a partner's storytelling (Bavelas et
+  al. 2000; Jefferson 1984).
+- **Repair** — self-correction, other-initiated repair and news receipts as
+  the machinery of staying understood (Schegloff et al. 1977; Dingemanse et
+  al. 2015; Heritage 1985).
+- **Follow-up questions** — the specific question type that raises liking
+  (Huang et al. 2017; Yeomans et al. 2019).
+- **Macro-rhythm** — the 2–5 minute cycles in which partners trade blocks of
+  vocal activity (Dabbs 1983; Warner 1979–92).
+- **Shared reality** — partner language similarity and its growth across the
+  conversation (Rossignac-Milon et al. 2021; Ta et al. 2017).
+- **Openings and closings** — greeting exchanges and the pre-closing
+  negotiation by which conversations actually end (Schegloff & Sacks 1973;
+  Mastroianni et al. 2021).
+
 Validation audio is real speech rendered through the system voices and placed
 at exact known times, so the whole chain runs on material every model accepts
 while the answer stays known to the millisecond.
@@ -356,9 +411,10 @@ convlab gui                        # the desktop app
 convlab analyze recordings/ -o out/
 convlab analyze sessions.json -o out/     # explicit manifest
 convlab demo -o out/
-convlab validate                   # 21 ground-truth checks
+convlab validate                   # ground-truth checks (29+)
+convlab benchmark                  # accuracy incl. WER + cold/warm runtime
 convlab codebook -o docs/measures.md
-pytest                             # 152 tests, no models or media needed
+pytest                             # 341 tests, no models or media needed
 ```
 
 A manifest is the authoritative route when filenames aren't tidy, and it
@@ -386,7 +442,7 @@ probe → decode audio → align cameras → voice activity → recording qualit
                               coherence · learned voice model, HMM decoded)
       → turns → transcription → turns again
       → prosody · semantics · body · hesitations · laughter
-      → 132 measures → tables · codebook · QC · dashboard
+      → 161 measures → tables · codebook · QC · dashboard
 ```
 
 Attribution runs *after* face tracking so mouth movement can inform it. Turn
@@ -427,7 +483,7 @@ a common silent failure on lab Windows machines).
 
 - [`docs/HOW-IT-WORKS.md`](docs/HOW-IT-WORKS.md) — **start here**: full walkthrough of every stage and how each measure is defined
 - [`docs/METHODS.md`](docs/METHODS.md) — algorithms, thresholds, and their justification
-- [`docs/measures.md`](docs/measures.md) — the generated catalogue of all 132 measures
+- [`docs/measures.md`](docs/measures.md) — the generated catalogue of all 161 measures
 
 ---
 

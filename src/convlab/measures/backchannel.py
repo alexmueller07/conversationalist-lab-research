@@ -61,7 +61,12 @@ def backchannel_rate(ctx: AnalysisContext) -> dict[str, float]:
 @measure(
     id="backchannel_count",
     label="Backchannel count",
-    description="Number of acknowledgment tokens this person produced.",
+    description=(
+        "Number of acknowledgment tokens this person produced. A lower "
+        "bound: short tokens spoken over the partner are the easiest thing "
+        "in the recording to miss, and the recognizer drops some outright. "
+        "Comparable across sessions processed the same way; not exhaustive."
+    ),
     unit="count",
     level=PERSON_LEVEL,
     family=FAMILY,

@@ -3,7 +3,9 @@
 Built on Tkinter deliberately. It ships with Python on every platform, so
 the application adds nothing to the install that a research assistant has to
 troubleshoot -- which matters far more here than a more fashionable toolkit
-would. The window is plain; the work it drives is not.
+would. The window reads as a three-step form -- recordings, measures,
+analyze -- because that is the whole job; the results table and activity
+log below it report on how the job went.
 
 Three rules shape the implementation:
 
@@ -21,6 +23,7 @@ Three rules shape the implementation:
 
 from __future__ import annotations
 
+import os
 import queue
 import sys
 import threading
@@ -33,6 +36,7 @@ from typing import Any, Callable
 try:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
+    from tkinter import font as tkfont
 except ImportError as exc:  # pragma: no cover - headless install
     raise SystemExit(
         "convlab gui needs Tkinter, which is missing from this Python install.\n"
@@ -40,22 +44,29 @@ except ImportError as exc:  # pragma: no cover - headless install
         "Ubuntu run: sudo apt install python3-tk"
     ) from exc
 
-APP_TITLE = "convlab - conversation analysis"
+APP_NAME = "Conversationalist"
+APP_TAGLINE = "Conversation analysis for dyadic studies — Niedenthal Emotions Lab"
+APP_TITLE = f"{APP_NAME} — conversation analysis for dyadic studies"
 
 MODEL_DIR = Path.home() / ".convlab" / "models"
 """One model cache per user. Keeping it out of the results folder means
 changing where results go never re-downloads 27 MB of weights."""
 
 PALETTE = {
-    "bg": "#f6f7f9",
-    "panel": "#ffffff",
-    "text": "#0f172a",
-    "muted": "#64748b",
-    "accent": "#0f766e",
-    "ok": "#15803d",
-    "warn": "#b45309",
-    "fail": "#b91c1c",
-    "line": "#dfe3e8",
+    # Warm near-white ground with ink text, one badger-red accent for the
+    # UW lab identity, and verdict colors kept dark enough to stay legible
+    # against the white cards.
+    "bg": "#FAFAF7",
+    "panel": "#FFFFFF",
+    "text": "#1A1E23",
+    "muted": "#6B7280",
+    "accent": "#B0392E",
+    "accent_dark": "#8E2E25",
+    "accent_faint": "#F4E3E1",
+    "ok": "#166534",
+    "warn": "#B45309",
+    "fail": "#B91C1C",
+    "line": "#E5E1DA",
 }
 
 SKIPPABLE = (
@@ -66,6 +77,41 @@ SKIPPABLE = (
     ("semantics", "Analyze meaning", "Topics, coherence and long-range callbacks"),
     ("laughter", "Detect laughter", "Laughter and shared laughter"),
 )
+
+
+def _draw_icon(size: int = 32) -> tk.PhotoImage:
+    """Two overlapping speech bubbles in the accent color.
+
+    Drawn pixel-by-pixel with ``PhotoImage.put`` so the app carries no image
+    files and no imaging dependency. 32x32 is what title bars and taskbars
+    actually display, so nothing finer would survive scaling anyway.
+    """
+    image = tk.PhotoImage(width=size, height=size)
+
+    def bubble(x0: int, y0: int, x1: int, y1: int, color: str) -> None:
+        radius = 4
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                dx = max(x0 + radius - x, x - (x1 - 1 - radius), 0)
+                dy = max(y0 + radius - y, y - (y1 - 1 - radius), 0)
+                if dx * dx + dy * dy <= radius * radius + radius:
+                    image.put(color, (x, y))
+
+    def tail(x: int, y: int, color: str, leftward: bool) -> None:
+        for step, width in enumerate((4, 3, 2, 1)):
+            if leftward:
+                image.put(color, to=(x, y + step, x + width, y + step + 1))
+            else:
+                image.put(color, to=(x - width, y + step, x, y + step + 1))
+
+    # The partner's bubble sits behind in a lighter tint, ours in front in
+    # the full accent -- a two-voice mark for a two-person tool.
+    faded = "#D08C84"
+    bubble(2, 2, 20, 15, faded)
+    tail(5, 15, faded, leftward=True)
+    bubble(12, 12, 30, 25, PALETTE["accent"])
+    tail(27, 25, PALETTE["accent"], leftward=False)
+    return image
 
 
 # ----------------------------------------------------------------------
@@ -317,12 +363,19 @@ class App:
         self.worker: Worker | None = None
         self.dashboards: dict[str, str] = {}
         self.report_path: str = ""
+        self.verdicts: dict[str, str] = {}
 
         root.title(APP_TITLE)
         root.geometry("1180x900")
-        root.minsize(980, 700)
-        root.minsize(820, 620)
+        root.minsize(880, 640)
         root.configure(bg=PALETTE["bg"])
+        try:
+            # Kept as an attribute deliberately: Tk holds no reference of
+            # its own, and a garbage-collected PhotoImage blanks the icon.
+            self._icon = _draw_icon()
+            root.iconphoto(True, self._icon)
+        except tk.TclError:  # pragma: no cover - display without RGBA icons
+            pass
 
         self._init_style()
         self._build()
@@ -336,42 +389,75 @@ class App:
         # honours color options; the native themes ignore most of them.
         if "clam" in style.theme_names():
             style.theme_use("clam")
-        style.configure(".", background=PALETTE["bg"], foreground=PALETTE["text"])
+
+        # Segoe UI is the Windows system face and the lab machines run
+        # Windows; elsewhere the toolkit's own defaults keep the app from
+        # requesting a font the platform does not ship.
+        if sys.platform == "win32":
+            self.font_family, self.font_mono = "Segoe UI", "Consolas"
+        else:
+            self.font_family = tkfont.nametofont("TkDefaultFont").actual("family")
+            self.font_mono = tkfont.nametofont("TkFixedFont").actual("family")
+        family = self.font_family
+
+        style.configure(".", background=PALETTE["bg"],
+                        foreground=PALETTE["text"], font=(family, 10))
         style.configure("TFrame", background=PALETTE["bg"])
-        style.configure("Panel.TFrame", background=PALETTE["panel"],
-                        relief="solid", borderwidth=1)
-        style.configure("TLabel", background=PALETTE["bg"], font=("Segoe UI", 10))
-        style.configure("Panel.TLabel", background=PALETTE["panel"])
-        style.configure("H1.TLabel", font=("Segoe UI Semibold", 16))
-        style.configure("Muted.TLabel", foreground=PALETTE["muted"], font=("Segoe UI", 9))
-        style.configure("Section.TLabel", font=("Segoe UI Semibold", 10))
-        style.configure("TButton", font=("Segoe UI", 10), padding=(12, 6))
-        style.configure("Accent.TButton", font=("Segoe UI Semibold", 10),
-                        foreground="#ffffff", background=PALETTE["accent"],
-                        padding=(18, 8))
-        style.map("Accent.TButton",
-                  background=[("active", "#115e59"), ("disabled", "#94a3b8")])
-        style.configure("TCheckbutton", background=PALETTE["bg"], font=("Segoe UI", 10),
-                        indicatorbackground=PALETTE["panel"],
-                        indicatorforeground=PALETTE["accent"], focuscolor=PALETTE["bg"])
+        style.configure("Card.TFrame", background=PALETTE["panel"])
+        style.configure("TLabel", background=PALETTE["bg"], font=(family, 10))
+        style.configure("Wordmark.TLabel", font=(family, 20, "bold"))
+        style.configure("Muted.TLabel", foreground=PALETTE["muted"],
+                        font=(family, 9))
+        style.configure("Card.TLabel", background=PALETTE["panel"],
+                        font=(family, 10))
+        style.configure("CardHint.TLabel", background=PALETTE["panel"],
+                        foreground=PALETTE["muted"], font=(family, 9))
+        style.configure("Summary.TLabel", background=PALETTE["panel"],
+                        foreground=PALETTE["muted"], font=(family, 10))
+        # The step number renders as a small accent chip: padding turns the
+        # label's own background into the badge, no canvas drawing needed.
+        style.configure("StepNumber.TLabel", background=PALETTE["accent"],
+                        foreground="#FFFFFF", font=(family, 10, "bold"),
+                        padding=(7, 1))
+        style.configure("StepTitle.TLabel", background=PALETTE["panel"],
+                        font=(family, 11, "bold"))
+        style.configure("TButton", font=(family, 10), padding=(12, 6))
+        style.configure("Ghost.TButton", font=(family, 9), padding=(8, 3))
+        style.configure("Card.TCheckbutton", background=PALETTE["panel"],
+                        font=(family, 10),
+                        indicatorbackground="#FFFFFF",
+                        indicatorforeground=PALETTE["accent"],
+                        focuscolor=PALETTE["panel"])
         style.map(
-            "TCheckbutton",
+            "Card.TCheckbutton",
+            background=[("active", PALETTE["panel"])],
             indicatorbackground=[("selected", PALETTE["accent"]),
-                                 ("active", "#e6efee")],
-            indicatorforeground=[("selected", "#ffffff")],
+                                 ("active", PALETTE["accent_faint"])],
+            indicatorforeground=[("selected", "#FFFFFF")],
         )
-        style.configure("TEntry", padding=6)
+        style.configure("TEntry", padding=6, fieldbackground="#FFFFFF",
+                        bordercolor=PALETTE["line"],
+                        lightcolor=PALETTE["line"], darkcolor=PALETTE["line"])
+        style.map("TEntry", bordercolor=[("focus", PALETTE["accent"])],
+                  lightcolor=[("focus", PALETTE["accent"])],
+                  darkcolor=[("focus", PALETTE["accent"])])
         style.configure("Treeview", background=PALETTE["panel"],
                         fieldbackground=PALETTE["panel"],
                         foreground=PALETTE["text"], borderwidth=0,
-                        rowheight=24, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background=PALETTE["bg"],
+                        rowheight=26, font=(family, 9))
+        style.configure("Treeview.Heading", background=PALETTE["panel"],
                         foreground=PALETTE["muted"], borderwidth=0,
-                        font=("Segoe UI", 9, "bold"))
+                        relief="flat", font=(family, 9, "bold"))
+        style.map("Treeview.Heading",
+                  background=[("active", PALETTE["panel"])])
         style.map("Treeview", background=[("selected", PALETTE["accent"])],
-                  foreground=[("selected", "#ffffff")])
-        style.configure("Horizontal.TProgressbar", background=PALETTE["accent"],
-                        troughcolor="#e2e8f0", borderwidth=0, thickness=10)
+                  foreground=[("selected", "#FFFFFF")])
+        style.configure("Horizontal.TProgressbar",
+                        background=PALETTE["accent"],
+                        troughcolor="#ECE9E2", borderwidth=0, thickness=8)
+        style.configure("Vertical.TScrollbar", background="#D8D4CB",
+                        troughcolor=PALETTE["bg"], bordercolor=PALETTE["bg"],
+                        arrowcolor=PALETTE["muted"])
 
     # -- layout --------------------------------------------------------
     def _build(self) -> None:

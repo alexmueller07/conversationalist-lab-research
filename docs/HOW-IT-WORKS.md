@@ -1,7 +1,7 @@
 # How convlab works
 
 A complete walkthrough: what goes in, what comes out, every stage in
-between, and how each of the 132 measures is defined.
+between, and how each of the 161 measures is defined.
 
 This is the explanatory document. [`METHODS.md`](METHODS.md) holds the
 algorithmic detail and the justification for each threshold;
@@ -40,7 +40,7 @@ results/
 ├── index.html              the whole run: verdicts, links, distributions
 ├── measures_all.csv        one row per session x person x measure
 ├── measures_all_wide.csv   pivoted, for eyeballing
-├── codebook.csv            all 132 measures defined
+├── codebook.csv            all 161 measures defined
 ├── session_summary.csv     pass / review / fail per session
 └── <session_id>/
     ├── dashboard.html      visual report with synchronized video review
@@ -78,7 +78,7 @@ probe -> decode audio -> align cameras -> voice activity
       -> recording quality -> face tracking -> speaker attribution
       -> turns -> transcription -> turns again -> prosody -> semantics
       -> face signals -> body -> hesitations -> laughter
-      -> 132 measures -> tables, codebook, quality control, dashboard
+      -> 161 measures -> tables, codebook, quality control, dashboard
 ```
 
 Two orderings are deliberate and worth explaining:
@@ -551,7 +551,7 @@ which measures to discount, not to discard the session.
 
 ## 4. The measures
 
-132 measures across 14 families. Each is a registered function with a
+161 measures across 17 families. Each is a registered function with a
 declared identifier, unit, level of analysis and upstream requirements; the
 codebook is generated from that registry, so a column in the output can never
 be undocumented.

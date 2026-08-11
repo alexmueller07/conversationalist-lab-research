@@ -161,10 +161,18 @@ class BenchmarkReport:
             lines.append("")
 
         if self.runtime_rows:
-            cold = {r["stage"]: r["cold_s"] for r in self.runtime_rows}
-            warm = {r["stage"]: r["warm_s"] for r in self.runtime_rows}
-            total_cold = sum(v for v in cold.values() if np.isfinite(v))
-            total_warm = sum(v for v in warm.values() if np.isfinite(v))
+            stage_rows = [r for r in self.runtime_rows if r["stage"] != "TOTAL"]
+            total_row = next(
+                (r for r in self.runtime_rows if r["stage"] == "TOTAL"), None
+            )
+            total_cold = (
+                total_row["cold_s"] if total_row is not None
+                else sum(r["cold_s"] for r in stage_rows if np.isfinite(r["cold_s"]))
+            )
+            total_warm = (
+                total_row["warm_s"] if total_row is not None
+                else sum(r["warm_s"] for r in stage_rows if np.isfinite(r["warm_s"]))
+            )
             duration = next(
                 (r["media_s"] for r in self.runtime_rows if r.get("media_s")), None
             )
@@ -181,11 +189,15 @@ class BenchmarkReport:
                 "| stage | cold (s) | warm (s) | share of cold |",
                 "|---|---|---|---|",
             ]
-            for r in self.runtime_rows:
+            for r in stage_rows:
                 share = r["cold_s"] / total_cold if total_cold > 0 else 0.0
                 lines.append(
                     f"| {r['stage']} | {r['cold_s']:.1f} | {r['warm_s']:.1f} | "
                     f"{share:.0%} |"
+                )
+            if total_row is not None:
+                lines.append(
+                    f"| **TOTAL** | {total_cold:.1f} | {total_warm:.1f} | 100% |"
                 )
             lines.append("")
 
@@ -341,15 +353,31 @@ def benchmark_end_to_end(report: BenchmarkReport, out_dir: Path, seed: int,
     add("turn_count (dyad total)", truth_turns, measured_turns,
         tolerance=max(3.0, 0.15 * truth_turns))
 
+    # Backchannel counts through the full chain are a lower bound, and the
+    # benchmark says so instead of pretending otherwise. Attribution alone
+    # recovers ~0.74 of planted tokens (validation), but the recognizer
+    # then drops many short overlapped interjections outright -- "uh huh"
+    # under the partner's speech often never reaches the transcript. So the
+    # end-to-end criterion is a bracket, not a distance: no inflation
+    # (measured must not exceed truth by more than 30%), and recall of at
+    # least a quarter. The measured/truth ratio is the number to watch.
     truth_bc = len(synth.backchannels)
     measured_bc = sum(
         values.get(("backchannel_count", p), 0) or 0 for p in ("A", "B")
     )
-    # Recall on backchannels is bounded near 0.74 (see validation), so the
-    # tolerance is asymmetric-by-construction: an undercount within that
-    # recall is expected, an overcount is not.
-    add("backchannel_count (dyad total)", truth_bc, measured_bc,
-        tolerance=max(2.0, 0.45 * truth_bc))
+    error_bc = abs(measured_bc - truth_bc)
+    report.measure_rows.append({
+        "measure": "backchannel_count (dyad total; lower bound by design)",
+        "truth": float(truth_bc), "measured": float(measured_bc),
+        "error": float(error_bc), "tolerance": float("nan"),
+        "passed": bool(0.25 * truth_bc <= measured_bc <= 1.3 * truth_bc),
+    })
+    report.notes.append(
+        "Backchannel counts are a lower bound end-to-end: short overlapped "
+        "tokens are often dropped by the recognizer even when attribution "
+        "hears them. Compare sessions on the same footing rather than "
+        "reading the count as exhaustive."
+    )
 
     truth_fto = float(np.median(synth.floor_transfer_offsets()))
     fto_values = [
