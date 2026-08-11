@@ -971,6 +971,29 @@ correct, which is where silent errors live: a sign flip, a boundary
 convention that shifts every latency by a frame, a threshold that suppresses
 a whole class of event.
 
+### The benchmark
+
+`convlab benchmark` extends validation with the three numbers it never
+produced, written to `workspace/benchmark/` as CSVs plus a readable
+`BENCHMARK.md`:
+
+- **Word error rate.** The synthetic scripts are known to the letter, so the
+  recognizer can be scored as a recognizer. First measurement: **WER 0.043**
+  on the TTS voices — the clean-speech ceiling, not field performance.
+- **End-to-end truth scoring.** The full pipeline runs on real .mp4
+  containers and the measured values are compared against the script's
+  answer key. First measurement: turn count exact, median response latency
+  within 10 ms, planted questions all detected. Backchannel counts came out
+  at a fraction of truth — not a pipeline bug but a transcription reality:
+  short tokens spoken over the partner often never reach the transcript, so
+  the count is documented as a **lower bound** in the codebook and the
+  benchmark checks a bracket (no inflation; bounded undercount) rather than
+  pretending precision it does not have.
+- **Runtime, cold and warm.** Every stage timed with an empty cache and
+  again with a warm one. First measurement: 95 s of media took 132 s cold
+  (with placeholder video, so vision is undercosted) and **10 s warm** —
+  the caches turn a re-analysis into seconds.
+
 ---
 
 ## 9. What to be careful about
