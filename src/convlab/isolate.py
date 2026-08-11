@@ -43,6 +43,33 @@ because CTranslate2's arena belongs to the model object rather than to the
 module."""
 
 
+def _write_request(
+    stage: str,
+    session: Session,
+    config: Config,
+    output_root: str | Path,
+    persons: list[str] | None,
+    suffix: str = "",
+) -> Path:
+    payload = {
+        "stage": stage,
+        "session_id": session.session_id,
+        "views": {role: str(path) for role, path in session.views.items()},
+        "metadata": dict(session.metadata),
+        "config": config.to_dict(),
+        "output_root": str(output_root),
+    }
+    if persons is not None:
+        payload["persons"] = list(persons)
+
+    request = (
+        Path(output_root) / session.session_id / f".isolate_{stage}{suffix}.json"
+    )
+    request.parent.mkdir(parents=True, exist_ok=True)
+    request.write_text(json.dumps(payload), encoding="utf-8")
+    return request
+
+
 def run_isolated(
     stage: str,
     session: Session,
@@ -59,19 +86,7 @@ def run_isolated(
     if stage not in ISOLATABLE:
         raise ValueError(f"{stage!r} is not isolatable; expected one of {ISOLATABLE}")
 
-    payload = {
-        "stage": stage,
-        "session_id": session.session_id,
-        "views": {role: str(path) for role, path in session.views.items()},
-        "metadata": dict(session.metadata),
-        "config": config.to_dict(),
-        "output_root": str(output_root),
-    }
-
-    request = Path(output_root) / session.session_id / f".isolate_{stage}.json"
-    request.parent.mkdir(parents=True, exist_ok=True)
-    request.write_text(json.dumps(payload), encoding="utf-8")
-
+    request = _write_request(stage, session, config, output_root, None)
     try:
         completed = subprocess.run(
             [sys.executable, "-m", "convlab.isolate", str(request)],
@@ -93,6 +108,74 @@ def run_isolated(
         )
         return False
     return True
+
+
+def run_isolated_concurrent(
+    stage: str,
+    session: Session,
+    config: Config,
+    output_root: str | Path,
+    persons: list[str],
+    timeout: float = 7200.0,
+) -> bool:
+    """Track each person in their own child process, all at once.
+
+    The two views are independent files landmarked by independent models,
+    so nothing is shared between the children but the CPU -- and tracking
+    is compute-bound at a handful of threads per process, which leaves a
+    modern machine with cores to spare. Wall-clock for the stage roughly
+    halves. True only if *every* child wrote its cache; any failure sends
+    the caller down the serial path, which recomputes safely because the
+    cache writes are atomic.
+    """
+    if stage not in ISOLATABLE:
+        raise ValueError(f"{stage!r} is not isolatable; expected one of {ISOLATABLE}")
+
+    requests = [
+        _write_request(stage, session, config, output_root, [p], suffix=f"_{p}")
+        for p in persons
+    ]
+    children: list[subprocess.Popen] = []
+    try:
+        for request in requests:
+            children.append(
+                subprocess.Popen(
+                    [sys.executable, "-m", "convlab.isolate", str(request)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+            )
+    except OSError as exc:
+        log.warning("could not start parallel %s children (%s)", stage, exc)
+        for child in children:
+            child.kill()
+        for request in requests:
+            request.unlink(missing_ok=True)
+        return False
+
+    ok = True
+    try:
+        for child, person in zip(children, persons):
+            try:
+                _, stderr = child.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.communicate()
+                log.warning("parallel %s for %s timed out", stage, person)
+                ok = False
+                continue
+            if child.returncode != 0:
+                tail = (stderr or "").strip().splitlines()[-3:]
+                log.warning(
+                    "parallel %s for %s exited %d. %s",
+                    stage, person, child.returncode, " / ".join(tail),
+                )
+                ok = False
+    finally:
+        for request in requests:
+            request.unlink(missing_ok=True)
+    return ok
 
 
 # ----------------------------------------------------------------------
@@ -124,6 +207,8 @@ def _run_request(path: Path) -> int:
     if stage in ("face_tracking", "body_tracking"):
         from convlab.session import CLOSE_VIEW, PERSONS
 
+        wanted_persons = tuple(payload.get("persons") or PERSONS)
+
         is_face = stage == "face_tracking"
         model = models.ensure(
             "face_landmarker" if is_face else "pose_landmarker", config.model_dir
@@ -133,7 +218,7 @@ def _run_request(path: Path) -> int:
         else:
             from convlab.vision.tracker import track_body as track
 
-        for person in PERSONS:
+        for person in wanted_persons:
             role = session.close_view(person)
             if role is None:
                 continue

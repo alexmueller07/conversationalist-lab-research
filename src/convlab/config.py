@@ -406,8 +406,21 @@ class VisionConfig:
     """Face and body tracking."""
 
     fps: float = 25.0
-    """Target analysis rate for video. Frames are sampled to this rate;
-    nods (1-4 Hz) and gaze shifts are well inside Nyquist at 25 Hz."""
+    """Target analysis rate for face tracking. Frames are sampled to this
+    rate; nods (1-4 Hz) and gaze shifts are well inside Nyquist at 25 Hz."""
+
+    body_fps: float = 12.5
+    """Analysis rate for body tracking, which is roughly half the vision
+    runtime. The body signals -- gesturing, postural shifts, self-touch --
+    live below 3 Hz, so 12.5 Hz still oversamples them fourfold while
+    halving the pose landmarker's frame count. Raise it to ``fps`` if a
+    study ever needs fast limb kinematics."""
+
+    max_side: int = 640
+    """Frames are downscaled so their longer side is at most this many
+    pixels before landmarking. 640 is MediaPipe's sweet spot: detection is
+    stable and decoding stays cheap. Raising it increases runtime roughly
+    with pixel count and rarely changes the signals."""
 
     min_face_confidence: float = 0.5
     min_tracking_confidence: float = 0.5
@@ -689,6 +702,23 @@ class Config:
     isolate_below_mb: float = 3000.0
     """Available-memory threshold under which tracking is isolated
     automatically."""
+
+    parallel_tracking: bool | None = None
+    """Track the two participants' videos in two concurrent child
+    processes. Vision is the pipeline's wall-clock dominator and the two
+    views are independent, so this roughly halves the tracking stages on a
+    machine with the memory for two MediaPipe processes at once.
+
+    ``None`` decides from available memory (see ``parallel_min_free_mb``);
+    True or False forces it. Requires the cache, which is how the children
+    hand their results back."""
+
+    parallel_min_free_mb: float = 3200.0
+    """Available memory needed before tracking runs two children at once.
+    Each child commits roughly 1.3 GB (the MediaPipe import plus decode
+    buffers), so the automatic policy asks for two of those with headroom.
+    On a machine below the threshold tracking falls back to the serial
+    path, isolated or not by the existing memory policy."""
 
     # ------------------------------------------------------------------
     @classmethod

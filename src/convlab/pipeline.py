@@ -255,9 +255,6 @@ def analyze_session(
     # ---- 4. voice activity --------------------------------------------
     speech_prob = np.zeros(n_frames)
     with stage_ctx("vad") as stage:
-        vad_path = models.ensure("silero_vad", model_dir)
-        vad = SileroVAD(vad_path, sample_rate)
-
         # Voice activity is taken as the per-frame maximum over the two
         # close-up tracks, not from the wide view. Each person is loudest in
         # their own camera's microphone, so the maximum has the best chance of
@@ -271,11 +268,27 @@ def analyze_session(
         sources = [CLOSE_VIEW[p] for p in PERSONS if CLOSE_VIEW[p] in aligned]
         if not sources:
             sources = [next(iter(aligned))]
-        probs = vad.probabilities([aligned[role] for role in sources])
-        grids = [
-            probability_to_grid(row, vad.chunk_hz, n_frames, frame_hz) for row in probs
+
+        def _compute_vad() -> dict[str, np.ndarray]:
+            vad_path = models.ensure("silero_vad", model_dir)
+            vad = SileroVAD(vad_path, sample_rate)
+            probs = vad.probabilities([aligned[role] for role in sources])
+            grids = [
+                probability_to_grid(row, vad.chunk_hz, n_frames, frame_hz)
+                for row in probs
+            ]
+            return {"speech_prob": np.maximum.reduce(grids)}
+
+        # Cached on the source files plus every config section upstream of
+        # the probabilities. A re-run to add measures then skips the 19k
+        # ONNX calls and goes straight to the grid.
+        vad_key = make_key(
+            fingerprints, cfg.vad.__dict__, cfg.audio.__dict__,
+            cfg.sync.__dict__, "vad",
+        )
+        speech_prob = workspace.cached_npz("vad", vad_key, _compute_vad)[
+            "speech_prob"
         ]
-        speech_prob = np.maximum.reduce(grids)
         stage.report.detail = (
             f"max over {', '.join(sources)}; speech {np.mean(speech_prob > 0.5):.1%}"
         )
@@ -432,15 +445,33 @@ def analyze_session(
     # ---- 10. prosody ---------------------------------------------------
     if "prosody" not in skip:
         with stage_ctx("prosody") as stage:
+            # Keyed like the transcript: source files plus the config
+            # sections that determine the speech regions. Praat's two-pass
+            # pitch extraction is a solid minute per session that a
+            # measures-only re-run should not pay twice.
+            prosody_key = make_key(
+                fingerprints, cfg.prosody.__dict__, cfg.attribution.__dict__,
+                cfg.vad.__dict__, "prosody",
+            )
             prosody = {}
             for person in PERSONS:
                 role = CLOSE_VIEW[person]
                 if role not in aligned:
                     continue
-                prosody[person] = analyze_prosody(
-                    aligned[role], context.attribution.speech[person], sample_rate,
-                    n_frames, frame_hz, cfg.prosody, person=person,
+
+                def _compute_prosody(person=person, role=role) -> dict[str, np.ndarray]:
+                    return _prosody_to_arrays(
+                        analyze_prosody(
+                            aligned[role], context.attribution.speech[person],
+                            sample_rate, n_frames, frame_hz, cfg.prosody,
+                            person=person,
+                        )
+                    )
+
+                data = workspace.cached_npz(
+                    f"prosody_{person}", prosody_key, _compute_prosody
                 )
+                prosody[person] = _arrays_to_prosody(data, person)
                 for warning in prosody[person].warnings:
                     context.note(f"prosody {person}: {warning}")
             context.prosody = prosody or None
@@ -557,20 +588,46 @@ def analyze_session(
     # ---- 14. laughter --------------------------------------------------
     if "laughter" not in skip:
         with stage_ctx("laughter") as stage:
-            yamnet = models.ensure("yamnet", model_dir)
-            close = {p: aligned[CLOSE_VIEW[p]] for p in PERSONS if CLOSE_VIEW[p] in aligned}
-            laughter = detect_laughter(
-                close, sample_rate, str(yamnet), energy=energies, frame_hz=frame_hz,
-                calibration_offset_db=context.attribution.calibration.offset_db,
-                colaughter_window_s=cfg.synchrony.colaughter_window_s,
+
+            def _compute_laughter() -> dict:
+                yamnet = models.ensure("yamnet", model_dir)
+                close = {
+                    p: aligned[CLOSE_VIEW[p]]
+                    for p in PERSONS if CLOSE_VIEW[p] in aligned
+                }
+                found = detect_laughter(
+                    close, sample_rate, str(yamnet), energy=energies,
+                    frame_hz=frame_hz,
+                    calibration_offset_db=context.attribution.calibration.offset_db,
+                    colaughter_window_s=cfg.synchrony.colaughter_window_s,
+                )
+                return {
+                    "available": bool(found.available),
+                    "warnings": list(found.warnings),
+                    "by_person": {
+                        p: [[float(s), float(e)] for s, e in segs]
+                        for p, segs in found.by_person.items()
+                    },
+                }
+
+            laughter_key = make_key(
+                fingerprints, cfg.attribution.__dict__, cfg.vad.__dict__,
+                {"colaughter_window_s": cfg.synchrony.colaughter_window_s},
+                "laughter",
             )
-            if laughter.available:
-                context.laughter = laughter.by_person
+            payload = workspace.cached_json(
+                "laughter", laughter_key, _compute_laughter
+            )
+            if payload["available"]:
+                context.laughter = {
+                    p: Segments.from_pairs([tuple(pair) for pair in pairs])
+                    for p, pairs in payload["by_person"].items()
+                }
                 stage.report.detail = ", ".join(
-                    f"{p}:{len(s)}" for p, s in laughter.by_person.items()
+                    f"{p}:{len(list(s))}" for p, s in context.laughter.items()
                 )
             else:
-                stage.skip("; ".join(laughter.warnings) or "unavailable")
+                stage.skip("; ".join(payload["warnings"]) or "unavailable")
 
     # ---- 15. measures --------------------------------------------------
     with stage_ctx("measures") as stage:
@@ -648,6 +705,37 @@ def _arrays_to_face(data: dict[str, np.ndarray], role: str):
     )
 
 
+def _prosody_to_arrays(track) -> dict[str, np.ndarray]:
+    return {
+        "f0_hz": track.f0_hz,
+        "intensity_db": track.intensity_db,
+        "frame_hz": np.array([track.frame_hz]),
+        "scalars": np.array([
+            track.f0_floor, track.f0_ceiling, track.jitter_local,
+            track.shimmer_local, track.voiced_fraction,
+        ]),
+        "warnings": np.array(track.warnings, dtype="U256"),
+    }
+
+
+def _arrays_to_prosody(data: dict[str, np.ndarray], person: str):
+    from convlab.speech.prosody import ProsodyTrack
+
+    scalars = data["scalars"]
+    return ProsodyTrack(
+        person=person,
+        f0_hz=data["f0_hz"],
+        intensity_db=data["intensity_db"],
+        frame_hz=float(data["frame_hz"][0]),
+        f0_floor=float(scalars[0]),
+        f0_ceiling=float(scalars[1]),
+        jitter_local=float(scalars[2]),
+        shimmer_local=float(scalars[3]),
+        voiced_fraction=float(scalars[4]),
+        warnings=[str(w) for w in data["warnings"].tolist()],
+    )
+
+
 def _should_isolate(cfg: Config) -> bool:
     if cfg.isolate_tracking is not None:
         return bool(cfg.isolate_tracking)
@@ -655,6 +743,18 @@ def _should_isolate(cfg: Config) -> bool:
 
     available = available_memory_mb()
     return available is not None and available < cfg.isolate_below_mb
+
+
+def _should_parallelize(cfg: Config, n_persons: int) -> bool:
+    """Two tracking children at once, when memory genuinely allows it."""
+    if n_persons < 2:
+        return False
+    if cfg.parallel_tracking is not None:
+        return bool(cfg.parallel_tracking)
+    from convlab.system import available_memory_mb
+
+    available = available_memory_mb()
+    return available is not None and available >= cfg.parallel_min_free_mb
 
 
 def _tracking_in_subprocess(
@@ -666,18 +766,39 @@ def _tracking_in_subprocess(
     wanted: list[tuple[str, str]],
     context: AnalysisContext,
 ) -> bool:
-    """Populate this stage's caches from a child process when memory is tight.
+    """Populate this stage's caches from child processes when that helps.
 
-    Returns True if a child ran. Doing nothing is always safe: the caller
-    falls through to computing in-process, which is what happens when the
-    caches are already warm or when memory is plentiful.
+    Two reasons to leave the parent process, decided independently. With
+    memory to spare, the two participants' videos are tracked in two
+    *concurrent* children -- vision dominates the pipeline's wall-clock and
+    the views are independent, so the stage roughly halves. With memory
+    tight, tracking runs in one child at a time so the MediaPipe import is
+    reclaimed on exit.
+
+    Returns True if children produced the caches. Doing nothing is always
+    safe: the caller falls through to computing in-process, which is what
+    happens when the caches are already warm.
     """
-    if not cfg.cache or not _should_isolate(cfg):
+    if not cfg.cache:
         return False
     # Nothing to do if every cache entry this stage would write already exists.
     if all(
         any(workspace.cache_dir.glob(f"{name}__{key}*")) for name, key in wanted
     ):
+        return False
+
+    persons = [name.split("_", 1)[1] for name, _ in wanted]
+    if _should_parallelize(cfg, len(persons)):
+        from convlab.isolate import run_isolated_concurrent
+
+        log.info("tracking both views concurrently for %s", stage)
+        if run_isolated_concurrent(stage, session, cfg, output_root, persons):
+            return True
+        context.note(
+            f"parallel {stage} failed; falling back to the serial path"
+        )
+
+    if not _should_isolate(cfg):
         return False
 
     from convlab.isolate import run_isolated
