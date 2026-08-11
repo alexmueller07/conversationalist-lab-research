@@ -263,6 +263,20 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0 if report.passed else 1
 
 
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    from convlab.benchmark import run_benchmark
+
+    report = run_benchmark(
+        output_dir=Path(args.output), seeds=tuple(args.seeds),
+        quick=args.quick, model_dir=args.model_dir,
+    )
+    print(report.render_markdown())
+    print(f"written to {Path(args.output) / 'BENCHMARK.md'}")
+    failed = [r for r in report.accuracy_rows if not r["passed"]]
+    failed += [r for r in report.measure_rows if not r["passed"]]
+    return 1 if failed else 0
+
+
 # ----------------------------------------------------------------------
 
 
@@ -320,6 +334,17 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--quick", action="store_true",
                           help="fewer seeds and no transcription")
     validate.set_defaults(func=cmd_validate)
+
+    bench = sub.add_parser(
+        "benchmark",
+        help="accuracy (incl. ASR word error rate) and runtime, cold and warm",
+    )
+    bench.add_argument("-o", "--output", default="workspace/benchmark")
+    bench.add_argument("--seeds", type=int, nargs="*", default=[3, 7, 11, 17])
+    bench.add_argument("--quick", action="store_true",
+                       help="fewer seeds; skips the slowest parts")
+    bench.add_argument("--model-dir", default="models")
+    bench.set_defaults(func=cmd_benchmark)
 
     return parser
 
