@@ -217,30 +217,42 @@ class TrackingPool:
     def wait(self, stage: str) -> bool:
         """Block until every job for ``stage`` has finished.
 
-        Jobs for other stages keep running. Returns True when all of this
-        stage's jobs wrote their caches.
+        Jobs belonging to other stages keep running -- that is the point of
+        the pool, and it is what lets body tracking carry on through
+        transcription while the face stage is being joined here.
+
+        Returns True when every job for this stage wrote its cache. False
+        means the caller should compute in-process, which is always safe.
         """
-        while any(j.stage == stage for j in self._pending + self._running):
-            # Prefer to reap a job of the stage being waited on; if none of
-            # them is running yet, reap whatever finishes and refill, which
-            # is what promotes a queued job of this stage into a slot.
-            target = [j for j in self._running if j.stage == stage]
-            for job in target or list(self._running):
-                self._reap(job)
-                break
+        while self._outstanding(stage):
+            waiting_on = [j for j in self._running if j.stage == stage]
+            if waiting_on:
+                self._reap(waiting_on[0])
+            elif self._running:
+                # This stage's jobs are still queued behind a full set of
+                # slots. Reap whatever is running to free one, then refill;
+                # the next pass finds one of ours in flight.
+                self._reap(self._running[0])
             else:
-                # Nothing running at all but jobs still pending: a start()
-                # failed for every slot. Give up on them.
-                for job in [j for j in self._pending if j.stage == stage]:
-                    self._pending.remove(job)
-                    job.request.unlink(missing_ok=True)
-                    job.done = True
-                    self._finished.append(job)
+                # Nothing is running and jobs remain, which means every
+                # attempt to start one failed. Abandon them so the caller
+                # falls through to computing in-process rather than looping.
+                self._abandon(stage)
                 break
             self.start()
 
         results = [j for j in self._finished if j.stage == stage]
         return bool(results) and all(j.ok for j in results)
+
+    def _outstanding(self, stage: str) -> bool:
+        return any(j.stage == stage for j in self._pending + self._running)
+
+    def _abandon(self, stage: str) -> None:
+        for job in [j for j in self._pending if j.stage == stage]:
+            self._pending.remove(job)
+            job.request.unlink(missing_ok=True)
+            job.done = True
+            self._finished.append(job)
 
     def __enter__(self) -> "TrackingPool":
         self.start()
