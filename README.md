@@ -145,8 +145,12 @@ parse — not forty minutes later.
 
 **3. Choose where results go** (or accept the default).
 
-**4. Untick anything you don't need.** *Track body* is the slowest stage;
-turning it off roughly halves the runtime.
+**4. Untick anything you don't need, and set the Speed.** Face and body
+tracking together are about 93 % of the runtime and cost roughly the same as
+each other, so turning *Track body* off roughly halves a run. **Fastest**
+runs all four tracking jobs at once and needs about 1.5 GB free — close other
+applications first. **Automatic** picks from the memory available when the
+run starts, which on a busy laptop is often one or two.
 
 **5. Click Analyze.** Progress and a running log appear as it works. **Stop**
 is safe at any point — it finishes the current step and leaves valid output.
@@ -220,8 +224,11 @@ results/
 ├── session_summary.csv     pass / review / fail per pair
 └── dyad012/
     ├── dashboard.html      the visual report
+    ├── transcript.txt      the whole conversation, timestamped, for reading
     ├── tables/turns.csv    every turn, with its text and timing
     ├── tables/events.csv   nods, smiles, laughs, interruptions, callbacks
+    ├── tables/nods.csv     one row per nod: cycles, magnitude, speaking or
+    │                       listening — for modelling nods individually
     ├── timeline.parquet    frame-level signals, for re-analysis
     ├── qc.json             every quality check and its result
     └── manifest.json       exact settings used, for reproducibility
