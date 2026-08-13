@@ -231,12 +231,20 @@ TRANSCRIPT_JS = r"""
   const search = document.getElementById("tx-search");
   const count = document.getElementById("tx-count");
   const total = D.turns.length;
+
+  // Search what is on the screen. The turn's own text and its word list
+  // normally say the same thing, but not always -- a vocabulary correction
+  // rewrites the words -- and searching the one that is not displayed
+  // produces the worst possible result: the reader can see the phrase and
+  // the box tells them it is not there. Both are searched.
+  const haystack = D.turns.map(tn =>
+    ((tn.w || []).map(w => w.w).join(" ") + " " + (tn.x || "")).toLowerCase());
+
   if(search) search.oninput = () => {
     const q = search.value.trim().toLowerCase();
     let shown = 0;
     rows.forEach((r, i) => {
-      const text = (D.turns[i].x || (D.turns[i].w || []).map(w => w.w).join(" ")).toLowerCase();
-      const hit = !q || text.includes(q);
+      const hit = !q || haystack[i].includes(q);
       r.classList.toggle("hidden", !hit);
       if(hit) shown++;
     });
