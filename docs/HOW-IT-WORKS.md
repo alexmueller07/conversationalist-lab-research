@@ -453,9 +453,32 @@ vocal register, which is largely anatomy.
 ### 3.8 Vision
 
 MediaPipe Tasks: 478 face landmarks, 52 expression coefficients, a head-pose
-matrix, and 33 body landmarks. Tracking runs in a child process when memory
-is short, because importing the runtime commits ~790 MB that garbage
-collection cannot return.
+matrix, and 33 body landmarks.
+
+**This is 93 % of the runtime**, so how it is scheduled matters more than
+anything else in the pipeline. A session has four independent tracking jobs —
+a face track and a body track for each participant — and none of them depends
+on anything else that happens here. All four are therefore started *before*
+the audio stages, in child processes, and each is joined only at the stage
+that first reads its result. Body tracking runs through transcription,
+prosody and semantics rather than queueing behind them.
+
+Two details are load-bearing. Child output goes to a **file, not a pipe**:
+a pipe holds about 64 KB before a write blocks, MediaPipe's imports are
+talkative, and nothing drains those pipes between start and join — the first
+version of this used pipes and every run hung during the children's imports,
+at 11 MB resident and zero CPU, with no error message. And the worker budget
+models **one expensive child plus cheap ones**, because that is what it
+measures as: the first holds about 520 MB and each further one about 200,
+since the runtime's images are shared between processes. The previous policy
+charged every child the full amount, so it demanded 5 GB before it would run
+even two and never ran more than one on the machine it was written for.
+
+Pose is tracked from the **close-up** views, not the wide one. A wide shot
+would require guessing which body belongs to whom from seating position, and
+a silent left/right mix-up would swap two participants' entire body profile.
+The cost is that a tight head-and-shoulders framing may not show the torso,
+which surfaces as low coverage and withheld measures.
 
 Pose is tracked from the **close-up** views, not the wide one. A wide shot
 would require guessing which body belongs to whom from seating position, and
@@ -735,19 +758,56 @@ their difference is reported as a third.
 **Mutual gaze** is a dyad-level measure: both looking at once, with episodes
 required to last at least 300 ms so coincidental alignments are excluded.
 
-### Head (6)
+### Head (20)
 
-**A nod is an oscillation, not a dip.** Head pitch is band-passed to
-0.8–4 Hz, enveloped, and a candidate is kept only if it completes at least
-1.2 cycles. Requiring periodicity is what separates agreement from a glance
-downward, and the orthogonal axis is compared so a diagonal head roll is not
-counted as both a nod and a shake.
+This family was rebuilt to answer the question an RA actually answers when
+they code a tape: not "how often did they nod" but "how many times, how long
+was each one, and were they listening at the time".
 
-Measured: **precision 1.00, recall 1.00**, with **zero** false positives from
-single dips, from head shakes, or from slow postural drift.
+**A nod is measured in cycles.** Following Mori, Den & Jokinen (2025), who
+annotated 9,223 nods, a *cycle* is one consecutive up-and-down movement of
+the head, and a nod's **length** is how many cycles it ran to — so *single*,
+*double* and *triple* are exact rather than impressionistic. Head pitch is
+smoothed, cut at inflection points, and each half-cycle is admitted if its
+implied frequency sits in 0.8–5 Hz (from Hadar et al.'s 1983 measurement of
+conversational head movement) and its peak-to-trough excursion clears the
+amplitude bar. Contiguous admitted half-cycles chain into one nod; a pause
+longer than 200 ms starts a new one.
 
-**Nod rate while listening** is normalized by the partner's speaking time —
-the visual counterpart of a vocal backchannel.
+**Starting a nod costs more than continuing one.** Mori et al. found nod
+magnitude declining from a nod's first cycle to its last — real nods taper —
+so a single threshold amputates the quiet end of a long nod and reports a
+triple as a single. Starting requires 2.0°, continuing requires half that,
+and a run that never reaches the onset bar is not a nod at all.
+
+**One unreturned movement is not counted**, even though their scheme allows
+it: their annotations were human-confirmed and these are not, and a head that
+goes down and stays down is indistinguishable from a slump.
+
+**Calibrated against the published distribution.** On the lab's sixteen test
+recordings the detector finds **42 % single nods and 98 % at five cycles or
+fewer**, against Mori et al.'s 42 % and "more than 95 %". That is evidence of
+cutting nods at the right joints — *not* evidence of agreeing with a human
+coder nod-for-nod, which nobody has measured yet.
+
+**Every nod is labelled speaking, listening, or neither**, from what its
+producer was doing at its midpoint. This is not a refinement: Poggi, D'Errico
+& Vincze (2010) organise their whole typology of nods by that role, and
+McClave (2000) shows speakers use head movement for intensification and for
+marking quoted speech — work unrelated to the listener's acknowledgement.
+Summing the two gives a number about neither.
+
+Measured against synthetic traces: **precision 1.00, recall 1.00, and cycle
+counts correct on every planted nod**, with zero false positives from single
+dips, from head shakes, or from slow postural drift.
+
+**Shakes** use the same machinery on the yaw axis with a wider amplitude bar,
+because yaw picks up every reorientation toward and away from the partner and
+those are not disagreement.
+
+Per-nod rows — length, magnitude, frequency and role — are written to
+`tables/nods.csv`, so nod-level models are possible rather than only
+per-person aggregates.
 
 ### Facial expression (8)
 
@@ -910,7 +970,7 @@ while whether its statistics can be trusted is a matter of count.
 
 ---
 
-## 7. The review player
+## 7. The review player and the transcript
 
 The report can describe what the pipeline believed, but a number cannot show
 you a mistake. The dashboard therefore plays both participants' video side by
@@ -921,6 +981,28 @@ gap and the first callback.
 
 This exists because of the flickering speaker track described above. No
 summary statistic revealed it; ten seconds of watching would have.
+
+**The transcript is a section of its own.** It used to be a single line under
+the video — whatever turn the playhead was inside, cut off at 160 characters.
+That is enough to check that attribution is pointing at the right person and
+nothing else, and it is not enough to read the conversation, to find where
+something was said, or to judge whether the transcription is any good. All
+three are things the lab needs to do.
+
+Now every turn is listed, in order, with times and speaker colours. It
+follows playback and scrolls itself, any line jumps the video there, and a
+search box filters it. Two things are marked rather than hidden:
+
+- Words the recognizer was **unsure of** are underlined, so a transcription
+  problem is distinguishable at a glance from a conversation problem.
+- Phrases the vocabulary pass **rewrote** are highlighted and carry what was
+  originally heard, with a table listing every one and its match score. A
+  correction pass is a machine that edits data; it does not belong in a study
+  without an audit trail.
+
+The running caption under the video now shows three turns rather than one,
+and the whole transcript is also written to `transcript.txt` for reading and
+marking up outside a browser.
 
 ---
 

@@ -144,38 +144,84 @@ def validate_sync(report: ValidationReport, seed: int = 0) -> None:
 
 
 def validate_nods(report: ValidationReport, seed: int = 0) -> None:
-    """Nods must be found, and non-periodic movement must not be."""
+    """Nods must be found, counted to the right length, and not invented.
+
+    Length is scored as well as detection, because the length distribution
+    is what the head measures are now built on: reporting a triple as a
+    single is not a small error, it moves the nod between two of the classes
+    the report tabulates.
+    """
     cfg = VisionConfig()
     hz = 100.0
     rng = np.random.default_rng(seed)
 
+    def half_cycles(x, i0, cycles, freq, amplitude):
+        """Plant an exact number of half-cycles, starting and ending at rest.
+
+        A windowed sinusoid cannot be used to score cycle counts: its taper
+        suppresses the first and last half-cycle below any amplitude bar, so
+        a three-cycle stimulus is legitimately found as two and the check
+        would be measuring the stimulus rather than the detector.
+        """
+        span = int(round(hz / (2.0 * freq)))
+        add = np.zeros(x.size)
+        i = i0
+        for k in range(int(round(cycles * 2))):
+            if i + span > x.size:
+                break
+            t = np.linspace(0.0, np.pi, span, endpoint=False)
+            add[i:i + span] = amplitude * (
+                (1.0 - np.cos(t)) / 2.0 if k % 2 == 0 else (1.0 + np.cos(t)) / 2.0
+            )
+            i += span
+        # The movement holds where it ended. For a whole number of cycles
+        # that is back at rest and changes nothing; for a half-cycle it is
+        # the head having moved and stayed there, which is the whole point
+        # of the single-dip check. Snapping instantly back to rest instead
+        # would plant a second, very fast half-cycle and make the stimulus a
+        # nod rather than a dip.
+        if i > i0:
+            add[i:] = add[i - 1]
+        x += add
+
     def trace(events, kind="nod"):
         n = int(60 * hz)
         t = np.arange(n) / hz
+        # Slow postural drift plus tracker noise, under everything.
         pitch = 6.0 * np.sin(2 * np.pi * 0.05 * t) + rng.normal(0, 0.3, n)
         yaw = 5.0 * np.sin(2 * np.pi * 0.07 * t + 2) + rng.normal(0, 0.3, n)
         for start, cycles, freq, amplitude in events:
-            i0, i1 = int(start * hz), int((start + cycles / freq) * hz)
-            i1 = min(i1, n)
-            tt = np.arange(i1 - i0) / hz
-            osc = amplitude * np.sin(2 * np.pi * freq * tt) * np.hanning(max(len(tt), 1))
-            if kind == "nod":
-                pitch[i0:i1] += osc
-            else:
-                yaw[i0:i1] += osc
+            target = pitch if kind == "nod" else yaw
+            half_cycles(target, int(start * hz), cycles, freq, amplitude)
         return pitch, yaw
 
-    true_events = [(4 + 7 * k, 2.5, 2.0, 6.0) for k in range(7)]
+    # A mix of lengths, because a detector that only ever finds doubles
+    # would pass a single-length check.
+    true_events = [
+        (4.0, 1, 2.0, 7.0), (11.0, 2, 2.0, 7.0), (18.0, 3, 2.0, 7.0),
+        (25.0, 1, 2.5, 7.0), (32.0, 2, 2.5, 7.0), (39.0, 4, 2.0, 7.0),
+        (48.0, 1, 1.6, 7.0),
+    ]
     pitch, yaw = trace(true_events)
     detected = detect_nods(pitch, yaw, hz, cfg)
-    matched = sum(
-        1 for start, _, _, _ in true_events
-        if any(s - 0.6 <= start <= e + 0.6 for s, e in detected)
-    )
+
+    matched, right_length = 0, 0
+    for start, cycles, _freq, _amplitude in true_events:
+        hit = next(
+            (e for e in detected.events if e.start - 0.6 <= start <= e.end + 0.6), None
+        )
+        if hit is None:
+            continue
+        matched += 1
+        if hit.cycles == cycles:
+            right_length += 1
+
     recall = matched / len(true_events)
     precision = matched / max(len(detected), 1)
+    length_accuracy = right_length / max(matched, 1)
 
-    dip_pitch, dip_yaw = trace([(5 + 8 * k, 0.6, 1.2, 9.0) for k in range(6)])
+    # One unreturned movement each: a head that went down and stayed there.
+    dip_pitch, dip_yaw = trace([(5 + 8 * k, 0.5, 1.5, 9.0) for k in range(6)])
     false_from_dips = len(detect_nods(dip_pitch, dip_yaw, hz, cfg))
 
     shake_pitch, shake_yaw = trace(true_events, kind="shake")
@@ -187,8 +233,12 @@ def validate_nods(report: ValidationReport, seed: int = 0) -> None:
     report.add(
         Check("nod recall", "recall", recall, 0.85, "min", f"{len(true_events)} planted"),
         Check("nod precision", "precision", precision, 0.85, "min", ""),
+        Check("nod length accuracy", "share with the right cycle count",
+              length_accuracy, 0.85, "min",
+              "lengths 1-4 planted; a triple reported as a single is a "
+              "category error, not a rounding one"),
         Check("nod vs single dips", "false positives", float(false_from_dips), 0.0,
-              "max", "0.6-cycle dips must not count"),
+              "max", "one unreturned movement must not count"),
         Check("nod vs head shakes", "false positives", float(nods_on_shakes), 0.0,
               "max", "yaw oscillation must not read as pitch"),
         Check("nod vs postural drift", "false positives", float(false_from_drift), 0.0,

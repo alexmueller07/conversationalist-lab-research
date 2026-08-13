@@ -139,12 +139,14 @@ class Worker(threading.Thread):
         model_dir: str,
         outbox: "queue.Queue[Message]",
         lenient: bool,
+        tracking_workers: int | None = None,
     ):
         super().__init__(daemon=True)
         self.target, self.output = target, output
         self.skip, self.model_dir = skip, model_dir
         self.outbox = outbox
         self.lenient = lenient
+        self.tracking_workers = tracking_workers
         self._stop = threading.Event()
 
     def request_stop(self) -> None:
@@ -183,6 +185,7 @@ class Worker(threading.Thread):
 
         config = Config()
         config.model_dir = self.model_dir
+        config.tracking_workers = self.tracking_workers
 
         self.send("log", "Checking model assets...")
         missing = [r for r in models.status(self.model_dir) if not r["valid"]]
@@ -435,6 +438,18 @@ class App:
                                  ("active", PALETTE["accent_faint"])],
             indicatorforeground=[("selected", "#FFFFFF")],
         )
+        style.configure("Card.TRadiobutton", background=PALETTE["panel"],
+                        font=(family, 10),
+                        indicatorbackground="#FFFFFF",
+                        indicatorforeground=PALETTE["accent"],
+                        focuscolor=PALETTE["panel"])
+        style.map(
+            "Card.TRadiobutton",
+            background=[("active", PALETTE["panel"])],
+            indicatorbackground=[("selected", PALETTE["accent"]),
+                                 ("active", PALETTE["accent_faint"])],
+            indicatorforeground=[("selected", "#FFFFFF")],
+        )
         style.configure("TEntry", padding=6, fieldbackground="#FFFFFF",
                         bordercolor=PALETTE["line"],
                         lightcolor=PALETTE["line"], darkcolor=PALETTE["line"])
@@ -588,6 +603,36 @@ class App:
                             style="Card.TCheckbutton").pack(anchor="w")
             ttk.Label(cell, text=hint, style="CardHint.TLabel").pack(
                 anchor="w", padx=(24, 0))
+
+        # Face and body landmarking are 93% of the runtime, and how many run
+        # at once is the only large lever on it. The automatic setting reads
+        # free memory and is often forced down to one worker by whatever else
+        # is open, so the choice is put in front of the person waiting for
+        # the run rather than buried in a config file.
+        speed = ttk.Frame(options, style="Card.TFrame")
+        speed.grid(row=(len(SKIPPABLE) + 1) // 2, column=0, columnspan=2,
+                   sticky="w", pady=(12, 0))
+        ttk.Label(speed, text="Speed", style="Card.TLabel").pack(anchor="w")
+        self.workers_var = tk.StringVar(value="auto")
+        choices = ttk.Frame(speed, style="Card.TFrame")
+        choices.pack(anchor="w")
+        for value, label in (
+            ("auto", "Automatic"),
+            ("4", "Fastest (4 at once)"),
+            ("1", "Gentlest (one at a time)"),
+        ):
+            ttk.Radiobutton(
+                choices, text=label, value=value, variable=self.workers_var,
+                style="Card.TRadiobutton",
+            ).pack(side="left", padx=(0, 18))
+        ttk.Label(
+            speed,
+            text="Tracking faces and bodies is most of the wait. Running all "
+                 "four jobs at once roughly halves it, and needs about 1.5 GB "
+                 "free — close other applications first. Automatic picks "
+                 "from the memory available when the run starts.",
+            style="CardHint.TLabel", wraplength=760, justify="left",
+        ).pack(anchor="w", pady=(4, 0))
 
         # -- step 3: analyze -----------------------------------------------
         run = self._card(outer, row=3, number="3", title="Analyze")
@@ -862,11 +907,20 @@ class App:
             model_dir=str(MODEL_DIR),
             outbox=self.queue,
             lenient=False,
+            tracking_workers=self._chosen_workers(),
         )
         self.worker.start()
         self.run_button.configure(state="disabled")
         self.stop_button.configure(state="normal")
         self.status_var.set("Starting...")
+
+    def _chosen_workers(self) -> int | None:
+        """The Speed setting, as the config wants it: None means automatic."""
+        value = getattr(self, "workers_var", None)
+        if value is None:
+            return None
+        raw = value.get()
+        return None if raw == "auto" else int(raw)
 
     def _stop(self) -> None:
         if self.worker:

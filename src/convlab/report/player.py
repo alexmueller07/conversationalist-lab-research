@@ -101,12 +101,16 @@ def build_player_data(
         data["people"][person] = entry
 
     if context.turn_set is not None:
+        # Full text, not a 160-character slice. The running caption shows a
+        # window of three turns and the transcript panel shows all of them;
+        # both read from here, and a truncated turn was the thing that made
+        # the caption useless for anything but checking attribution.
         data["turns"] = [
             {
                 "t": round(float(turn.start), 2),
                 "e": round(float(turn.end), 2),
                 "p": turn.person,
-                "x": (turn.text or "")[:160],
+                "x": turn.text or "",
             }
             for turn in context.turn_set.turns
         ]
@@ -144,8 +148,10 @@ font-weight:600}
 .clock{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace;
 font-size:13px;color:var(--muted)}
 .saidnow{background:var(--card);border:1px solid var(--line);border-radius:8px;
-padding:9px 12px;font-size:13.5px;min-height:2.6em}
+padding:9px 12px;font-size:13.5px;min-height:5.4em;max-height:11em;overflow-y:auto}
 .saidnow .lab{font-weight:650;margin-right:6px}
+.said-line{padding:2px 0;opacity:.5;line-height:1.5}
+.said-line.live{opacity:1;font-weight:500}
 .missing{background:var(--card);border-left:3px solid var(--warn);padding:10px 12px;
 border-radius:0 8px 8px 0;font-size:13.5px}
 .scrub{width:100%;accent-color:var(--a)}
@@ -235,16 +241,38 @@ _PLAYER_JS = r"""
       if(whos[p]) whos[p].style.opacity = speaking ? "1" : ".55";
     }
 
-    let cur = null;
-    for(const tn of D.turns){ if(t >= tn.t && t < tn.e){ cur = tn; break; } }
-    if(cur){
-      said.innerHTML = '<span class="lab" style="color:' +
-        (cur.p === "A" ? "var(--a)" : "var(--b)") + '">' + cur.p + ":</span>" +
-        (cur.x ? cur.x.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))
-               : "<em>(no transcript for this turn)</em>");
-    } else {
-      said.innerHTML = '<em style="color:var(--muted)">no one holding the floor</em>';
+    // A window around the playhead rather than the single turn under it.
+    // One line answers "is attribution pointing at the right person"; three
+    // answer "what are they actually talking about", which is what anyone
+    // watching a recording is trying to work out.
+    const escText = s => String(s).replace(/[<>&]/g,
+      c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    let idxCur = -1;
+    for(let i = 0; i < D.turns.length; i++){
+      if(t >= D.turns[i].t && t < D.turns[i].e){ idxCur = i; break; }
+      if(D.turns[i].t > t) break;
+      idxCur = i;  // most recent turn that has started
     }
+    if(idxCur < 0){
+      said.innerHTML = '<em style="color:var(--muted)">nothing said yet</em>';
+    } else {
+      const parts = [];
+      for(let i = Math.max(0, idxCur - 1); i <= Math.min(D.turns.length - 1, idxCur + 1); i++){
+        const tn = D.turns[i];
+        const live = (t >= tn.t && t < tn.e);
+        parts.push(
+          '<div class="said-line' + (live ? " live" : "") + '">' +
+          '<span class="lab" style="color:' +
+          (tn.p === "A" ? "var(--a)" : "var(--b)") + '">' + tn.p + ":</span>" +
+          (tn.x ? escText(tn.x)
+                : '<em style="color:var(--muted)">(no recognized words)</em>') +
+          "</div>"
+        );
+      }
+      said.innerHTML = parts.join("");
+    }
+
+    if(window.__convlabTranscriptAt) window.__convlabTranscriptAt(t);
   }
 
   lead.addEventListener("timeupdate", () => paint(toSession(vids.A ? "A" : "B", lead.currentTime)));

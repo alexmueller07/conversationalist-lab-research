@@ -14,10 +14,12 @@ import logging
 from dataclasses import dataclass, field
 
 import numpy as np
-from scipy import ndimage, signal as sps
+from scipy import ndimage
 
 from convlab.config import VisionConfig
 from convlab.timeline import Segments, resample_to_grid
+from convlab.vision.nods import NodTrack
+from convlab.vision.nods import detect_nods as _detect_nod_events
 from convlab.vision.tracker import BLENDSHAPE_INDEX, BodyTrack, FaceTrack
 
 log = logging.getLogger(__name__)
@@ -89,7 +91,12 @@ class FaceSignals:
     valence: np.ndarray = field(default_factory=lambda: np.zeros(0))
     """Positive minus negative facial action, per frame. NaN where untracked."""
     nods: Segments = field(default_factory=Segments.empty)
+    """Nod spans, for the timeline and the review player. The countable
+    facts about each nod -- its length in cycles, its magnitude, whether the
+    person was speaking or listening -- live in :attr:`nod_track`."""
+    nod_track: NodTrack = field(default_factory=NodTrack)
     shakes: Segments = field(default_factory=Segments.empty)
+    shake_track: NodTrack = field(default_factory=NodTrack)
     smiles: Segments = field(default_factory=Segments.empty)
     partner_direction: tuple[float, float] = (float("nan"), float("nan"))
     coverage: float = 0.0
@@ -156,94 +163,49 @@ def _nanmin(stack: np.ndarray, axis: int = 0) -> np.ndarray:
             return np.nanmin(stack, axis=axis)
 
 
-def _bandpass(x: np.ndarray, frame_hz: float, band: tuple[float, float]) -> np.ndarray:
-    """Zero-phase band-pass over the finite part of a possibly-gappy series.
-
-    Gaps are filled before filtering and restored afterwards: filtering
-    across a NaN would poison the whole output, but pretending the gap
-    contained real movement would invent events inside it.
-    """
-    valid = np.isfinite(x)
-    if valid.sum() < 16:
-        return np.full_like(x, np.nan)
-    filled = x.copy()
-    idx = np.arange(x.size)
-    filled[~valid] = np.interp(idx[~valid], idx[valid], x[valid])
-
-    nyquist = frame_hz / 2.0
-    lo, hi = max(1e-4, band[0] / nyquist), min(0.99, band[1] / nyquist)
-    if lo >= hi:
-        return np.full_like(x, np.nan)
-    sos = sps.butter(3, [lo, hi], btype="bandpass", output="sos")
-    out = sps.sosfiltfilt(sos, filled)
-    out[~valid] = np.nan
-    return out
-
-
-def detect_oscillations(
-    angle: np.ndarray,
-    frame_hz: float,
-    band: tuple[float, float],
-    min_amplitude_deg: float,
-    min_cycles: float,
-    competing: np.ndarray | None = None,
-) -> Segments:
-    """Find rhythmic head movements: runs of at least ``min_cycles`` oscillation.
-
-    Requiring more than one cycle is what separates a nod from a glance
-    downward. A single dip below a threshold is a head *movement*; a nod is
-    periodic, and a detector that does not check periodicity reports every
-    postural adjustment as agreement.
-
-    ``competing`` is the orthogonal axis: a movement is only attributed to
-    this axis when it dominates, so a diagonal head roll is not counted as
-    both a nod and a shake.
-    """
-    filtered = _bandpass(angle, frame_hz, band)
-    if not np.isfinite(filtered).any():
-        return Segments.empty()
-
-    analytic = np.zeros(filtered.size, dtype=complex)
-    valid = np.isfinite(filtered)
-    analytic[valid] = sps.hilbert(filtered[valid])
-    envelope = np.abs(analytic)
-    phase = np.unwrap(np.angle(analytic))
-
-    active = valid & (envelope >= min_amplitude_deg)
-
-    if competing is not None:
-        other = _bandpass(competing, frame_hz, band)
-        other_env = np.abs(np.nan_to_num(other))
-        active &= envelope >= other_env
-
-    candidates = Segments.from_mask(active, frame_hz)
-    kept: list[tuple[float, float]] = []
-    for start, end in candidates:
-        i0 = max(0, int(start * frame_hz))
-        i1 = min(phase.size - 1, int(end * frame_hz))
-        if i1 <= i0:
-            continue
-        cycles = abs(phase[i1] - phase[i0]) / (2.0 * np.pi)
-        if cycles >= min_cycles:
-            kept.append((start, end))
-    return Segments.from_pairs(kept)
-
-
 def detect_nods(
     head_pitch: np.ndarray, head_yaw: np.ndarray, frame_hz: float, cfg: VisionConfig
-) -> Segments:
-    return detect_oscillations(
-        head_pitch, frame_hz, cfg.nod_band_hz,
-        cfg.nod_min_amplitude_deg, cfg.nod_min_cycles, competing=head_yaw,
+) -> NodTrack:
+    """Nods in the pitch axis, each with its cycle count and magnitude.
+
+    See :mod:`convlab.vision.nods` for the definitions and their sources.
+    The return type changed from :class:`Segments` to :class:`NodTrack` when
+    cycle counting was added; ``track.segments`` gives the old value.
+    """
+    return _detect_nod_events(
+        head_pitch, frame_hz,
+        band_hz=cfg.nod_band_hz,
+        min_amplitude_deg=cfg.nod_min_amplitude_deg,
+        min_half_cycles=cfg.nod_min_half_cycles,
+        max_gap_s=cfg.nod_max_gap_s,
+        smooth_s=cfg.nod_smooth_s,
+        competing=head_yaw,
+        competing_ratio=cfg.nod_competing_ratio,
+        continue_ratio=cfg.nod_continue_ratio,
     )
 
 
 def detect_shakes(
     head_pitch: np.ndarray, head_yaw: np.ndarray, frame_hz: float, cfg: VisionConfig
-) -> Segments:
-    return detect_oscillations(
-        head_yaw, frame_hz, cfg.shake_band_hz,
-        cfg.shake_min_amplitude_deg, cfg.nod_min_cycles, competing=head_pitch,
+) -> NodTrack:
+    """The same machinery on the yaw axis.
+
+    A shake is the lateral counterpart of a nod and has the same cyclic
+    structure, so it is counted the same way rather than by a second,
+    differently-behaved detector. Hadar, Steiner & Rose (1985) treat both as
+    the symmetrical cyclic class of listener head movement, distinguished
+    from the linear movements that anticipate a claim for the floor.
+    """
+    return _detect_nod_events(
+        head_yaw, frame_hz,
+        band_hz=cfg.shake_band_hz,
+        min_amplitude_deg=cfg.shake_min_amplitude_deg,
+        min_half_cycles=cfg.nod_min_half_cycles,
+        max_gap_s=cfg.nod_max_gap_s,
+        smooth_s=cfg.nod_smooth_s,
+        competing=head_pitch,
+        competing_ratio=cfg.nod_competing_ratio,
+        continue_ratio=cfg.nod_continue_ratio,
     )
 
 
@@ -349,8 +311,8 @@ def derive_face_signals(
             "gaze measures unavailable"
         )
 
-    nods = detect_nods(pitch, yaw, frame_hz, cfg)
-    shakes = detect_shakes(pitch, yaw, frame_hz, cfg)
+    nod_track = detect_nods(pitch, yaw, frame_hz, cfg)
+    shake_track = detect_shakes(pitch, yaw, frame_hz, cfg)
     smiles = (
         Segments.from_mask(np.nan_to_num(smile) >= cfg.smile_threshold, frame_hz)
         .merge_gaps(0.2)
@@ -374,8 +336,10 @@ def derive_face_signals(
         gaze_pitch=gaze_pitch,
         on_partner=on_partner,
         tracked=tracked,
-        nods=nods,
-        shakes=shakes,
+        nods=nod_track.segments,
+        nod_track=nod_track,
+        shakes=shake_track.segments,
+        shake_track=shake_track,
         smiles=smiles,
         partner_direction=partner,
         coverage=coverage,

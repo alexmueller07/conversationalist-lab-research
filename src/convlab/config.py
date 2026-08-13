@@ -14,7 +14,7 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Mapping, TypeVar
+from typing import Any, ClassVar, Mapping, TypeVar
 
 T = TypeVar("T")
 
@@ -330,6 +330,41 @@ class ASRConfig:
     completing a batch and being killed part-way through it. A slightly
     higher word error rate, reported in the warnings, is the better trade."""
 
+    vocabulary: str | None = None
+    """Path to the lab's list of expected names. ``None`` uses
+    ``configs/vocabulary.txt``; an empty string disables the feature.
+
+    See :mod:`convlab.speech.vocabulary`. This is the fix for the class of
+    error a bigger model does not solve -- a proper noun the recognizer has
+    never encountered, rendered as the common phrase it sounds like."""
+
+    bias_decoder: bool = True
+    """Pass the vocabulary to the recognizer as hotwords while it decodes.
+    Cheaper and safer than repairing afterwards, because the acoustic
+    evidence is still available to arbitrate."""
+
+    repair_vocabulary: bool = True
+    """Run the phonetic repair pass over what the recognizer returned.
+    Every rewrite is recorded and shown in the report."""
+
+    repair_min_score: float = 0.86
+    """Phonetic similarity a run of words must reach before it is rewritten.
+
+    Chosen from the failure this exists for: "sunny portland" against SUNY
+    Cortland scores 0.86, while the nearest wrong answers in the lab's own
+    vocabulary sit below 0.75. Lowering it starts rewriting ordinary speech
+    into names; raising it above 0.9 gives up the two-word cases, which are
+    most of them."""
+
+    temperature_fallback: bool = True
+    """Let the decoder retry a block at higher temperature when its output
+    fails Whisper's own compression-ratio and log-probability checks.
+
+    Off, a block that decodes badly stays badly decoded; on, it is decoded
+    again with more randomness, which is the standard remedy for the
+    repetition loops that otherwise produce a hundred copies of one phrase.
+    Costs time only on the blocks that need it."""
+
 
 @dataclass
 class FillerConfig:
@@ -432,19 +467,82 @@ class VisionConfig:
     """Fraction of frames needing a tracked face before facial measures are
     reported at all. Below this the view is marked unusable."""
 
-    nod_band_hz: tuple[float, float] = (0.8, 4.0)
-    nod_min_amplitude_deg: float = 1.6
-    nod_min_cycles: float = 1.2
-    """A nod is an *oscillation* in head pitch, not a single dip. Requiring
-    more than one cycle is what separates agreement from a glance downward,
-    and it is why postural drift and single head dips contribute no false
-    nods at all. The value sits between the ~0.6 cycles a single dip
-    produces and the 2-3 cycles of a real nod; measured cycle counts fall
-    below the nominal ones because a nod tapers at both ends, so 1.2 recovers
-    genuine short nods without admitting dips."""
+    nod_band_hz: tuple[float, float] = (0.8, 5.0)
+    """Admissible nod frequency, in cycles per second.
 
-    shake_band_hz: tuple[float, float] = (0.8, 4.0)
-    shake_min_amplitude_deg: float = 2.5
+    Hadar, Steiner, Grant & Rose (1983) measured conversational head
+    oscillation at 0.2-7 Hz and divided it into slow (0.2-1.8 Hz), ordinary
+    (1.9-3.6 Hz) and rapid (3.7-7.0 Hz) movement. The band here spans the
+    ordinary and rapid classes and the fast end of the slow one. Below
+    0.8 Hz the head is drifting rather than nodding -- a person settling in
+    a chair traverses more degrees than a nod does, just slowly -- and above
+    5 Hz there is nothing left for a 25 Hz camera to resolve honestly."""
+
+    nod_min_amplitude_deg: float = 2.0
+    """Peak-to-trough head-pitch excursion needed to start a nod.
+
+    This is the per-cycle *magnitude* of Mori, Den & Jokinen (2025): "the
+    scalar value of the difference between the lowest and highest points of
+    the head within a cycle". Applied as an admission test rather than only
+    as a description, because head-pose estimates carry roughly half a
+    degree of frame-to-frame noise and admitting movements at that scale
+    fills the output with nods nobody made."""
+
+    nod_continue_ratio: float = 0.5
+    """Fraction of the amplitude threshold a half-cycle must reach to carry
+    on a nod already under way.
+
+    Mori et al. found nod magnitude declining systematically from a nod's
+    first cycle to its last, so a nod tapers. Holding every cycle to the
+    onset threshold cuts the quiet end off long nods and reports a triple as
+    a single, which distorts exactly the length distribution this detector
+    exists to produce.
+
+    The pair (2.0 degrees, 0.5) was chosen against that distribution rather
+    than by eye. Over the sixteen close-up recordings in the lab's test
+    corpus it yields 42% single nods and 98% of nods at five cycles or
+    fewer, against the 42% and "more than 95%" that Mori et al. report for
+    9,223 human-checked nods. Requiring the full amplitude on every cycle
+    instead gives 57% single and a longest nod of 11; halving the
+    continuation floor again gives 39% and admits movement close to the
+    tracker's noise. Agreement on the shape of the distribution is evidence
+    that the detector is carving nods at the right joints; it is not
+    evidence that it agrees with a human coder nod for nod on this corpus,
+    which nobody has yet measured."""
+
+    nod_min_half_cycles: int = 2
+    """Half-cycles a movement must contain to be a nod at all.
+
+    Two is one full cycle -- a movement and its return -- which is the
+    length-1 single nod that is the mode of Mori et al.'s distribution at
+    42% of 9,223 annotated nods. Their scheme admits an odd trailing
+    half-cycle as a cycle, so in principle a lone unreturned movement is a
+    nod; here it is not, because their annotations were human-confirmed and
+    these are not, and a single downward movement with no return is
+    indistinguishable from postural drift, a glance at the table, or a
+    slump."""
+
+    nod_max_gap_s: float = 0.20
+    """Longest pause between two half-cycles that still leaves them part of
+    one nod. Beyond it the head came to rest and a second nod began, which
+    is the difference between one four-cycle nod and two doubles."""
+
+    nod_smooth_s: float = 0.08
+    """Moving-average window applied to head pitch before inflection points
+    are located, following the same step in Mori et al. Expressed in seconds
+    rather than samples because this pipeline's 100 Hz analysis grid is not
+    their video rate."""
+
+    nod_competing_ratio: float = 1.0
+    """How much more the head must travel in yaw than in pitch over a
+    half-cycle before that half-cycle is credited to shaking instead of
+    nodding. At 1.0 the larger excursion simply wins."""
+
+    shake_band_hz: tuple[float, float] = (0.8, 5.0)
+    shake_min_amplitude_deg: float = 3.0
+    """Shakes are held to a wider excursion than nods because the yaw axis
+    picks up every reorientation of the head toward and away from the
+    partner, and those are not disagreement."""
 
     gaze_on_partner_deg: float = 12.0
     """Angular tolerance around the partner direction for 'looking at'."""
@@ -467,6 +565,30 @@ class VisionConfig:
     self_touch_distance: float = 0.55
     """Wrist-to-face distance, in shoulder-width units, below which contact
     is inferred."""
+
+    # ------------------------------------------------------------------
+    TRACKING_FIELDS: ClassVar[tuple[str, ...]] = (
+        "fps", "body_fps", "max_side",
+        "min_face_confidence", "min_tracking_confidence",
+    )
+    """Which fields actually change the landmarks that come out of MediaPipe.
+
+    Everything else in this section -- every nod, gaze, smile and gesture
+    threshold -- is applied to those landmarks afterwards, in
+    :mod:`convlab.vision.signals`, and changes nothing about the tracking.
+
+    The distinction is the difference between tuning a threshold in seconds
+    and re-landmarking hours of video. The tracking cache used to be keyed
+    on this whole section, so adjusting a nod amplitude by a tenth of a
+    degree invalidated every face and body track in the workspace and the
+    next run spent twenty minutes per session recomputing identical
+    landmarks. Keying on the fields below means a detector can be retuned
+    and the corpus re-scored immediately, which is what makes calibrating
+    one against a published distribution practical at all."""
+
+    def tracking_key(self) -> dict[str, Any]:
+        """The subset of this config that the tracking caches key on."""
+        return {name: getattr(self, name) for name in self.TRACKING_FIELDS}
 
 
 @dataclass
@@ -686,39 +808,53 @@ class Config:
     cache: bool = True
     model_dir: str = "models"
 
-    isolate_tracking: bool | None = None
-    """Run face and body tracking in a separate process.
+    tracking_workers: int | None = None
+    """How many tracking children to run at once.
 
-    Importing MediaPipe commits about 790 MB that garbage collection cannot
-    return, because it belongs to the module rather than to any object. On a
-    machine with little free memory that is enough to get the process killed
-    once the recognizer loads on top of it. A child process gives all of it
-    back on exit.
+    A session has four independent tracking jobs -- a face track and a body
+    track for each participant -- and they are the pipeline's entire
+    wall-clock problem: across the lab's sixteen-file test corpus they were
+    93% of total stage time. Running them concurrently is the whole of the
+    speed story, so this is the knob that matters.
 
-    ``None`` decides automatically from available memory; True or False
-    forces it. The cost is a couple of seconds of interpreter startup per
-    session, so it is not worth forcing on a machine with room to spare."""
+    ``None`` decides from free memory and core count, which is almost
+    always right. Set an integer to force it: 1 reproduces the old serial
+    behavior, 4 uses every job on a machine with the memory for it.
 
-    isolate_below_mb: float = 3000.0
-    """Available-memory threshold under which tracking is isolated
-    automatically."""
+    The previous automatic policy asked for 3.2 GB free before running even
+    two children, on the belief that each committed about 1.3 GB. Measured,
+    a child holds roughly 520 MB, so the gate never opened on the machine it
+    was written for and every run was serial."""
 
-    parallel_tracking: bool | None = None
-    """Track the two participants' videos in two concurrent child
-    processes. Vision is the pipeline's wall-clock dominator and the two
-    views are independent, so this roughly halves the tracking stages on a
-    machine with the memory for two MediaPipe processes at once.
+    tracking_first_worker_mb: float = 650.0
+    """Physical memory the first tracking child costs, in MB.
 
-    ``None`` decides from available memory (see ``parallel_min_free_mb``);
-    True or False forces it. Requires the cache, which is how the children
-    hand their results back."""
+    Measured at 519 MB on the lab laptop, with headroom for a
+    higher-resolution recording's frame buffer. The first child is the
+    expensive one because it pays for the MediaPipe and TensorFlow images."""
 
-    parallel_min_free_mb: float = 3200.0
-    """Available memory needed before tracking runs two children at once.
-    Each child commits roughly 1.3 GB (the MediaPipe import plus decode
-    buffers), so the automatic policy asks for two of those with headroom.
-    On a machine below the threshold tracking falls back to the serial
-    path, isolated or not by the existing memory policy."""
+    tracking_extra_worker_mb: float = 300.0
+    """Memory each *additional* tracking child costs beyond the first.
+
+    Measured at 198-220 MB. Far below the first child's cost, and the
+    difference is the entire reason four workers fit on an 8 GB machine:
+    the code pages are shared between processes, so only the per-process
+    working set is paid again. The previous policy budgeted every child at
+    the full 1.3 GB it guessed the first one cost, which is why it never
+    allowed a second."""
+
+    tracking_reserve_mb: float = 500.0
+    """Physical memory left unclaimed, so that the parent process -- which
+    holds the aligned audio and is about to load a recognizer -- has room."""
+
+    asr_needs_mb: float = 2600.0
+    """Memory the recognizer wants before it will start alongside tracking.
+
+    ``small.en`` commits about 2.3 GB in CTranslate2's arena. When less than
+    this is free, the pipeline joins the still-running body-tracking workers
+    before loading the recognizer instead of overlapping them. Overlapping
+    is worth several minutes of wall-clock, but not at the price of
+    ``auto_downscale`` quietly stepping down to a less accurate model."""
 
     # ------------------------------------------------------------------
     @classmethod

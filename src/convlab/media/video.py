@@ -34,11 +34,13 @@ class VideoReader:
         target_fps: float | None = 25.0,
         max_side: int | None = 640,
         pix_fmt: str = "rgb24",
+        prefetch: int = 8,
     ) -> None:
         self.path = Path(path)
         self.target_fps = target_fps
         self.max_side = max_side
         self.pix_fmt = pix_fmt
+        self.prefetch = int(prefetch)
         self.info: MediaInfo = probe(self.path)
         if not self.info.has_video:
             raise ValueError(f"{self.path.name} has no video stream")
@@ -71,6 +73,70 @@ class VideoReader:
 
     # ------------------------------------------------------------------
     def __iter__(self) -> Iterator[tuple[float, np.ndarray]]:
+        """Frames at the target rate, decoded ahead of the consumer.
+
+        Decoding is cheap next to landmarking -- about 350 frames a second
+        against 40 to 70 -- but it is not free, and done inline it is dead
+        time on every frame because the tracker sits idle while ffmpeg
+        works. A producer thread with a bounded queue overlaps the two.
+        PyAV releases the GIL inside the decoder and scaler and MediaPipe
+        releases it inside inference, so the overlap is real rather than
+        cooperative-only, and it recovers most of the decode cost.
+
+        The queue is bounded so that a fast decoder cannot read a whole
+        session into memory ahead of a slow tracker; at 640x360 RGB each
+        frame is 690 KB, and eight of them is a bound worth having on a
+        machine with 8 GB.
+
+        ``prefetch=0`` decodes inline, which is what the tests use so that
+        a failure surfaces as itself rather than as a thread exception.
+        """
+        if self.prefetch <= 0:
+            yield from self._decode()
+            return
+
+        import queue
+        import threading
+
+        buffer: "queue.Queue[object]" = queue.Queue(maxsize=self.prefetch)
+        sentinel = object()
+        stop = threading.Event()
+
+        def produce() -> None:
+            try:
+                for item in self._decode():
+                    if stop.is_set():
+                        break
+                    buffer.put(item)
+            except BaseException as exc:  # noqa: BLE001 - re-raised in consumer
+                buffer.put(exc)
+            finally:
+                buffer.put(sentinel)
+
+        worker = threading.Thread(
+            target=produce, name=f"decode:{self.path.name}", daemon=True
+        )
+        worker.start()
+        try:
+            while True:
+                item = buffer.get()
+                if item is sentinel:
+                    return
+                if isinstance(item, BaseException):
+                    raise item
+                yield item  # type: ignore[misc]
+        finally:
+            # A consumer that stops early -- an exception, or a `break` after
+            # N frames -- must not leave a decoder thread holding the file.
+            stop.set()
+            try:
+                while buffer.get_nowait() is not sentinel:
+                    pass
+            except Exception:
+                pass
+            worker.join(timeout=5.0)
+
+    def _decode(self) -> Iterator[tuple[float, np.ndarray]]:
         step = 1.0 / self.target_fps if self.target_fps else 0.0
         next_t = 0.0
         emitted = 0

@@ -276,6 +276,101 @@ def benchmark_asr(report: BenchmarkReport, seeds, model_dir: str) -> None:
             })
 
 
+VOCABULARY_SENTENCES: tuple[tuple[str, str], ...] = (
+    ("I transferred here from SUNY Cortland after my first year.", "SUNY Cortland"),
+    ("My roommate went to SUNY Binghamton instead.", "SUNY Binghamton"),
+    ("We were at Camp Randall for the game on Saturday.", "Camp Randall"),
+    ("I usually eat at Gordon Commons because it is closer.", "Gordon Commons"),
+    ("She grew up in Waukesha and moved here for school.", "Waukesha"),
+    ("The bus goes right past Bascom Hill in the morning.", "Bascom Hill"),
+    ("I spent the summer working in Eau Claire.", "Eau Claire"),
+    ("My brother plays for Marquette now.", "Marquette"),
+)
+"""Sentences whose proper nouns the recognizer reliably gets wrong.
+
+Each is a real thing a participant in this lab might say. The names are the
+class of error a larger model does not fix: institutions and places rare
+enough that the recognizer has a far more common phrase available for the
+same sounds -- SUNY Cortland against "sunny Portland" being the case that
+prompted the whole vocabulary mechanism.
+"""
+
+
+def benchmark_vocabulary(report: BenchmarkReport, model_dir: str) -> None:
+    """Does the vocabulary actually fix the names it was added for?
+
+    Three conditions on the same synthesized audio: the recognizer alone,
+    the recognizer biased toward the lab vocabulary, and biased plus the
+    phonetic repair pass. What is scored is not word error rate but whether
+    the *name* came out right, because a sentence can score a good WER while
+    getting the only word anybody cares about wrong.
+    """
+    from convlab.config import ASRConfig
+    from convlab.speech.asr import transcribe
+    from convlab.synth.tts import TTSRenderer, available_voices, tts_available
+
+    if not tts_available():
+        report.notes.append("vocabulary benchmark skipped: system TTS unavailable")
+        return
+
+    voices = available_voices()
+    if not voices:
+        report.notes.append("vocabulary benchmark skipped: no TTS voices installed")
+        return
+
+    renderer = TTSRenderer(sample_rate=Config().audio.sample_rate)
+    clips = renderer.render(
+        [(sentence, voices[0], 0) for sentence, _name in VOCABULARY_SENTENCES]
+    )
+
+    conditions = (
+        ("recognizer alone", dict(vocabulary="", bias_decoder=False, repair_vocabulary=False)),
+        ("+ vocabulary bias", dict(bias_decoder=True, repair_vocabulary=False)),
+        ("+ phonetic repair", dict(bias_decoder=True, repair_vocabulary=True)),
+    )
+
+    sample_rate = Config().audio.sample_rate
+    for label, overrides in conditions:
+        cfg = ASRConfig(**overrides)
+        correct = 0
+        misses: list[str] = []
+        for clip, (_sentence, name) in zip(clips, VOCABULARY_SENTENCES):
+            audio = np.asarray(clip.samples, dtype=np.float32)
+            duration = audio.size / sample_rate
+            transcript = transcribe(
+                {"A": audio},
+                {"A": Segments.from_pairs([(0.0, duration)])},
+                sample_rate,
+                cfg,
+                download_root=Path(model_dir) / "whisper",
+            )
+            heard = transcript.text_of("A")
+            if _contains_name(heard, name):
+                correct += 1
+            elif len(misses) < 3:
+                misses.append(f"{name} -> {heard.strip()[:60]}")
+
+        report.measure_rows.append({
+            "measure": f"proper nouns, {label}",
+            "truth": float(len(VOCABULARY_SENTENCES)),
+            "measured": float(correct),
+            "error": float(len(VOCABULARY_SENTENCES) - correct),
+            "tolerance": 0.0,
+            "passed": correct == len(VOCABULARY_SENTENCES),
+            "note": "; ".join(misses) if misses else "all names recognized",
+        })
+
+
+def _contains_name(text: str, name: str) -> bool:
+    """Whether the transcript carries the name, ignoring case and punctuation."""
+    import re
+
+    def normalise(value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+    return normalise(name) in normalise(text)
+
+
 def benchmark_end_to_end(report: BenchmarkReport, out_dir: Path, seed: int,
                          model_dir: str) -> None:
     """Media files in, measures out -- timed cold and warm, scored on truth.
@@ -418,6 +513,10 @@ def run_benchmark(
     asr_seeds = seeds[:1] if quick else seeds[:2]
     log.info("ASR word error rate (%d seeds)", len(asr_seeds))
     benchmark_asr(report, asr_seeds, model_dir)
+
+    if not quick:
+        log.info("proper nouns, with and without the lab vocabulary")
+        benchmark_vocabulary(report, model_dir)
 
     log.info("end-to-end timed run")
     benchmark_end_to_end(report, out, seed=seeds[0], model_dir=model_dir)

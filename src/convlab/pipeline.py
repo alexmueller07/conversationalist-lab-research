@@ -185,6 +185,17 @@ def analyze_session(
     fingerprints = {r: fingerprint_file(p) for r, p in session.views.items()}
     base_key = make_key(fingerprints, cfg.audio.to_dict() if hasattr(cfg.audio, "to_dict") else str(cfg.audio))
 
+    # ---- 0. tracking, started before anything waits on it --------------
+    #
+    # Face and body landmarking are 93% of this pipeline's stage time on the
+    # lab's test corpus, and the four jobs -- two people, two models -- do
+    # not depend on each other or on anything computed below. Starting them
+    # first means the audio stages run inside their shadow, and joining each
+    # stage only where its result is first read means body tracking overlaps
+    # transcription, prosody and semantics instead of queueing behind them.
+    tracking_keys = _tracking_keys(session, cfg, skip, fingerprints)
+    tracking = _start_tracking(session, cfg, workspace, output_root, tracking_keys, context)
+
     # ---- 1. probe -----------------------------------------------------
     infos: dict[str, Any] = {}
     with stage_ctx("probe") as stage:
@@ -201,6 +212,7 @@ def analyze_session(
 
     if context.duration <= 0:
         context.note("no usable media; nothing was analyzed")
+        _stop_tracking(tracking, context)
         return result
 
     n_frames = int(np.floor(context.duration * frame_hz)) + 1
@@ -222,6 +234,7 @@ def analyze_session(
 
     if not tracks:
         context.note("no audio decoded; analysis cannot proceed")
+        _stop_tracking(tracking, context)
         return result
 
     # ---- 3. sync ------------------------------------------------------
@@ -327,17 +340,8 @@ def analyze_session(
     face_tracks: dict[str, Any] = {}
     if "face" not in skip:
         with stage_ctx("face_tracking") as stage:
-            keys = {
-                person: make_key(
-                    fingerprints[session.close_view(person)], cfg.vision.__dict__, "face"
-                )
-                for person in PERSONS
-                if session.close_view(person) is not None
-            }
-            isolated = _tracking_in_subprocess(
-                "face_tracking", session, cfg, workspace, output_root,
-                [(f"face_{p}", k) for p, k in keys.items()], context,
-            )
+            keys = tracking_keys["face_tracking"]
+            isolated = tracking is not None and tracking.wait("face_tracking")
 
             for person, key in keys.items():
                 role = session.close_view(person)
@@ -397,6 +401,7 @@ def analyze_session(
         )
 
     if context.attribution is None:
+        _stop_tracking(tracking, context)
         return result
 
     # ---- 7. first-pass turns (needed to target the recognizer) --------
@@ -407,6 +412,24 @@ def analyze_session(
 
     # ---- 8. transcription ---------------------------------------------
     if "asr" not in skip:
+        # Body tracking is normally left running through this stage and the
+        # ones after it, which is most of what makes the run shorter. But
+        # the recognizer wants about 2.3 GB, and if it cannot have it the
+        # ASR stage silently steps down to a smaller, less accurate model.
+        # Trading transcription accuracy for wall-clock is the wrong trade
+        # for this project, so on a machine without room for both, the
+        # workers are joined first.
+        if tracking is not None:
+            from convlab.system import available_memory_mb
+
+            free = available_memory_mb()
+            if free is not None and free < cfg.asr_needs_mb:
+                log.info(
+                    "only %.0f MB free; finishing tracking before loading the "
+                    "recognizer so it is not downscaled", free,
+                )
+                tracking.wait("body_tracking")
+
         with stage_ctx("asr") as stage:
             person_audio = {
                 p: aligned[CLOSE_VIEW[p]] for p in PERSONS if CLOSE_VIEW[p] in aligned
@@ -498,6 +521,7 @@ def analyze_session(
     # ---- 12. face signals ---------------------------------------------
     if face_tracks:
         with stage_ctx("face_signals") as stage:
+            from convlab.vision.nods import assign_roles
             from convlab.vision.signals import derive_face_signals
 
             signals = {}
@@ -506,11 +530,28 @@ def analyze_session(
                     track, person, n_frames, frame_hz, cfg.vision,
                     offset=offsets.get(CLOSE_VIEW[person], 0.0),
                 )
+                # Whether a nod was produced while speaking or while
+                # listening is part of what a nod *is* -- Poggi et al. (2010)
+                # build their typology on it and McClave (2000) shows the two
+                # do different work -- so it is attached here, as soon as the
+                # turn structure exists, rather than recomputed by each
+                # measure that needs it.
+                signals[person].nod_track = assign_roles(
+                    signals[person].nod_track,
+                    speaking=context.turn_segments(person),
+                    listening=context.listening_segments(person),
+                )
+                signals[person].shake_track = assign_roles(
+                    signals[person].shake_track,
+                    speaking=context.turn_segments(person),
+                    listening=context.listening_segments(person),
+                )
                 for warning in signals[person].warnings:
                     context.note(warning)
             context.face = signals or None
             stage.report.detail = ", ".join(
-                f"{p}: {len(s.nods)} nods, {len(s.smiles)} smiles"
+                f"{p}: {len(s.nod_track)} nods "
+                f"({s.nod_track.total_cycles} cycles), {len(s.smiles)} smiles"
                 for p, s in signals.items()
             )
 
@@ -528,17 +569,9 @@ def analyze_session(
             # a tightly framed close-up may not show the torso at all, which
             # shows up honestly as low coverage and withheld measures rather
             # than as confident numbers about an unseen body.
-            keys = {
-                person: make_key(
-                    fingerprints[session.close_view(person)], cfg.vision.__dict__, "body"
-                )
-                for person in PERSONS
-                if session.close_view(person) is not None
-            }
-            _tracking_in_subprocess(
-                "body_tracking", session, cfg, workspace, output_root,
-                [(f"body_{p}", k) for p, k in keys.items()], context,
-            )
+            keys = tracking_keys["body_tracking"]
+            if tracking is not None:
+                tracking.wait("body_tracking")
 
             body_signals = {}
             for person, key in keys.items():
@@ -628,6 +661,8 @@ def analyze_session(
                 )
             else:
                 stage.skip("; ".join(payload["warnings"]) or "unavailable")
+
+    _stop_tracking(tracking, context)
 
     # ---- 15. measures --------------------------------------------------
     with stage_ctx("measures") as stage:
@@ -736,81 +771,142 @@ def _arrays_to_prosody(data: dict[str, np.ndarray], person: str):
     )
 
 
-def _should_isolate(cfg: Config) -> bool:
-    if cfg.isolate_tracking is not None:
-        return bool(cfg.isolate_tracking)
-    from convlab.system import available_memory_mb
+def _tracking_keys(
+    session: Session,
+    cfg: Config,
+    skip: tuple[str, ...],
+    fingerprints: dict[str, str],
+) -> dict[str, dict[str, str]]:
+    """Cache keys for every tracking job this session needs, by stage.
 
-    available = available_memory_mb()
-    return available is not None and available < cfg.isolate_below_mb
+    Computed once from the fingerprints the run already took, and shared by
+    the scheduler and by the stages that read the caches. A key built twice
+    is a key that can differ twice -- a file touched between the two calls
+    would leave a child writing an entry the parent then misses, and the
+    symptom would be a stage that silently recomputes everything.
+    """
+    out: dict[str, dict[str, str]] = {"face_tracking": {}, "body_tracking": {}}
+    for stage, kind, skip_name in (
+        ("face_tracking", "face", "face"),
+        ("body_tracking", "body", "body"),
+    ):
+        if skip_name in skip:
+            continue
+        for person in PERSONS:
+            role = session.close_view(person)
+            if role is None or role not in fingerprints:
+                continue
+            # Keyed on the tracking settings only, not the whole vision
+            # section: nod, gaze and smile thresholds are applied to the
+            # landmarks afterwards and do not change them, so retuning one
+            # must not force hours of re-landmarking.
+            out[stage][person] = make_key(
+                fingerprints[role], cfg.vision.tracking_key(), kind
+            )
+    return out
 
 
-def _should_parallelize(cfg: Config, n_persons: int) -> bool:
-    """Two tracking children at once, when memory genuinely allows it."""
-    if n_persons < 2:
-        return False
-    if cfg.parallel_tracking is not None:
-        return bool(cfg.parallel_tracking)
-    from convlab.system import available_memory_mb
-
-    available = available_memory_mb()
-    return available is not None and available >= cfg.parallel_min_free_mb
-
-
-def _tracking_in_subprocess(
-    stage: str,
+def _start_tracking(
     session: Session,
     cfg: Config,
     workspace: Workspace,
     output_root: str | Path,
-    wanted: list[tuple[str, str]],
+    keys: dict[str, dict[str, str]],
     context: AnalysisContext,
-) -> bool:
-    """Populate this stage's caches from child processes when that helps.
+):
+    """Launch every tracking job whose cache is cold, all at once.
 
-    Two reasons to leave the parent process, decided independently. With
-    memory to spare, the two participants' videos are tracked in two
-    *concurrent* children -- vision dominates the pipeline's wall-clock and
-    the views are independent, so the stage roughly halves. With memory
-    tight, tracking runs in one child at a time so the MediaPipe import is
-    reclaimed on exit.
-
-    Returns True if children produced the caches. Doing nothing is always
-    safe: the caller falls through to computing in-process, which is what
-    happens when the caches are already warm.
+    Returns a :class:`~convlab.isolate.TrackingPool`, or None when there is
+    nothing to launch or child processes are unavailable. Either way the
+    stages below still work: they read the cache, and compute in-process
+    whatever the cache does not have. That fallback is what makes this
+    optimisation safe to have failed.
     """
     if not cfg.cache:
-        return False
-    # Nothing to do if every cache entry this stage would write already exists.
-    if all(
-        any(workspace.cache_dir.glob(f"{name}__{key}*")) for name, key in wanted
-    ):
-        return False
+        return None
 
-    persons = [name.split("_", 1)[1] for name, _ in wanted]
-    if _should_parallelize(cfg, len(persons)):
-        from convlab.isolate import run_isolated_concurrent
-
-        log.info("tracking both views concurrently for %s", stage)
-        if run_isolated_concurrent(stage, session, cfg, output_root, persons):
-            return True
-        context.note(
-            f"parallel {stage} failed; falling back to the serial path"
+    jobs = [
+        (stage, person)
+        for stage, per_person in keys.items()
+        for person, key in per_person.items()
+        # A warm cache entry needs no worker.
+        if not any(
+            workspace.cache_dir.glob(
+                f"{'face' if stage == 'face_tracking' else 'body'}_{person}__{key}*"
+            )
         )
+    ]
+    if not jobs:
+        return None
 
-    if not _should_isolate(cfg):
-        return False
+    from convlab.isolate import TrackingPool, plan_workers
 
-    from convlab.isolate import run_isolated
+    from convlab.system import available_memory_mb
 
-    log.info("running %s in a separate process to limit memory use", stage)
-    ok = run_isolated(stage, session, cfg, output_root)
-    if not ok:
+    workers = plan_workers(cfg, len(jobs))
+    free = available_memory_mb()
+    log.info(
+        "tracking: %d job(s) across %d concurrent worker(s)%s",
+        len(jobs), workers,
+        f" ({free:.0f} MB free)" if free is not None else "",
+    )
+    pool = TrackingPool(session, cfg, output_root, jobs, workers=workers)
+    pool.start()
+    if cfg.tracking_workers is None and workers < len(jobs):
         context.note(
-            f"could not run {stage} in a separate process; running in-process, "
-            "which uses more memory"
+            f"tracking is running {workers} of {len(jobs)} jobs at a time "
+            + (f"because only {free:.0f} MB was free" if free is not None
+               else "because free memory could not be read")
+            + ". Vision is most of this pipeline's runtime, so closing other "
+            "applications before a run, or setting tracking_workers: "
+            f"{len(jobs)} in the config, is the fastest thing available."
         )
-    return ok
+    elif cfg.tracking_workers is not None and free is not None:
+        # Forcing more workers than memory supports is slower, not faster:
+        # the children page against each other and the machine spends its
+        # time moving memory rather than landmarking. Say so, because the
+        # symptom -- a run that takes longer after being told to go faster
+        # -- is otherwise baffling.
+        affordable = plan_workers(_without_forced_workers(cfg), len(jobs))
+        if workers > affordable:
+            context.note(
+                f"tracking_workers is set to {workers}, but only {free:.0f} MB "
+                f"was free, which supports about {affordable}. The workers will "
+                "page against each other and the run may take longer than it "
+                "would with fewer. Close other applications, or let the setting "
+                "choose automatically."
+            )
+    return pool
+
+
+def _without_forced_workers(cfg: Config) -> Config:
+    """A copy of the config with the manual worker count removed.
+
+    Used only to ask what the automatic policy would have chosen, so that a
+    forced setting can be compared against what the machine can actually
+    afford.
+    """
+    import copy
+
+    relaxed = copy.copy(cfg)
+    relaxed.tracking_workers = None
+    return relaxed
+
+
+def _stop_tracking(pool, context: AnalysisContext) -> None:
+    """Release the pool and record anything that went wrong in it.
+
+    Worker failures are not fatal -- the stage recomputes in-process -- but
+    they are the difference between a fifteen-minute run and an hour-long
+    one, so they belong in the warnings where someone will see them rather
+    than only in the log.
+    """
+    if pool is None:
+        return
+    for warning in pool.warnings:
+        context.note(f"tracking: {warning}")
+    pool.warnings.clear()
+    pool.close()
 
 
 def _track_face_lazily(path: Path, model_dir: str, cfg: Config, role: str):
@@ -871,11 +967,18 @@ def _transcript_to_json(transcript: Transcript) -> dict:
         "words": [
             [w.person, w.start, w.end, w.text, w.probability] for w in transcript.words
         ],
+        # Cached with the words. A warm re-run must not quietly drop the
+        # record of what the recognizer originally said.
+        "corrections": [
+            [c.person, c.start, c.heard, c.written, c.score]
+            for c in transcript.corrections
+        ],
     }
 
 
 def _json_to_transcript(payload: dict) -> Transcript:
     from convlab.speech.asr import Word
+    from convlab.speech.vocabulary import Correction
 
     return Transcript(
         words=[
@@ -887,6 +990,12 @@ def _json_to_transcript(payload: dict) -> Transcript:
         mean_confidence=float(payload.get("mean_confidence", float("nan"))),
         n_dropped=int(payload.get("n_dropped", 0)),
         warnings=list(payload.get("warnings", [])),
+        corrections=[
+            Correction(
+                person=p, start=float(s), heard=h, written=w, score=float(sc)
+            )
+            for p, s, h, w, sc in payload.get("corrections", [])
+        ],
     )
 
 

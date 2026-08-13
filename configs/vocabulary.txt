@@ -1,0 +1,140 @@
+# Names the recognizer would otherwise get wrong.
+#
+# One entry per line. Blank lines and lines starting with '#' are ignored.
+# Entries are used twice: to bias the recognizer while it is decoding, and
+# to repair close phonetic misses afterwards. Every repair is listed in the
+# session report, so nothing is changed silently.
+#
+# ADD TO THIS FILE when you notice a name coming out wrong. That is the fix
+# -- it needs no code change and no new model, only a re-run of the affected
+# sessions. Write the entry the way it should appear in the transcript,
+# including capitalisation.
+#
+# Do NOT add ordinary words. The repair pass will not rewrite a common word
+# on its own, but a vocabulary full of everyday vocabulary makes the
+# decoder's bias useless by diluting it.
+#
+# NEVER add participant names or anything else identifying. This file is
+# committed to the repository; IRB protocol 2020-1657 keeps identifiers out
+# of source control.
+
+# --- this campus -------------------------------------------------------
+UW-Madison
+Madison
+Wisconsin
+Badgers
+Bascom Hill
+State Street
+Memorial Union
+Camp Randall
+Chazen
+Sellery
+Witte
+Ogg Hall
+Gordon Commons
+Van Hise
+Sterling Hall
+Union South
+Picnic Point
+Lake Mendota
+Lake Monona
+Langdon Street
+Regent Street
+Willy Street
+Monroe Street
+Vilas
+Humanities
+Grainger
+Nicholas Recreation Center
+the Nick
+SERF
+College Library
+Steenbock
+Babcock
+Mifflin
+
+# --- other universities that come up -----------------------------------
+# These are exactly the class of name Whisper mishears: a rare institution
+# whose sound matches a common phrase. SUNY Cortland comes out as "Sunny
+# Portland" without this line.
+SUNY Cortland
+SUNY Binghamton
+SUNY Geneseo
+SUNY Oswego
+SUNY Plattsburgh
+UW-Milwaukee
+UW-La Crosse
+UW-Eau Claire
+UW-Whitewater
+UW-Oshkosh
+UW-Stevens Point
+UW-Platteville
+UW-River Falls
+UW-Stout
+UW-Green Bay
+UW-Parkside
+UW-Superior
+Marquette
+Carthage College
+Beloit College
+Lawrence University
+Ripon College
+Edgewood College
+Northwestern
+Purdue
+Michigan State
+Ohio State
+Penn State
+Notre Dame
+Loyola
+DePaul
+Illinois State
+Iowa State
+Grinnell
+Macalester
+Carleton College
+
+# --- Wisconsin and upper-Midwest places --------------------------------
+Milwaukee
+Waukesha
+Kenosha
+Racine
+Appleton
+Oshkosh
+Sheboygan
+Wauwatosa
+Menomonee Falls
+Sun Prairie
+Middleton
+Verona
+Fitchburg
+Waunakee
+Stoughton
+Janesville
+Beloit
+La Crosse
+Eau Claire
+Green Bay
+Fond du Lac
+Manitowoc
+Stevens Point
+Wausau
+Superior
+Door County
+Wisconsin Dells
+Devil's Lake
+the Driftless
+Minneapolis
+Saint Paul
+Naperville
+Schaumburg
+Evanston
+Oak Park
+Des Plaines
+
+# --- the lab and the department ----------------------------------------
+Niedenthal
+SONA
+psych department
+Brogden
+Psychology Building

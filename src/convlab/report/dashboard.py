@@ -25,6 +25,11 @@ from convlab.context import AnalysisContext
 from convlab.measures.base import MeasureValue, registry
 from convlab.report.player import build_player_data, player_css, render_player
 from convlab.report.qc import QCReport
+from convlab.report.transcript import (
+    build_transcript_data,
+    render_transcript,
+    transcript_css,
+)
 
 PALETTE = {
     "A": "#0f766e",
@@ -352,6 +357,31 @@ def _duration(seconds: float | None) -> str:
     return f"{minutes} min {rest:02d} s" if rest else f"{minutes} min"
 
 
+def _nod_lengths(get, person: str) -> str:
+    """Nods broken down by how many cycles each one ran to.
+
+    The distinction a coder makes and a rate cannot: one down-and-up is not
+    the same signal as four, and Poggi et al. (2010) treat the number of
+    repetitions as one of the features separating what a nod means.
+    """
+    parts = []
+    for measure_id, label in (
+        ("nod_count_single", "single"),
+        ("nod_count_double", "double"),
+        ("nod_count_triple", "triple"),
+        ("nod_count_multiple", "4+ cycles"),
+    ):
+        value = get(measure_id, person)
+        if value is None:
+            continue
+        parts.append(f"{value:,.0f} {label}")
+    if not parts:
+        return "n/a"
+    mean = get("nod_cycles_mean", person)
+    tail = f" &mdash; {mean:.1f} cycles on average" if mean is not None else ""
+    return ", ".join(parts) + tail
+
+
 def _scorecard(context: AnalysisContext, values: Sequence[MeasureValue]) -> str:
     """A plain-language summary of each participant.
 
@@ -375,6 +405,26 @@ def _scorecard(context: AnalysisContext, values: Sequence[MeasureValue]) -> str:
 
     total = max(context.duration, 1e-9)
     cards = []
+
+    def both(person: str, count_id: str, rate_id: str, per: str = "per minute") -> str:
+        """A count and its rate together.
+
+        Neither alone is enough. The rate is what compares two conversations
+        of different lengths; the count is what says whether the rate rests
+        on nine events or ninety. Printing one and not the other has been
+        the single most common complaint about this report.
+        """
+        n = get(count_id, person)
+        rate = get(rate_id, person)
+        if n is None and rate is None:
+            return "n/a"
+        if n is None:
+            return f"{rate:.1f} {per}"
+        word = "time" if n == 1 else "times"
+        if rate is None:
+            return f"{n:,.0f} {word}"
+        return f"{n:,.0f} {word} &mdash; {rate:.1f} {per}"
+
     for person in context.persons:
         speaking = get("speaking_time", person)
         listening = get("listening_time", person)
@@ -419,8 +469,27 @@ def _scorecard(context: AnalysisContext, values: Sequence[MeasureValue]) -> str:
             ),
             (
                 "Nodded",
-                f"{count(get('nod_count', person))} times, "
-                f"{_duration(get('nod_total_duration', person))} in total",
+                both(person, "nod_count", "nod_rate")
+                + (f", {_duration(get('nod_total_duration', person))} in total"
+                   if get("nod_total_duration", person) is not None else ""),
+            ),
+            (
+                "&nbsp;&nbsp;of those, nod length",
+                _nod_lengths(get, person),
+            ),
+            (
+                "&nbsp;&nbsp;while listening",
+                both(person, "nod_count_listening", "nod_rate_while_listening",
+                     "per minute of listening"),
+            ),
+            (
+                "&nbsp;&nbsp;while speaking",
+                both(person, "nod_count_speaking", "nod_rate_while_speaking",
+                     "per minute of their own speech"),
+            ),
+            (
+                "Shook their head",
+                both(person, "head_shake_count", "head_shake_rate"),
             ),
             (
                 "Smiled",
@@ -431,31 +500,32 @@ def _scorecard(context: AnalysisContext, values: Sequence[MeasureValue]) -> str:
             ),
             (
                 "Laughed",
-                f"{get('laughter_rate', person):.1f} times per minute"
-                if get("laughter_rate", person) is not None else "n/a",
+                both(person, "laughter_count", "laughter_rate"),
             ),
             (
                 "Acknowledged their partner",
-                f"{count(get('backchannel_count', person))} times "
-                f'("mhm", "right", "yeah")',
+                both(person, "backchannel_count", "backchannel_rate")
+                + ' ("mhm", "right", "yeah")',
             ),
             (
                 "Asked questions",
-                f"{get('question_rate', person):.1f} per minute"
-                if get("question_rate", person) is not None else "n/a",
+                both(person, "question_count", "question_rate"),
             ),
             (
                 "Hesitated",
-                f"{get('hesitation_rate', person):.1f} times per minute of their "
-                "own speech"
-                if get("hesitation_rate", person) is not None else "n/a",
+                both(person, "hesitation_count", "hesitation_rate",
+                     "per minute of their own speech"),
+            ),
+            (
+                "Gestured",
+                both(person, "gesture_count", "gesture_rate",
+                     "per minute of their own speech"),
             ),
             (
                 "Came in over their partner",
-                f"{interruptions:.1f} times per minute"
+                both(person, "interruption_count", "interruption_rate")
                 + (f", winning the floor {success:.0%} of the time"
-                   if success is not None else "")
-                if interruptions is not None else "n/a",
+                   if success is not None else ""),
             ),
             (
                 "Introduced topics",
@@ -611,6 +681,87 @@ def _topic_block(context: AnalysisContext) -> str:
         '<th class="num">Starts (min)</th><th class="num">Length (min)</th>'
         '<th class="num">Turns</th><th>Opened by</th>'
         "<th>Distinctive words</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+    )
+
+
+def _nod_block(context: AnalysisContext) -> str:
+    """Nods by length and by role, as a coder would tally them.
+
+    The point of the table is that these are four different behaviors and
+    not one behavior measured four ways. A person who produces sixty single
+    nods while listening and a person who produces twenty triples while
+    talking can have the same nod rate.
+    """
+    if not context.face:
+        return '<p class="na">No face tracking, so no nods were counted.</p>'
+
+    from convlab.vision.nods import LISTENING, OTHER, SPEAKING, length_histogram
+
+    tracked = {
+        person: signals.nod_track
+        for person, signals in context.face.items()
+        if getattr(signals, "nod_track", None) is not None
+        and signals.coverage >= context.config.vision.min_coverage
+    }
+    if not tracked:
+        return (
+            '<p class="na">The face was not tracked well enough in either '
+            "view to count nods.</p>"
+        )
+
+    max_cycles = max(
+        (e.cycles for track in tracked.values() for e in track.events), default=1
+    )
+    columns = list(range(1, min(max_cycles, 6) + 1))
+
+    header = "".join(f'<th class="num">{n}</th>' for n in columns)
+    if max_cycles > 6:
+        header += '<th class="num">7+</th>'
+
+    rows = []
+    for person, track in sorted(tracked.items()):
+        histogram = length_histogram(track, 6)
+        cells = "".join(f'<td class="num">{histogram.get(n, 0)}</td>' for n in columns)
+        if max_cycles > 6:
+            cells += (
+                f'<td class="num">'
+                f'{sum(1 for e in track.events if e.cycles > 6)}</td>'
+            )
+        colour = "var(--a)" if person == "A" else "var(--b)"
+        mean = (
+            np.mean([e.cycles for e in track.events]) if len(track) else float("nan")
+        )
+        rows.append(
+            f'<tr><td style="color:{colour};font-weight:650">{_esc(person)}</td>'
+            f'<td class="num">{len(track)}</td>{cells}'
+            f'<td class="num">{_fmt(mean)}</td>'
+            f'<td class="num">{track.total_cycles}</td>'
+            f'<td class="num">{len(track.of_role(LISTENING))}</td>'
+            f'<td class="num">{len(track.of_role(SPEAKING))}</td>'
+            f'<td class="num">{len(track.of_role(OTHER))}</td></tr>'
+        )
+
+    return (
+        '<p class="desc">A <strong>cycle</strong> is one down-and-up movement '
+        "of the head; a nod’s length is how many it ran to, following "
+        "Mori, Den &amp; Jokinen (2025), who annotated 9,223 nods and found "
+        "42% of them single, more than 95% at five cycles or fewer, and a "
+        "longest of nineteen. <strong>Listening</strong> means the partner "
+        "held the floor and this person was silent; <strong>speaking</strong> "
+        "means this person held it. <strong>Neither</strong> counts nods "
+        "during simultaneous speech or during silence with no floor-holder "
+        "&mdash; real nods, but not interpretable as either a listener’s "
+        "or a speaker’s, so they are shown rather than folded into one.</p>"
+        '<div class="scroll"><table><thead><tr>'
+        '<th>Who</th><th class="num">Nods</th>'
+        f'<th class="num" colspan="{len(columns) + (1 if max_cycles > 6 else 0)}">'
+        "Nods of each length (cycles)</th>"
+        '<th class="num">Mean</th><th class="num">Total cycles</th>'
+        '<th class="num">Listening</th><th class="num">Speaking</th>'
+        '<th class="num">Neither</th></tr>'
+        f'<tr><th></th><th></th>{header}<th></th><th></th><th></th><th></th>'
+        "<th></th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
 
@@ -800,6 +951,10 @@ def render_dashboard(
     available = sum(1 for v in values if v.available)
     player_data = build_player_data(context, video_paths, offsets)
     player_html = render_player(player_data, _review_jumps(context))
+    transcript_data = build_transcript_data(context)
+    transcript_html = render_transcript(
+        transcript_data, len(transcript_data.get("corrections", []))
+    )
 
     legend_items = [
         ('style="background:var(--a)"', "Person A speaking"),
@@ -835,7 +990,7 @@ def render_dashboard(
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{_esc(context.session_id)} &mdash; conversation analysis</title>
-<style>{_CSS}{player_css()}</style></head><body><div class="wrap">
+<style>{_CSS}{player_css()}{transcript_css()}</style></head><body><div class="wrap">
 
 <h1>Session {_esc(context.session_id)}</h1>
 <p class="sub">
@@ -860,6 +1015,12 @@ could not be computed &mdash; it is not a zero.</p>
 
 <h2>Watch it</h2>
 {player_html}
+
+<h2>Transcript</h2>
+{transcript_html}
+
+<h2>Nods</h2>
+{_nod_block(context)}
 
 <h2>Topics</h2>
 {_topic_block(context)}

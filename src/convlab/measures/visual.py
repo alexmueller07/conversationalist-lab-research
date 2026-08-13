@@ -19,7 +19,6 @@ from convlab.session import PERSONS
 from convlab.timeline import Segments
 
 FAMILY_GAZE = "gaze"
-FAMILY_HEAD = "head"
 FAMILY_FACE = "facial_expression"
 FAMILY_BODY = "body"
 
@@ -217,81 +216,8 @@ def mutual_gaze_episode_rate(ctx: AnalysisContext) -> float:
     return per_minute(len(episodes), ctx.duration)
 
 
-# ----------------------------------------------------------------------
-# Head movement
-# ----------------------------------------------------------------------
-
-
-@measure(
-    id="nod_rate_while_listening",
-    label="Nod rate while listening",
-    description=(
-        "Head nods per minute of the partner's speaking time. A nod is a "
-        "rhythmic pitch oscillation of at least 1.2 cycles, not a single dip."
-    ),
-    unit="per minute of partner speech",
-    level=PERSON_LEVEL,
-    family=FAMILY_HEAD,
-    requires=("face", "turn_set"),
-    interpretation=(
-        "The visual counterpart of a vocal backchannel, and a direct index of "
-        "active listening. Normalized by the partner's talk time so that "
-        "having a quiet partner does not read as inattention."
-    ),
-    references=(
-        "Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- "
-        "listener responses as a collaborative process",
-    ),
-)
-def nod_rate_while_listening(ctx: AnalysisContext) -> dict[str, float]:
-    out = {}
-    for p in PERSONS:
-        if not _usable(ctx, p):
-            out[p] = float("nan")
-            continue
-        listening = ctx.listening_segments(p)
-        if listening.total < 5.0:
-            out[p] = float("nan")
-            continue
-        n = sum(1 for s, e in ctx.face[p].nods if listening.contains(0.5 * (s + e))[0])
-        out[p] = per_minute(n, listening.total)
-    return out
-
-
-@measure(
-    id="nod_rate",
-    label="Overall nod rate",
-    description="Head nods per minute across the whole conversation.",
-    unit="per minute",
-    level=PERSON_LEVEL,
-    family=FAMILY_HEAD,
-    requires=("face",),
-)
-def nod_rate(ctx: AnalysisContext) -> dict[str, float]:
-    return {
-        p: per_minute(len(ctx.face[p].nods), ctx.duration) if _usable(ctx, p) else float("nan")
-        for p in PERSONS
-    }
-
-
-@measure(
-    id="head_shake_rate",
-    label="Head shake rate",
-    description="Rhythmic side-to-side head movements per minute.",
-    unit="per minute",
-    level=PERSON_LEVEL,
-    family=FAMILY_HEAD,
-    requires=("face",),
-    interpretation=(
-        "Often disagreement or disbelief, but also used as an intensifier "
-        "while telling a story, so it should not be read as negative alone."
-    ),
-)
-def head_shake_rate(ctx: AnalysisContext) -> dict[str, float]:
-    return {
-        p: per_minute(len(ctx.face[p].shakes), ctx.duration) if _usable(ctx, p) else float("nan")
-        for p in PERSONS
-    }
+# Head movement lives in :mod:`convlab.measures.head`, which counts nods by
+# cycle and splits them by whether the person was speaking or listening.
 
 
 # ----------------------------------------------------------------------
@@ -562,60 +488,6 @@ def _event_stats(ctx: AnalysisContext, attribute: str):
         signals = (ctx.face or {}).get(person)
         spans = list(getattr(signals, attribute)) if signals is not None else []
         out[person] = spans
-    return out
-
-
-@measure(
-    id="nod_count",
-    label="Number of nods",
-    description="Count of head-pitch oscillations of at least 1.2 cycles.",
-    unit="count",
-    level=PERSON_LEVEL,
-    family=FAMILY_HEAD,
-    requires=("face",),
-    interpretation=(
-        "The raw count behind the nod rate. A nod here is an oscillation, "
-        "not a single downward movement -- that distinction is what keeps "
-        "postural adjustments out of the count."
-    ),
-)
-def nod_count(ctx: AnalysisContext) -> dict[str, float]:
-    return {p: float(len(s)) for p, s in _event_stats(ctx, "nods").items()}
-
-
-@measure(
-    id="nod_total_duration",
-    label="Time spent nodding",
-    description="Total seconds occupied by detected nods.",
-    unit="seconds",
-    level=PERSON_LEVEL,
-    family=FAMILY_HEAD,
-    requires=("face",),
-    interpretation=(
-        "Read with the count: the same total can be a few long agreements or "
-        "many short ones, and those are different listening styles."
-    ),
-)
-def nod_total_duration(ctx: AnalysisContext) -> dict[str, float]:
-    return {
-        p: float(sum(e - s for s, e in spans))
-        for p, spans in _event_stats(ctx, "nods").items()
-    }
-
-
-@measure(
-    id="nod_mean_duration",
-    label="Mean nod length",
-    description="Mean duration of a detected nod.",
-    unit="seconds",
-    level=PERSON_LEVEL,
-    family=FAMILY_HEAD,
-    requires=("face",),
-)
-def nod_mean_duration(ctx: AnalysisContext) -> dict[str, float]:
-    out = {}
-    for p, spans in _event_stats(ctx, "nods").items():
-        out[p] = float(np.mean([e - s for s, e in spans])) if spans else float("nan")
     return out
 
 

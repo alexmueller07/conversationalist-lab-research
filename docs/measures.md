@@ -1,6 +1,6 @@
 # Measure catalogue
 
-161 measures across 17 families. Generated from the registry; do not edit by hand.
+195 measures across 18 families. Generated from the registry; do not edit by hand.
 
 ## Affect (11)
 
@@ -154,7 +154,7 @@ Mean facial valence during this person's own speech.
 - **Level:** person &nbsp; **Unit:** count
 - **Requires:** turn_set
 
-Number of acknowledgment tokens this person produced.
+Number of acknowledgment tokens this person produced. A lower bound: short tokens spoken over the partner are the easiest thing in the recording to miss, and the recognizer drops some outright. Comparable across sessions processed the same way; not exhaustive.
 
 ### `backchannel_coverage` -- Backchannel coverage of partner turns
 
@@ -284,6 +284,160 @@ Distinct movements of the torso center per minute, in shoulder-width units so th
 Proportion of tracked frames in which a hand was close to the face.
 
 *Interpretation.* Face-directed self-touch is a much-cited proxy for self-soothing under discomfort. The evidence for that reading is mixed, so it is offered as a descriptive behavior rather than an anxiety score.
+
+## Counts (20)
+
+### `brow_raise_count` -- Number of eyebrow raises
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face
+
+Distinct eyebrow raises above threshold.
+
+### `callback_count` -- Number of callbacks
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** semantics
+
+Times this person returned to something said at least four turns earlier, sharing a rare content anchor with it.
+
+*Interpretation.* Usually a small number, which is why the count matters: a rate of 0.4 per minute over ten minutes is four events, and four events describe this conversation rather than estimate a tendency.
+
+### `change_of_state_count` -- Number of change-of-state tokens
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** turn_set, transcript
+
+Tokens like "oh" and "ah" marking newly received information.
+
+### `compliment_count` -- Number of compliments
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** turn_set, transcript
+
+Turns opening with a compliment form addressed to the partner.
+
+*Interpretation.* Lexical detection of a small, conventionalised set of openers, so this is a floor: a compliment phrased unusually is missed.
+
+### `followup_question_count` -- Number of follow-up questions
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** semantics, turn_set, transcript
+
+Questions that took up what the partner had just said rather than opening a new line.
+
+### `gesture_count` -- Number of hand gestures
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** body
+
+Bursts of hand movement above the speed threshold.
+
+### `hesitation_count` -- Number of hesitations
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** filled_pauses
+
+Held vowels found acoustically in this person's speech -- the "uh" and "um" the transcript mostly loses.
+
+### `interrupted_count` -- Number of times interrupted
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** overlap_evidence, turn_set
+
+Times the partner came in while this person held the floor.
+
+### `interruption_count` -- Number of interruptions
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** overlap_evidence, turn_set
+
+Times this person began speaking while the partner held the floor.
+
+*Interpretation.* Requires a recording in which simultaneous speech is detectable at all. On sessions where both files carry one mixed feed this is withheld rather than reported as zero.
+
+### `laughter_count` -- Number of laughs
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** laughter
+
+Distinct laughter episodes detected in this person's audio.
+
+*Interpretation.* The count behind the laughter rate. Detection is acoustic, so a quiet exhaled laugh is missed more often than a voiced one and this should be read as a lower bound.
+
+### `mutual_gaze_episode_count` -- Number of mutual gaze episodes
+
+- **Level:** dyad &nbsp; **Unit:** count
+- **Requires:** face
+
+Episodes in which both people looked at each other at once, lasting at least the configured minimum.
+
+### `other_directed_callback_count` -- Number of callbacks to the partner
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** semantics, turn_set
+
+Callbacks reaching back to something the *partner* said rather than to this person's own earlier point.
+
+### `other_repair_count` -- Number of other-initiated repairs
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** turn_set, transcript
+
+Times this person signalled that they had not understood and asked the partner to redo the turn.
+
+### `posture_shift_count` -- Number of postural shifts
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** body
+
+Distinct movements of the torso centre.
+
+### `question_count` -- Number of questions
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** turn_set, transcript
+
+Turns classified as a wh-question, a yes/no question or a tag question from their wording.
+
+*Interpretation.* Classified from the transcript, so it inherits the recognizer's errors: a question marked only by rising intonation and not by wording will be missed.
+
+### `shared_laughter_count` -- Number of shared laughs
+
+- **Level:** dyad &nbsp; **Unit:** count
+- **Requires:** laughter
+
+Laughs by one person that the other joined within the co-laughter window.
+
+### `silence_count` -- Number of shared silences
+
+- **Level:** dyad &nbsp; **Unit:** count
+- **Requires:** turn_set
+
+Stretches in which neither person was speaking.
+
+### `turn_count_total` -- Turns in the conversation
+
+- **Level:** dyad &nbsp; **Unit:** count
+- **Requires:** turn_set
+
+Floor-holding turns by both participants together.
+
+*Interpretation.* The sample size behind every turn-level median and spread in the report. Below about twenty, those numbers are descriptive of this recording rather than estimates of anything.
+
+### `turn_transition_overlap_count` -- Number of overlapping turn onsets
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** overlap_evidence, turn_set
+
+Turns this person began before the partner had finished -- early onsets that reflect projecting the turn end rather than competing.
+
+### `within_turn_pause_count` -- Number of pauses inside turns
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** turn_set
+
+Silences inside this person's own turns -- planning pauses, as opposed to the gaps between turns.
 
 ## Dynamics (8)
 
@@ -503,59 +657,239 @@ Proportion of the conversation in which both people were looking at each other a
 - Kendon (1967) Acta Psychologica 26:22 -- gaze direction in conversation
 - Argyle & Dean (1965) Sociometry 28:289 -- eye contact and intimacy equilibrium
 
-## Head (6)
+## Head (20)
+
+### `head_shake_count` -- Number of head shakes
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face
+
+Rhythmic side-to-side head movements, counted by the same cycle rule as nods but on the yaw axis.
+
+*Interpretation.* Often disagreement or disbelief, but also used as an intensifier while telling a story, so it should not be read as negative on its own.
+
+- Hadar, Steiner, Grant & Rose (1983) Human Movement Science 2:35 -- conversational head movement at 0.2-7 Hz in slow, ordinary and rapid classes
+- Hadar, Steiner & Rose (1985) J. Nonverbal Behavior 9:214 -- cyclic versus linear head movement during listening turns
 
 ### `head_shake_rate` -- Head shake rate
 
 - **Level:** person &nbsp; **Unit:** per minute
 - **Requires:** face
 
-Rhythmic side-to-side head movements per minute.
+Head shakes per minute of conversation.
 
-*Interpretation.* Often disagreement or disbelief, but also used as an intensifier while telling a story, so it should not be read as negative alone.
+- Hadar, Steiner, Grant & Rose (1983) Human Movement Science 2:35 -- conversational head movement at 0.2-7 Hz in slow, ordinary and rapid classes
+- Hadar, Steiner & Rose (1985) J. Nonverbal Behavior 9:214 -- cyclic versus linear head movement during listening turns
 
 ### `nod_count` -- Number of nods
 
 - **Level:** person &nbsp; **Unit:** count
 - **Requires:** face
 
-Count of head-pitch oscillations of at least 1.2 cycles.
+Total nods. A nod is one or more continuous vertical head movements; it must contain at least one full cycle, meaning a movement and its return, so a single unreturned dip of the head does not count.
 
-*Interpretation.* The raw count behind the nod rate. A nod here is an oscillation, not a single downward movement -- that distinction is what keeps postural adjustments out of the count.
+*Interpretation.* The headline count. Read it next to the rate rather than instead of it: the same count means different things in a six-minute and a sixteen-minute conversation.
 
-### `nod_mean_duration` -- Mean nod length
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
+- Hadar, Steiner, Grant & Rose (1983) Human Movement Science 2:35 -- conversational head movement at 0.2-7 Hz in slow, ordinary and rapid classes
+- Hadar, Steiner & Rose (1985) J. Nonverbal Behavior 9:214 -- cyclic versus linear head movement during listening turns
+
+### `nod_count_double` -- Double nods (2 cycles)
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face
+
+Nods consisting of two cycles.
+
+*Interpretation.* Repetition is one of the features Poggi et al. use to separate nod types, so a shift between single and double nodding is a change in what the nods are doing, not only in how many there are.
+
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
+
+### `nod_count_listening` -- Nods while listening
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face, turn_set
+
+Nods produced while the partner held the floor and this person was silent. The nod's midpoint decides, not its onset.
+
+*Interpretation.* The visual counterpart of a vocal backchannel and the most direct index of active listening this pipeline produces.
+
+- Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- listener responses as a collaborative process
+- Dittmann & Llewellyn (1968) J. Pers. Soc. Psychol. 9:79 -- head nods as listener responses to vocalization
+- Poggi, D'Errico & Vincze (2010) LREC 2010:2570 -- types of nods, organised by speaker versus listener role
+- McClave (2000) J. Pragmatics 32:855 -- linguistic functions of speakers' head movements
+
+### `nod_count_multiple` -- Multiple nods (4+ cycles)
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face
+
+Nods of four cycles or more, pooled.
+
+*Interpretation.* Rare -- Mori et al. put nods of six cycles or more at about 4% -- and pooled because splitting them further gives counts too small to compare between people.
+
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
+
+### `nod_count_single` -- Single nods (1 cycle)
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face
+
+Nods consisting of one cycle: the head moved and returned once.
+
+*Interpretation.* The most common nod. In Mori et al.'s corpus of 9,223 hand-checked nods, 42% were single, and this detector reproduces that share on the lab's own recordings.
+
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
+
+### `nod_count_speaking` -- Nods while speaking
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face, turn_set
+
+Nods produced while this person held the floor.
+
+*Interpretation.* Not a listening signal at all. McClave (2000) documents speakers using head movement to intensify, to mark inclusivity, to set off quoted speech and to enumerate. Counting these together with listener nods is the single easiest way to make a nod measure mean nothing.
+
+- Poggi, D'Errico & Vincze (2010) LREC 2010:2570 -- types of nods, organised by speaker versus listener role
+- McClave (2000) J. Pragmatics 32:855 -- linguistic functions of speakers' head movements
+
+### `nod_count_triple` -- Triple nods (3 cycles)
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face
+
+Nods consisting of three cycles.
+
+*Interpretation.* Uncommon. Long nods tend to accompany strong agreement or an attempt to hand the floor back, but the count is usually small enough that individual sessions should not be over-read.
+
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
+
+### `nod_cycles_mean` -- Mean nod length
+
+- **Level:** person &nbsp; **Unit:** cycles
+- **Requires:** face
+
+Mean number of cycles per nod.
+
+*Interpretation.* Around 1.8 in the reference corpus. Values close to 1.0 describe someone who marks acknowledgement once and stops; higher values describe sustained nodding runs.
+
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
+
+### `nod_cycles_total` -- Total nod cycles
+
+- **Level:** person &nbsp; **Unit:** count
+- **Requires:** face
+
+Sum of every nod's length in cycles. A single nod contributes one, a triple contributes three.
+
+*Interpretation.* How much nodding happened, as opposed to how many separate times it started. Two people with the same nod count can differ twofold here, and that difference is a real difference in behavior.
+
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
+
+### `nod_frequency_median` -- Median nod frequency
+
+- **Level:** person &nbsp; **Unit:** Hz
+- **Requires:** face
+
+Median cycles per second within a nod.
+
+*Interpretation.* Expected in the 1.9-3.6 Hz 'ordinary' band of Hadar et al. (1983). A median at the edge of the search band is a sign the detector is picking up something other than nodding and the recording is worth watching.
+
+- Hadar, Steiner, Grant & Rose (1983) Human Movement Science 2:35 -- conversational head movement at 0.2-7 Hz in slow, ordinary and rapid classes
+- Hadar, Steiner & Rose (1985) J. Nonverbal Behavior 9:214 -- cyclic versus linear head movement during listening turns
+
+### `nod_listening_share` -- Share of nods produced while listening
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** face, turn_set
+
+Listening nods as a proportion of this person's listening and speaking nods combined. Nods during simultaneous speech or during silence with no floor-holder are excluded from both.
+
+*Interpretation.* Near 1.0 describes someone whose nodding is entirely acknowledgement of the partner. Values near 0.5 describe someone who also nods through their own speech, which is a speaking style rather than a listening one.
+
+- Poggi, D'Errico & Vincze (2010) LREC 2010:2570 -- types of nods, organised by speaker versus listener role
+- McClave (2000) J. Pragmatics 32:855 -- linguistic functions of speakers' head movements
+
+### `nod_magnitude_median` -- Median nod magnitude
+
+- **Level:** person &nbsp; **Unit:** degrees
+- **Requires:** face
+
+Median across nods of the largest peak-to-trough head-pitch excursion within the nod, in degrees.
+
+*Interpretation.* How emphatic the nodding was. Amplitude is one of the kinematic properties Hadar et al. found to separate conversational functions of head movement, and one of the production features in Poggi et al.'s typology.
+
+- Hadar, Steiner, Grant & Rose (1983) Human Movement Science 2:35 -- conversational head movement at 0.2-7 Hz in slow, ordinary and rapid classes
+- Hadar, Steiner & Rose (1985) J. Nonverbal Behavior 9:214 -- cyclic versus linear head movement during listening turns
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
+
+### `nod_mean_duration` -- Mean nod duration
 
 - **Level:** person &nbsp; **Unit:** seconds
 - **Requires:** face
 
-Mean duration of a detected nod.
+Mean wall-clock duration of a nod, in seconds.
 
-### `nod_rate` -- Overall nod rate
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
+
+### `nod_rate` -- Nod rate
 
 - **Level:** person &nbsp; **Unit:** per minute
 - **Requires:** face
 
-Head nods per minute across the whole conversation.
+Nods per minute of conversation.
+
+*Interpretation.* The count divided by session length. It mixes nodding while listening with nodding while speaking, which are separated below.
+
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
 
 ### `nod_rate_while_listening` -- Nod rate while listening
 
-- **Level:** person &nbsp; **Unit:** per minute of partner speech
+- **Level:** person &nbsp; **Unit:** per minute of listening
 - **Requires:** face, turn_set
 
-Head nods per minute of the partner's speaking time. A nod is a rhythmic pitch oscillation of at least 1.2 cycles, not a single dip.
+Nods per minute of listening time -- time when the partner held the floor and this person was silent.
 
-*Interpretation.* The visual counterpart of a vocal backchannel, and a direct index of active listening. Normalized by the partner's talk time so that having a quiet partner does not read as inattention.
+*Interpretation.* Normalized by the partner's talk time rather than by session length, so that having a quiet partner does not read as inattention.
 
 - Bavelas, Coates & Johnson (2000) J. Pers. Soc. Psychol. 79:941 -- listener responses as a collaborative process
+- Dittmann & Llewellyn (1968) J. Pers. Soc. Psychol. 9:79 -- head nods as listener responses to vocalization
+
+### `nod_rate_while_speaking` -- Nod rate while speaking
+
+- **Level:** person &nbsp; **Unit:** per minute of own speech
+- **Requires:** face, turn_set
+
+Nods per minute of this person's own speaking time.
+
+*Interpretation.* Speaker head movement is partly prosodic: it lands on stressed syllables and at phrase boundaries. Read it alongside gesture rate rather than as a measure of agreement.
+
+- Poggi, D'Errico & Vincze (2010) LREC 2010:2570 -- types of nods, organised by speaker versus listener role
+- McClave (2000) J. Pragmatics 32:855 -- linguistic functions of speakers' head movements
+- Hadar, Steiner, Grant & Rose (1983) Human Movement Science 2:35 -- conversational head movement at 0.2-7 Hz in slow, ordinary and rapid classes
+- Hadar, Steiner & Rose (1985) J. Nonverbal Behavior 9:214 -- cyclic versus linear head movement during listening turns
+
+### `nod_single_proportion` -- Share of nods that are single
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** face
+
+Single-cycle nods as a proportion of all this person's nods.
+
+*Interpretation.* A scale-free summary of the length distribution. The reference value is 0.42; a much higher value describes clipped, perfunctory acknowledgement and a much lower one describes sustained nodding.
+
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
 
 ### `nod_total_duration` -- Time spent nodding
 
 - **Level:** person &nbsp; **Unit:** seconds
 - **Requires:** face
 
-Total seconds occupied by detected nods.
+Total seconds occupied by nods.
 
-*Interpretation.* Read with the count: the same total can be a few long agreements or many short ones, and those are different listening styles.
+*Interpretation.* Read with the count and the mean length: the same total can be a few long agreements or many short ones.
+
+- Mori, Den & Jokinen (2025) PLoS ONE 20(5):e0323448 -- structure of nods in conversation; cycle definition and length distribution
 
 ## Interruption (7)
 

@@ -69,6 +69,11 @@ class Transcript:
     mean_confidence: float = float("nan")
     n_dropped: int = 0
     warnings: list[str] = field(default_factory=list)
+    corrections: list = field(default_factory=list)
+    """Vocabulary repairs applied after recognition, as
+    :class:`convlab.speech.vocabulary.Correction`. Kept on the transcript
+    and shown in the report so that no word in the output was changed
+    without a visible record of what it was before."""
 
     def words_of(self, person: str) -> list[Word]:
         return [w for w in self.words if w.person == person]
@@ -254,6 +259,16 @@ def transcribe(
     offsets = offsets or {}
     all_probs: list[float] = []
 
+    # The lab's list of names the recognizer has never heard of. Supplied to
+    # the decoder as hotwords so the right spelling is in the search rather
+    # than absent from it, and used again afterwards to repair what still
+    # came out wrong. See :mod:`convlab.speech.vocabulary`.
+    from convlab.speech.vocabulary import Vocabulary
+
+    vocabulary = Vocabulary([]) if cfg.vocabulary == "" else Vocabulary.load(cfg.vocabulary)
+    if vocabulary:
+        log.info("recognition biased toward %d vocabulary entries", len(vocabulary))
+
     for person, signal in audio.items():
         person_speech = speech.get(person)
         if person_speech is None or not len(person_speech):
@@ -262,6 +277,7 @@ def transcribe(
         blocks = _build_blocks(
             signal, person_speech, sample_rate, offset, cfg.max_segment_s
         )
+        person_words: list[Word] = []
 
         for block in blocks:
             kwargs: dict = dict(
@@ -270,6 +286,14 @@ def transcribe(
                 word_timestamps=cfg.word_timestamps,
                 condition_on_previous_text=cfg.condition_on_previous_text,
             )
+            if vocabulary and cfg.bias_decoder:
+                kwargs["hotwords"] = vocabulary.hotwords()
+            if not cfg.temperature_fallback:
+                # Whisper's default is a ladder of temperatures tried in
+                # turn when a block's output fails its own sanity checks.
+                # Pinning it to zero makes runs reproducible and faster at
+                # the cost of leaving repetition loops in place.
+                kwargs["temperature"] = 0.0
             if runner is model:
                 kwargs["vad_filter"] = cfg.vad_filter
             else:
@@ -291,7 +315,7 @@ def transcribe(
                         all_probs.append(prob)
                         start_s = block.to_session_time(float(w.start))
                         end_s = block.to_session_time(float(w.end))
-                        transcript.words.append(
+                        person_words.append(
                             Word(
                                 person=person,
                                 start=start_s,
@@ -300,9 +324,29 @@ def transcribe(
                                 probability=prob,
                             )
                         )
+            except TypeError as exc:
+                # An older faster-whisper without `hotwords`. Retry once
+                # without it rather than losing the whole block: unbiased
+                # recognition is worse than biased, and far better than none.
+                if "hotwords" not in kwargs:
+                    raise
+                log.info("recognizer does not accept hotwords (%s); decoding unbiased", exc)
+                kwargs.pop("hotwords")
+                transcript.warnings.append(
+                    "this faster-whisper build does not support hotwords; "
+                    "recognition was not biased toward the lab vocabulary"
+                )
+                continue
             except Exception as exc:  # noqa: BLE001
                 log.warning("transcription failed for %s block: %s", person, exc)
                 transcript.warnings.append(f"{person}: {type(exc).__name__}: {exc}")
+
+        if vocabulary and cfg.repair_vocabulary:
+            person_words, corrections = vocabulary.correct(
+                person_words, person, min_score=cfg.repair_min_score
+            )
+            transcript.corrections.extend(corrections)
+        transcript.words.extend(person_words)
 
     # Release the recognizer before returning. It commits roughly 2.3 GB, and
     # holding it through the prosody, semantics and body stages is what makes
@@ -320,5 +364,11 @@ def transcribe(
         transcript.warnings.append(
             f"mean word confidence {transcript.mean_confidence:.2f} is low; "
             "lexical and semantic measures for this session are unreliable"
+        )
+    if transcript.corrections:
+        log.info(
+            "vocabulary repaired %d phrase(s): %s",
+            len(transcript.corrections),
+            "; ".join(c.describe() for c in transcript.corrections[:5]),
         )
     return transcript

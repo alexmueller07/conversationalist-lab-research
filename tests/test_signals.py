@@ -23,9 +23,10 @@ from convlab.speech.attribution import (
     _transition_matrix,
 )
 from convlab.synchrony import windowed_lagged_correlation
+from convlab.timeline import Segments
+from convlab.vision.nods import LISTENING, OTHER, SPEAKING, assign_roles, length_histogram
 from convlab.vision.signals import (
     detect_nods,
-    detect_oscillations,
     detect_shakes,
     estimate_partner_direction,
 )
@@ -61,16 +62,52 @@ class TestHeadPose:
         assert yaw == pytest.approx(20.0, abs=0.5)
 
 
-class TestOscillationDetection:
+def square_nod(duration, hz, freq, amplitude, start, cycles, taper=1.0):
+    """A nod of exactly ``cycles`` cycles, optionally shrinking as it goes.
+
+    A plain windowed sinusoid is a bad test signal for cycle counting: the
+    Hanning taper suppresses the first and last half-cycle below any
+    amplitude threshold, so a three-cycle stimulus is legitimately detected
+    as two. This builds each half-cycle explicitly instead, so the expected
+    count is unambiguous, and ``taper`` scales successive cycles the way
+    Mori et al. report real nods declining.
+    """
+    n = int(duration * hz)
+    x = np.zeros(n)
+    span = int(round(hz / (2.0 * freq)))
+    i = int(start * hz)
+    for k in range(int(round(cycles * 2))):
+        if i + span > n:
+            break
+        scale = amplitude * (taper ** (k // 2))
+        t = np.linspace(0.0, np.pi, span, endpoint=False)
+        # Even half-cycles rise from the resting trough to the peak, odd
+        # ones fall back to it, so the nod begins and ends at rest and the
+        # peak-to-trough magnitude of each half-cycle is exactly `scale`.
+        x[i:i + span] = scale * (
+            (1.0 - np.cos(t)) / 2.0 if k % 2 == 0 else (1.0 + np.cos(t)) / 2.0
+        )
+        i += span
+    # The head holds where the movement left it. A whole number of cycles
+    # ends at rest and this changes nothing; half a cycle ends with the head
+    # moved and staying moved, which is what a single dip actually is.
+    if i > int(start * hz):
+        x[i:] = x[i - 1]
+    return x
+
+
+class TestNodDetection:
     def test_finds_a_clear_nod(self):
         hz = 100.0
-        pitch = oscillation(10, hz, 2.0, 6.0, 3.0, 3.0)
+        pitch = square_nod(10, hz, 2.0, 6.0, 3.0, 3)
         yaw = np.zeros_like(pitch)
         assert len(detect_nods(pitch, yaw, hz, VisionConfig())) == 1
 
     def test_rejects_a_single_dip(self):
+        # One half-cycle: the head went down and stayed there. Mori et al.
+        # would admit this after human confirmation; this detector does not.
         hz = 100.0
-        pitch = oscillation(10, hz, 1.0, 9.0, 3.0, 0.6)
+        pitch = square_nod(10, hz, 1.5, 9.0, 3.0, 0.5)
         yaw = np.zeros_like(pitch)
         assert len(detect_nods(pitch, yaw, hz, VisionConfig())) == 0
 
@@ -82,12 +119,12 @@ class TestOscillationDetection:
 
     def test_rejects_movement_that_is_too_small(self):
         hz = 100.0
-        pitch = oscillation(10, hz, 2.0, 0.4, 3.0, 3.0)
+        pitch = square_nod(10, hz, 2.0, 0.4, 3.0, 3)
         assert len(detect_nods(pitch, np.zeros_like(pitch), hz, VisionConfig())) == 0
 
     def test_shake_is_not_counted_as_a_nod(self):
         hz = 100.0
-        yaw = oscillation(10, hz, 2.0, 7.0, 3.0, 3.0)
+        yaw = square_nod(10, hz, 2.0, 7.0, 3.0, 3)
         pitch = np.zeros_like(yaw)
         cfg = VisionConfig()
         assert len(detect_nods(pitch, yaw, hz, cfg)) == 0
@@ -95,7 +132,99 @@ class TestOscillationDetection:
 
     def test_all_nan_input_yields_nothing(self):
         nan = np.full(500, np.nan)
-        assert len(detect_oscillations(nan, 100.0, (0.8, 4.0), 1.0, 1.0)) == 0
+        assert len(detect_nods(nan, nan, 100.0, VisionConfig())) == 0
+
+    @pytest.mark.parametrize("cycles", [1, 2, 3, 5])
+    def test_cycle_count_is_recovered(self, cycles):
+        """The defining property: a nod of N cycles is reported as length N."""
+        hz = 100.0
+        pitch = square_nod(12, hz, 2.0, 6.0, 3.0, cycles)
+        track = detect_nods(pitch, np.zeros_like(pitch), hz, VisionConfig())
+        assert len(track) == 1
+        assert track.events[0].cycles == cycles
+
+    def test_odd_half_cycle_counts_as_a_cycle(self):
+        # Mori et al.: "when nods comprise odd numbers of half-cycles, the
+        # last half-cycle is regarded as a cycle". Three half-cycles is
+        # therefore length 2, not length 1.5 and not length 1.
+        hz = 100.0
+        pitch = square_nod(12, hz, 2.0, 6.0, 3.0, 1.5)
+        track = detect_nods(pitch, np.zeros_like(pitch), hz, VisionConfig())
+        assert len(track) == 1
+        assert track.events[0].half_cycles == 3
+        assert track.events[0].cycles == 2
+
+    def test_a_tapering_nod_keeps_its_length(self):
+        """Magnitude declines across a real nod; the count must not."""
+        hz = 100.0
+        pitch = square_nod(12, hz, 2.0, 7.0, 3.0, 3, taper=0.6)
+        track = detect_nods(pitch, np.zeros_like(pitch), hz, VisionConfig())
+        assert len(track) == 1
+        assert track.events[0].cycles == 3
+
+    def test_movement_entirely_below_the_onset_bar_is_not_a_nod(self):
+        """Hysteresis must not admit a run that never reached full size."""
+        hz = 100.0
+        cfg = VisionConfig()
+        pitch = square_nod(12, hz, 2.0, cfg.nod_min_amplitude_deg * 0.7, 3.0, 4)
+        assert len(detect_nods(pitch, np.zeros_like(pitch), hz, cfg)) == 0
+
+    def test_two_separate_nods_are_not_merged(self):
+        hz = 100.0
+        pitch = square_nod(20, hz, 2.0, 6.0, 3.0, 2) + square_nod(20, hz, 2.0, 6.0, 10.0, 2)
+        track = detect_nods(pitch, np.zeros_like(pitch), hz, VisionConfig())
+        assert len(track) == 2
+        assert [e.cycles for e in track.events] == [2, 2]
+
+    def test_magnitude_and_frequency_are_reported(self):
+        hz = 100.0
+        pitch = square_nod(12, hz, 2.5, 8.0, 3.0, 3)
+        event = detect_nods(pitch, np.zeros_like(pitch), hz, VisionConfig()).events[0]
+        assert event.magnitude_deg == pytest.approx(8.0, rel=0.15)
+        assert event.frequency_hz == pytest.approx(2.5, rel=0.2)
+
+    def test_nothing_is_invented_inside_a_tracking_gap(self):
+        hz = 100.0
+        pitch = square_nod(12, hz, 2.0, 6.0, 3.0, 3)
+        pitch[int(3.0 * hz):int(4.5 * hz)] = np.nan
+        assert len(detect_nods(pitch, np.zeros_like(pitch), hz, VisionConfig())) == 0
+
+    def test_length_histogram_bins_by_cycles(self):
+        hz = 100.0
+        pitch = square_nod(30, hz, 2.0, 6.0, 2.0, 1) + square_nod(30, hz, 2.0, 6.0, 10.0, 3)
+        track = detect_nods(pitch, np.zeros_like(pitch), hz, VisionConfig())
+        histogram = length_histogram(track, 5)
+        assert histogram[1] == 1
+        assert histogram[3] == 1
+
+
+class TestNodRoles:
+    def _track(self):
+        hz = 100.0
+        pitch = (
+            square_nod(40, hz, 2.0, 6.0, 2.0, 2)     # while speaking
+            + square_nod(40, hz, 2.0, 6.0, 12.0, 2)  # while listening
+            + square_nod(40, hz, 2.0, 6.0, 25.0, 2)  # neither
+        )
+        return detect_nods(pitch, np.zeros_like(pitch), hz, VisionConfig())
+
+    def test_roles_are_assigned_from_the_midpoint(self):
+        track = assign_roles(
+            self._track(),
+            speaking=Segments.from_pairs([(0.0, 8.0)]),
+            listening=Segments.from_pairs([(10.0, 20.0)]),
+        )
+        assert [e.role for e in track.events] == [SPEAKING, LISTENING, OTHER]
+
+    def test_of_role_filters(self):
+        track = assign_roles(
+            self._track(),
+            speaking=Segments.from_pairs([(0.0, 8.0)]),
+            listening=Segments.from_pairs([(10.0, 20.0)]),
+        )
+        assert len(track.of_role(SPEAKING)) == 1
+        assert len(track.of_role(LISTENING)) == 1
+        assert track.total_cycles == 6
 
 
 class TestGazeDirection:

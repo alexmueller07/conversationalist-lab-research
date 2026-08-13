@@ -24,6 +24,7 @@ import json
 import logging
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from convlab.config import Config
@@ -110,72 +111,258 @@ def run_isolated(
     return True
 
 
-def run_isolated_concurrent(
-    stage: str,
-    session: Session,
-    config: Config,
-    output_root: str | Path,
-    persons: list[str],
-    timeout: float = 7200.0,
-) -> bool:
-    """Track each person in their own child process, all at once.
+@dataclass
+class _Job:
+    stage: str
+    person: str
+    request: Path
+    log: Path
+    process: "subprocess.Popen | None" = None
+    handle: "object | None" = None
+    ok: bool = False
+    done: bool = False
 
-    The two views are independent files landmarked by independent models,
-    so nothing is shared between the children but the CPU -- and tracking
-    is compute-bound at a handful of threads per process, which leaves a
-    modern machine with cores to spare. Wall-clock for the stage roughly
-    halves. True only if *every* child wrote its cache; any failure sends
-    the caller down the serial path, which recomputes safely because the
-    cache writes are atomic.
+
+class TrackingPool:
+    """Every tracking job for one session, running at once.
+
+    Four independent jobs exist per session -- a face and a body track for
+    each participant -- and on this workload they are the entire wall-clock
+    problem. Measured on the lab laptop, a single tracking child holds about
+    520 MB and saturates 1.2 of twelve logical cores, so running them one
+    after another leaves nine tenths of the machine idle for the twenty
+    minutes that dominates a run. Four at once returns 1,600 frames in the
+    time one worker returns 800.
+
+    Two further savings come from doing this in one place rather than once
+    per stage. Importing MediaPipe costs nineteen seconds in each child; a
+    single round of children pays that once in wall-clock instead of twice.
+    And because the pool is started before speaker attribution and joined
+    at each stage that needs it, body tracking overlaps transcription,
+    prosody and semantics rather than queueing behind them -- on a typical
+    session it stops contributing to wall-clock altogether.
+
+    Jobs whose cache is already warm are never launched. A job that fails
+    is reported and left to the parent, which recomputes it in-process; the
+    caches are content-addressed and written atomically, so recomputing is
+    always safe.
+
+    Child output goes to a file, not to a pipe. This is not a stylistic
+    choice: a pipe holds about 64 KB before a write to it blocks, and
+    importing MediaPipe and TensorFlow produces a steady stream of notices
+    on stderr. Because these children are started long before they are
+    joined -- that being the entire point -- nothing would be draining those
+    pipes, and the children would deadlock during their imports, at about
+    11 MB resident and zero CPU, forever. A file has no such limit, and it
+    leaves a durable record of what a failed worker said.
     """
-    if stage not in ISOLATABLE:
-        raise ValueError(f"{stage!r} is not isolatable; expected one of {ISOLATABLE}")
 
-    requests = [
-        _write_request(stage, session, config, output_root, [p], suffix=f"_{p}")
-        for p in persons
-    ]
-    children: list[subprocess.Popen] = []
-    try:
-        for request in requests:
-            children.append(
-                subprocess.Popen(
-                    [sys.executable, "-m", "convlab.isolate", str(request)],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
+    def __init__(
+        self,
+        session: Session,
+        config: Config,
+        output_root: str | Path,
+        jobs: "list[tuple[str, str]]",
+        workers: int,
+        timeout: float = 7200.0,
+    ) -> None:
+        self.session = session
+        self.config = config
+        self.output_root = output_root
+        self.timeout = timeout
+        self.workers = max(1, int(workers))
+        self._pending: list[_Job] = [
+            _Job(
+                stage=stage,
+                person=person,
+                request=_write_request(
+                    stage, session, config, output_root, [person],
+                    suffix=f"_{person}",
+                ),
+                log=Path(output_root) / session.session_id
+                / f".worker_{stage}_{person}.log",
             )
-    except OSError as exc:
-        log.warning("could not start parallel %s children (%s)", stage, exc)
-        for child in children:
-            child.kill()
-        for request in requests:
-            request.unlink(missing_ok=True)
+            for stage, person in jobs
+        ]
+        self._running: list[_Job] = []
+        self._finished: list[_Job] = []
+        self.warnings: list[str] = []
+
+    # ------------------------------------------------------------------
+    def start(self) -> None:
+        """Fill the worker slots. Safe to call more than once."""
+        while self._pending and len(self._running) < self.workers:
+            job = self._pending.pop(0)
+            try:
+                job.log.parent.mkdir(parents=True, exist_ok=True)
+                job.handle = job.log.open("w", encoding="utf-8", errors="replace")
+                job.process = subprocess.Popen(
+                    [sys.executable, "-m", "convlab.isolate", str(job.request)],
+                    stdout=job.handle,
+                    stderr=subprocess.STDOUT,
+                )
+            except OSError as exc:
+                log.warning("could not start %s for %s (%s)", job.stage, job.person, exc)
+                self.warnings.append(
+                    f"could not start a {job.stage} worker ({exc}); "
+                    "that view will be tracked in-process"
+                )
+                self._close_log(job)
+                job.done = True
+                job.request.unlink(missing_ok=True)
+                self._finished.append(job)
+                continue
+            self._running.append(job)
+
+    def wait(self, stage: str) -> bool:
+        """Block until every job for ``stage`` has finished.
+
+        Jobs for other stages keep running. Returns True when all of this
+        stage's jobs wrote their caches.
+        """
+        while any(j.stage == stage for j in self._pending + self._running):
+            # Prefer to reap a job of the stage being waited on; if none of
+            # them is running yet, reap whatever finishes and refill, which
+            # is what promotes a queued job of this stage into a slot.
+            target = [j for j in self._running if j.stage == stage]
+            for job in target or list(self._running):
+                self._reap(job)
+                break
+            else:
+                # Nothing running at all but jobs still pending: a start()
+                # failed for every slot. Give up on them.
+                for job in [j for j in self._pending if j.stage == stage]:
+                    self._pending.remove(job)
+                    job.request.unlink(missing_ok=True)
+                    job.done = True
+                    self._finished.append(job)
+                break
+            self.start()
+
+        results = [j for j in self._finished if j.stage == stage]
+        return bool(results) and all(j.ok for j in results)
+
+    def __enter__(self) -> "TrackingPool":
+        self.start()
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        self.close()
         return False
 
-    ok = True
-    try:
-        for child, person in zip(children, persons):
+    def __del__(self) -> None:  # pragma: no cover - interpreter teardown
+        # Backstop for the path where a run raises between starting the pool
+        # and joining it. Without this, a cancelled analysis would leave two
+        # to four MediaPipe processes running against the user's video files.
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def close(self) -> None:
+        """Stop everything still running. Called when a run is cancelled."""
+        for job in self._running:
+            if job.process is not None and job.process.poll() is None:
+                job.process.kill()
+                job.process.wait()
+            self._close_log(job)
+            job.request.unlink(missing_ok=True)
+            job.log.unlink(missing_ok=True)
+        for job in self._pending:
+            job.request.unlink(missing_ok=True)
+        self._running.clear()
+        self._pending.clear()
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _close_log(job: _Job) -> None:
+        handle = job.handle
+        job.handle = None
+        if handle is not None:
             try:
-                _, stderr = child.communicate(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.communicate()
-                log.warning("parallel %s for %s timed out", stage, person)
-                ok = False
-                continue
-            if child.returncode != 0:
-                tail = (stderr or "").strip().splitlines()[-3:]
-                log.warning(
-                    "parallel %s for %s exited %d. %s",
-                    stage, person, child.returncode, " / ".join(tail),
-                )
-                ok = False
-    finally:
-        for request in requests:
-            request.unlink(missing_ok=True)
-    return ok
+                handle.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _tail(self, job: _Job, lines: int = 3) -> str:
+        try:
+            return " / ".join(job.log.read_text(encoding="utf-8").strip().splitlines()[-lines:])
+        except OSError:
+            return ""
+
+    def _reap(self, job: _Job) -> None:
+        process = job.process
+        try:
+            if process is not None:
+                process.wait(timeout=self.timeout)
+                self._close_log(job)
+                if process.returncode == 0:
+                    job.ok = True
+                else:
+                    log.warning(
+                        "%s worker for %s exited %d. %s",
+                        job.stage, job.person, process.returncode, self._tail(job),
+                    )
+                    self.warnings.append(
+                        f"{job.stage} for participant {job.person} failed in its "
+                        f"worker and was recomputed in-process; see {job.log.name}"
+                    )
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            self._close_log(job)
+            log.warning("%s worker for %s timed out", job.stage, job.person)
+            self.warnings.append(
+                f"{job.stage} for participant {job.person} timed out after "
+                f"{self.timeout:.0f}s"
+            )
+        finally:
+            self._close_log(job)
+            job.request.unlink(missing_ok=True)
+            # The log is only worth keeping when it explains a failure.
+            if job.ok:
+                job.log.unlink(missing_ok=True)
+            job.done = True
+            if job in self._running:
+                self._running.remove(job)
+            self._finished.append(job)
+
+
+def plan_workers(config: Config, n_jobs: int) -> int:
+    """How many tracking children to run at once.
+
+    Decided from free memory rather than from core count, because memory is
+    what kills a run and cores only make it slow.
+
+    The cost is modelled as one expensive child plus cheap ones, which is
+    what it measures as: the first holds 519 MB, and each further child adds
+    only about 200, because the MediaPipe and TensorFlow images are shared
+    between processes and only the working set is paid again. Treating every
+    child as costing the full amount -- which the previous policy did, at a
+    guessed 1.3 GB apiece -- demands 5 GB free to run four workers and so
+    never ran more than one on the machine this is for.
+
+    One worker is always allowed: refusing to start any would make a
+    low-memory machine slower than before rather than merely no faster.
+    """
+    if n_jobs <= 0:
+        return 0
+    if config.tracking_workers is not None:
+        return max(1, min(int(config.tracking_workers), n_jobs))
+
+    import os
+
+    from convlab.system import available_memory_mb
+
+    by_cpu = max(1, (os.cpu_count() or 4) - 1)
+    available = available_memory_mb()
+    if available is None:
+        by_memory = 2  # unknown memory: take the modest win, not the big one
+    else:
+        spare = available - config.tracking_reserve_mb - config.tracking_first_worker_mb
+        extra = max(config.tracking_extra_worker_mb, 1.0)
+        by_memory = 1 + int(max(0.0, spare) // extra)
+    return int(max(1, min(n_jobs, by_cpu, by_memory)))
 
 
 # ----------------------------------------------------------------------
@@ -222,9 +409,11 @@ def _run_request(path: Path) -> int:
             role = session.close_view(person)
             if role is None:
                 continue
+            # Must match _tracking_keys in the pipeline exactly, or the child
+            # writes a cache entry the parent will never look for.
             key = make_key(
                 fingerprint_file(session.path(role)),
-                config.vision.__dict__,
+                config.vision.tracking_key(),
                 "face" if is_face else "body",
             )
             name = f"{'face' if is_face else 'body'}_{person}"

@@ -121,10 +121,25 @@ def events_table(session_id: str, context: AnalysisContext) -> pd.DataFrame:
 
     if context.face:
         for person, signals in context.face.items():
-            for start, end in signals.nods:
-                add("nod", person, start, end, source="face")
-            for start, end in signals.shakes:
-                add("head_shake", person, start, end, source="face")
+            # Nods carry their length, magnitude and role into the events
+            # table, so a study can model nods individually -- length by
+            # role, magnitude by partner behaviour -- rather than only the
+            # per-person aggregates in measures.csv.
+            for event in getattr(signals, "nod_track", None) or ():
+                add(
+                    "nod", person, event.start, event.end,
+                    f"{event.cycles} cycle{'s' if event.cycles != 1 else ''} "
+                    f"({event.length_label}); {event.magnitude_deg:.1f} deg; "
+                    f"{event.frequency_hz:.1f} Hz; while {event.role}",
+                    "face",
+                )
+            for event in getattr(signals, "shake_track", None) or ():
+                add(
+                    "head_shake", person, event.start, event.end,
+                    f"{event.cycles} cycle{'s' if event.cycles != 1 else ''}; "
+                    f"{event.magnitude_deg:.1f} deg; while {event.role}",
+                    "face",
+                )
             for start, end in signals.smiles:
                 add("smile", person, start, end, source="face")
 
@@ -145,6 +160,39 @@ def events_table(session_id: str, context: AnalysisContext) -> pd.DataFrame:
             add("topic", topic.initiator, topic.start, topic.end,
                 f"turns {topic.start_turn}-{topic.end_turn}", "semantics")
 
+    frame = pd.DataFrame(rows)
+    return frame.sort_values("start_s").reset_index(drop=True) if not frame.empty else frame
+
+
+def nods_table(session_id: str, context: AnalysisContext) -> pd.DataFrame:
+    """One row per nod, with its length, size and role as columns.
+
+    The events table has nods too, but with their properties packed into a
+    text description. This is the same data in a shape a model can consume:
+    predicting nod length from role, or magnitude from what the partner was
+    doing, needs `cycles` and `role` as columns rather than as prose.
+    """
+    rows: list[dict] = []
+    for person, signals in (context.face or {}).items():
+        for kind, attribute in (("nod", "nod_track"), ("head_shake", "shake_track")):
+            for event in getattr(signals, attribute, None) or ():
+                rows.append(
+                    {
+                        "session_id": session_id,
+                        "person": person,
+                        "kind": kind,
+                        "start_s": round(float(event.start), 3),
+                        "end_s": round(float(event.end), 3),
+                        "duration_s": round(float(event.duration), 3),
+                        "cycles": int(event.cycles),
+                        "length_class": event.length_label,
+                        "half_cycles": int(event.half_cycles),
+                        "magnitude_deg": round(float(event.magnitude_deg), 3),
+                        "frequency_hz": round(float(event.frequency_hz), 3),
+                        "role": event.role,
+                        "face_coverage": round(float(signals.coverage), 3),
+                    }
+                )
     frame = pd.DataFrame(rows)
     return frame.sort_values("start_s").reset_index(drop=True) if not frame.empty else frame
 
@@ -224,6 +272,7 @@ def write_session_tables(
     for name, frame in (
         ("turns", turns_table(session_id, context)),
         ("events", events_table(session_id, context)),
+        ("nods", nods_table(session_id, context)),
     ):
         if not frame.empty:
             path = workspace.table(f"{name}.csv")
@@ -235,5 +284,14 @@ def write_session_tables(
         path = workspace.file("timeline.parquet")
         timeline.to_parquet(path, index=False)
         written["timeline"] = path
+
+    # The transcript as plain text as well as inside the report, so it can be
+    # read, searched and marked up without a browser.
+    if context.turn_set is not None and context.turn_set.turns:
+        from convlab.report.transcript import transcript_text
+
+        path = workspace.file("transcript.txt")
+        path.write_text(transcript_text(context), encoding="utf-8")
+        written["transcript"] = path
 
     return written

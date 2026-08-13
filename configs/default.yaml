@@ -74,8 +74,12 @@ qc:
 cache: true
 model_dir: models
 
-# Track the two participants' videos in two concurrent child processes
-# when free memory allows (each child needs ~1.3 GB). null decides from
-# memory at run time; true / false forces it either way.
-parallel_tracking: null
-parallel_min_free_mb: 3200.0
+# A session has four independent tracking jobs -- a face and a body track
+# for each participant -- and they are 93% of the pipeline's stage time.
+# How many run at once is the single biggest lever on how long a run takes.
+# null decides from free memory and core count; an integer forces it (1
+# reproduces the old serial behaviour, 4 uses every job).
+tracking_workers: null
+tracking_first_worker_mb: 650.0   # measured 519 MB for the first child
+tracking_extra_worker_mb: 300.0   # measured ~200 MB for each one after it
+tracking_reserve_mb: 500.0        # left free for the parent and the recognizer

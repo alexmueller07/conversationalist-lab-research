@@ -7,12 +7,22 @@ from convlab.vision.tracker import (
     track_body,
     track_face,
 )
+from convlab.vision.nods import (
+    LISTENING,
+    OTHER,
+    SPEAKING,
+    NodEvent,
+    NodTrack,
+    assign_roles,
+    length_histogram,
+)
 from convlab.vision.signals import (
     BodySignals,
     FaceSignals,
     derive_body_signals,
     derive_face_signals,
     detect_nods,
+    detect_shakes,
 )
 
 __all__ = [
@@ -26,4 +36,12 @@ __all__ = [
     "derive_face_signals",
     "derive_body_signals",
     "detect_nods",
+    "detect_shakes",
+    "NodEvent",
+    "NodTrack",
+    "assign_roles",
+    "length_histogram",
+    "SPEAKING",
+    "LISTENING",
+    "OTHER",
 ]

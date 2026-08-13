@@ -114,6 +114,53 @@ class BodyTrack:
         return float(np.mean(self.detected)) if self.detected.size else 0.0
 
 
+class _FreezeSkipper:
+    """Reuse the last result when the decoder hands back the same picture.
+
+    Conferencing tools hold the last frame when packets stop arriving, and
+    the container still reports a full frame rate, so a recording can
+    contain thousands of byte-identical frames. Landmarking an identical
+    image produces an identical answer, so running the model on it is pure
+    cost -- on the one recording in the lab's test corpus that freezes 60%
+    of the time, most of the tracking budget went on frames that had
+    already been tracked.
+
+    Equality is checked exactly, not approximately: a cheap subsampled
+    fingerprint screens out the ordinary case in microseconds, and only a
+    fingerprint match triggers a full comparison. A near-identical frame is
+    therefore still tracked normally, and the output is bit-for-bit what it
+    would have been without this.
+    """
+
+    __slots__ = ("_previous", "_fingerprint", "skipped", "seen")
+
+    def __init__(self) -> None:
+        self._previous: np.ndarray | None = None
+        self._fingerprint: bytes | None = None
+        self.skipped = 0
+        self.seen = 0
+
+    def is_repeat(self, frame: np.ndarray) -> bool:
+        self.seen += 1
+        fingerprint = frame[::8, ::8].tobytes()
+        repeat = (
+            self._fingerprint is not None
+            and fingerprint == self._fingerprint
+            and self._previous is not None
+            and np.array_equal(frame, self._previous)
+        )
+        if repeat:
+            self.skipped += 1
+            return True
+        self._previous = frame
+        self._fingerprint = fingerprint
+        return False
+
+    @property
+    def fraction(self) -> float:
+        return self.skipped / self.seen if self.seen else 0.0
+
+
 def _rotation_to_euler(matrix: np.ndarray) -> tuple[float, float, float]:
     """Pitch, yaw and roll in degrees from a 4x4 pose matrix.
 
@@ -169,11 +216,23 @@ def track_face(
 
     nan_shape = np.full(len(BLENDSHAPE_NAMES), np.nan, dtype=np.float32)
     landmarker = vision.FaceLandmarker.create_from_options(options)
+    frozen = _FreezeSkipper()
     try:
         stamp = 0
         step = max(1, int(round(1000.0 / max(cfg.fps, 1.0))))
         for t, frame in reader:
             stamp += step  # monotonic by construction
+
+            if frozen.is_repeat(frame) and times:
+                # Same picture as the last frame: repeat the last answer
+                # rather than paying for an identical one.
+                times.append(t)
+                shapes.append(shapes[-1])
+                angles.append(angles[-1])
+                apertures.append(apertures[-1])
+                found.append(found[-1])
+                continue
+
             image = mp.Image(
                 image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(frame)
             )
@@ -223,6 +282,11 @@ def track_face(
         track.warnings.append(
             f"face tracked in only {track.coverage:.0%} of frames in {view or 'view'} "
             f"(minimum {cfg.min_coverage:.0%}); facial measures will be withheld"
+        )
+    if frozen.fraction > 0.05:
+        log.info(
+            "%s: %.0f%% of frames were repeats of the previous one and were "
+            "not re-tracked", view or "view", frozen.fraction * 100,
         )
     return track
 
@@ -274,11 +338,23 @@ def track_body(
     found: list[bool] = []
 
     landmarker = vision.PoseLandmarker.create_from_options(options)
+    frozen = _FreezeSkipper()
     try:
         stamp = 0
         step = max(1, int(round(1000.0 / max(body_fps, 1.0))))
         for t, frame in reader:
             stamp += step
+
+            if frozen.is_repeat(frame) and times:
+                times.append(t)
+                torso.append(torso[-1])
+                widths.append(widths[-1])
+                wrists_l.append(wrists_l[-1])
+                wrists_r.append(wrists_r[-1])
+                to_face.append(to_face[-1])
+                found.append(found[-1])
+                continue
+
             image = mp.Image(
                 image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(frame)
             )
