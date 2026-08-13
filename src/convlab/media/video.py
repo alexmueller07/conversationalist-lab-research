@@ -97,6 +97,7 @@ class VideoReader:
 
         import queue
         import threading
+        import time
 
         buffer: "queue.Queue[object]" = queue.Queue(maxsize=self.prefetch)
         sentinel = object()
@@ -128,13 +129,20 @@ class VideoReader:
         finally:
             # A consumer that stops early -- an exception, or a `break` after
             # N frames -- must not leave a decoder thread holding the file.
+            #
+            # Draining once is not enough. The producer may be blocked inside
+            # `put` on a full queue, and it can only notice `stop` after that
+            # put returns; its final `put(sentinel)` can block for the same
+            # reason. So keep taking items until the thread has actually
+            # ended, rather than until the queue happens to look empty.
             stop.set()
-            try:
-                while buffer.get_nowait() is not sentinel:
+            deadline = time.monotonic() + 5.0
+            while worker.is_alive() and time.monotonic() < deadline:
+                try:
+                    buffer.get(timeout=0.05)
+                except queue.Empty:
                     pass
-            except Exception:
-                pass
-            worker.join(timeout=5.0)
+            worker.join(timeout=1.0)
 
     def _decode(self) -> Iterator[tuple[float, np.ndarray]]:
         step = 1.0 / self.target_fps if self.target_fps else 0.0
