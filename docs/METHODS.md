@@ -776,12 +776,13 @@ that appears to stop.
 
 **Calibration against the published distribution.** The pair (2.0°, 0.5) was
 not chosen by eye. Over the sixteen close-up recordings in the lab's test
-corpus it produces **42 % single nods and 98 % at five cycles or fewer**,
-against the **42 %** and "more than 95 %" Mori et al. report for their 9,223
-human-checked nods; the longest nod found is 13 cycles against their 19.
-Requiring full amplitude on every cycle instead gives 57 % single and a
-longest of 11; halving the continuation floor again gives 39 % and starts
-admitting movement at the tracker's noise level.
+corpus — 2,178 detected nods — the full pipeline produces **42.1 % single
+nods and 97.6 % at five cycles or fewer**, against the **42 %** and "more
+than 95 %" Mori et al. report for their 9,223 human-checked nods; the longest
+nod found is 13 cycles against their 19. Requiring full amplitude on every
+cycle instead gives 57 % single and a longest of 11; halving the continuation
+floor again gives 39 % and starts admitting movement at the tracker's noise
+level.
 
 > Agreement on the *shape* of the distribution is evidence that the detector
 > is carving nods at roughly the right joints. It is **not** evidence that it

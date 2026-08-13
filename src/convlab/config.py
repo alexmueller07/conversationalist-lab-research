@@ -500,9 +500,9 @@ class VisionConfig:
 
     The pair (2.0 degrees, 0.5) was chosen against that distribution rather
     than by eye. Over the sixteen close-up recordings in the lab's test
-    corpus it yields 42% single nods and 98% of nods at five cycles or
-    fewer, against the 42% and "more than 95%" that Mori et al. report for
-    9,223 human-checked nods. Requiring the full amplitude on every cycle
+    corpus it yields 42.1% single nods and 97.6% of nods at five cycles or
+    fewer, over 2,178 detected nods, against the 42% and "more than 95%"
+    that Mori et al. report for 9,223 human-checked nods. Requiring the full amplitude on every cycle
     instead gives 57% single and a longest nod of 11; halving the
     continuation floor again gives 39% and admits movement close to the
     tracker's noise. Agreement on the shape of the distribution is evidence

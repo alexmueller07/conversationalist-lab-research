@@ -296,8 +296,8 @@ nods on, and which McClave (2000) shows matters because speakers use head
 movement for intensification and quotation rather than for agreement.
 
 Calibrated against the published distribution: on the lab's own sixteen
-recordings the detector finds **42 % single nods and 98 % at five cycles or
-fewer**, against Mori et al.'s 42 % and "more than 95 %". That agreement is
+recordings the detector finds **42.1 % single nods and 97.6 % at five cycles
+or fewer**, over 2,178 nods, against Mori et al.'s 42 % and "more than 95 %". That agreement is
 evidence the detector is cutting nods at roughly the right joints; it is not
 evidence it agrees with a human coder nod-for-nod, which nobody has measured
 yet and which remains this pipeline's largest open gap.

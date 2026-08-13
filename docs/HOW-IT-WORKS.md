@@ -785,8 +785,8 @@ it: their annotations were human-confirmed and these are not, and a head that
 goes down and stays down is indistinguishable from a slump.
 
 **Calibrated against the published distribution.** On the lab's sixteen test
-recordings the detector finds **42 % single nods and 98 % at five cycles or
-fewer**, against Mori et al.'s 42 % and "more than 95 %". That is evidence of
+recordings the detector finds **42.1 % single nods and 97.6 % at five cycles
+or fewer**, over 2,178 nods, against Mori et al.'s 42 % and "more than 95 %". That is evidence of
 cutting nods at the right joints — *not* evidence of agreeing with a human
 coder nod-for-nod, which nobody has measured yet.
 
