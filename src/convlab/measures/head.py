@@ -420,10 +420,14 @@ def nod_magnitude_median(ctx: AnalysisContext) -> dict[str, float]:
     family=FAMILY_HEAD,
     requires=("face",),
     interpretation=(
-        "Expected in the 1.9-3.6 Hz 'ordinary' band of Hadar et al. (1983). "
-        "A median at the edge of the search band is a sign the detector is "
-        "picking up something other than nodding and the recording is worth "
-        "watching."
+        "On the lab's own recordings this lands around 1.4-1.5 Hz, at the "
+        "slow end of the 0.8-5 Hz search band and below the 1.9-3.6 Hz "
+        "'ordinary' class Hadar et al. (1983) describe for conversational "
+        "head movement generally -- nodding here is slower than head "
+        "movement at large, which is worth knowing before treating their "
+        "classes as a target. A median pressed against either edge of the "
+        "band is a sign the detector is picking up something other than "
+        "nodding, and the recording is worth watching."
     ),
     references=_KINEMATIC_REF,
 )

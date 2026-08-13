@@ -793,7 +793,7 @@ Sum of every nod's length in cycles. A single nod contributes one, a triple cont
 
 Median cycles per second within a nod.
 
-*Interpretation.* Expected in the 1.9-3.6 Hz 'ordinary' band of Hadar et al. (1983). A median at the edge of the search band is a sign the detector is picking up something other than nodding and the recording is worth watching.
+*Interpretation.* On the lab's own recordings this lands around 1.4-1.5 Hz, at the slow end of the 0.8-5 Hz search band and below the 1.9-3.6 Hz 'ordinary' class Hadar et al. (1983) describe for conversational head movement generally -- nodding here is slower than head movement at large, which is worth knowing before treating their classes as a target. A median pressed against either edge of the band is a sign the detector is picking up something other than nodding, and the recording is worth watching.
 
 - Hadar, Steiner, Grant & Rose (1983) Human Movement Science 2:35 -- conversational head movement at 0.2-7 Hz in slow, ordinary and rapid classes
 - Hadar, Steiner & Rose (1985) J. Nonverbal Behavior 9:214 -- cyclic versus linear head movement during listening turns

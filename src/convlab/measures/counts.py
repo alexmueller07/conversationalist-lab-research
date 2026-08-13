@@ -40,6 +40,25 @@ def _n(value) -> float:
         return float("nan")
 
 
+def _whole(value: float) -> float:
+    """Recover an exact integer from a rate that was a count over minutes.
+
+    These counts are derived by multiplying an existing rate back out by the
+    session length rather than by re-deriving the events, so that a count and
+    its rate can never disagree about what they counted. Floating point makes
+    that round trip land on 2.9999999, and a count printed as 3.00 invites
+    the question of what the hundredths mean.
+    """
+    import math
+
+    return float(round(value)) if math.isfinite(value) else float("nan")
+
+
+def _count_from_rate(rate: dict, ctx: AnalysisContext) -> dict[str, float]:
+    minutes = ctx.duration / 60.0
+    return {p: _whole(rate.get(p, float("nan")) * minutes) for p in PERSONS}
+
+
 # ----------------------------------------------------------------------
 # Speech events
 # ----------------------------------------------------------------------
@@ -316,9 +335,7 @@ def other_directed_callback_count(ctx: AnalysisContext) -> dict[str, float]:
 def followup_question_count(ctx: AnalysisContext) -> dict[str, float]:
     from convlab.measures import semantic as semantic_measures
 
-    rate = semantic_measures.followup_question_rate(ctx)
-    minutes = ctx.duration / 60.0
-    return {p: rate[p] * minutes for p in PERSONS}
+    return _count_from_rate(semantic_measures.followup_question_rate(ctx), ctx)
 
 
 @measure(
@@ -337,9 +354,7 @@ def followup_question_count(ctx: AnalysisContext) -> dict[str, float]:
 def compliment_count(ctx: AnalysisContext) -> dict[str, float]:
     from convlab.measures import lexical as lexical_measures
 
-    rate = lexical_measures.compliment_rate(ctx)
-    minutes = ctx.duration / 60.0
-    return {p: rate[p] * minutes for p in PERSONS}
+    return _count_from_rate(lexical_measures.compliment_rate(ctx), ctx)
 
 
 @measure(
@@ -354,9 +369,7 @@ def compliment_count(ctx: AnalysisContext) -> dict[str, float]:
 def change_of_state_count(ctx: AnalysisContext) -> dict[str, float]:
     from convlab.measures import repair as repair_measures
 
-    rate = repair_measures.change_of_state_rate(ctx)
-    minutes = ctx.duration / 60.0
-    return {p: rate[p] * minutes for p in PERSONS}
+    return _count_from_rate(repair_measures.change_of_state_rate(ctx), ctx)
 
 
 @measure(
@@ -457,7 +470,7 @@ def silence_count(ctx: AnalysisContext) -> float:
     from convlab.measures import turntaking as turntaking_measures
 
     rate = turntaking_measures.silence_rate(ctx)
-    return float(rate * ctx.duration / 60.0)
+    return _whole(rate * ctx.duration / 60.0)
 
 
 @measure(
