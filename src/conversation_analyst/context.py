@@ -104,6 +104,139 @@ class AnalysisContext:
         are not themselves speaking."""
         return self.turn_segments(self.other(person)).subtract(self.speech(person))
 
+    def usable_face(self, person: str):
+        """This person's face signals, if the view can actually support them.
+
+        Two gates, both about evidence rather than plausibility. Coverage:
+        the face must be tracked in enough frames. Reliability: the *video*
+        must be live -- a view that freezes for most of the session, or in
+        which almost no pixels ever change, produces confident tracking of a
+        picture rather than of a person, and nods counted from a held frame
+        are fiction. Measures call this instead of reaching into ``face``
+        directly, so the policy lives in one place.
+        """
+        signals = (self.face or {}).get(person)
+        if signals is None:
+            return None
+        if signals.coverage < self.config.vision.min_coverage:
+            return None
+        if not getattr(signals, "view_reliable", True):
+            return None
+        return signals
+
+    def usable_body(self, person: str):
+        signals = (self.body or {}).get(person)
+        if signals is None:
+            return None
+        if signals.coverage < self.config.vision.min_coverage:
+            return None
+        if not getattr(signals, "view_reliable", True):
+            return None
+        return signals
+
+    def short_run_corroboration(self) -> dict[str, float] | None:
+        """How much of the speaker track's fine structure is real speech.
+
+        A decoder working from weak evidence can flicker between speakers
+        while reporting high confidence, and the original guard against that
+        was the fraction of speaking runs shorter than 300 ms. On real
+        recordings that guard failed for the *opposite* reason it was built:
+        casual conversation is full of genuine 200 ms vocalisations --
+        "yeah", "nice", "oh cool" -- and a metric calibrated on scripted
+        sessions with fewer backchannels read all of them as decoder noise.
+
+        The distinction the raw fraction cannot make, corroboration can. A
+        short run is *vouched for* when the recognizer independently found a
+        word from the same person inside it, or laughter was detected there.
+        A short run with neither is the thing the guard exists to catch: a
+        state the decoder invented. Measured on the lab's eight-session
+        corpus, 62-87% of short runs carry a recognized word, and the
+        uncorroborated remainder is 2.8-8.7% of all speaking runs -- inside
+        the 3-15% band that scripted ground truth occupies.
+
+        Returns None when there is no attribution to assess. Without a
+        transcript, corroboration is impossible and ``uncorroborated`` is
+        conservatively the raw short-run fraction.
+        """
+        if self.attribution is None:
+            return None
+        state = np.asarray(self.attribution.state)
+        if state.size < 2:
+            return None
+
+        hz = self.frame_hz
+        edges = np.flatnonzero(np.diff(state)) + 1
+        starts = np.concatenate(([0], edges))
+        ends = np.concatenate((edges, [state.size]))
+        run_states = state[starts]
+        speaking = np.flatnonzero((run_states == 1) | (run_states == 2))
+        if speaking.size == 0:
+            return None
+        lengths = ends - starts
+        short = speaking[lengths[speaking] < 0.3 * hz]
+
+        raw = short.size / speaking.size
+
+        words: dict[str, list[tuple[float, float]]] = {"A": [], "B": []}
+        if self.transcript is not None:
+            for w in self.transcript.words:
+                if w.person in words:
+                    words[w.person].append((w.start, w.end))
+        laughs = {
+            p: list(segments)
+            for p, segments in (self.laughter or {}).items()
+        }
+
+        def vouched(person: str, t0: float, t1: float) -> bool:
+            for ws, we in words.get(person, ()):
+                if ws < t1 + 0.15 and we > t0 - 0.15:
+                    return True
+            for ls, le in laughs.get(person, ()):
+                if ls < t1 + 0.30 and le > t0 - 0.30:
+                    return True
+            return False
+
+        uncorroborated = 0
+        for k in short:
+            person = "A" if run_states[k] == 1 else "B"
+            if not vouched(person, starts[k] / hz, ends[k] / hz):
+                uncorroborated += 1
+
+        return {
+            "raw_short_fraction": float(raw),
+            "uncorroborated_fraction": float(uncorroborated / speaking.size),
+            "n_speaking_runs": float(speaking.size),
+            "n_short_runs": float(short.size),
+            "transcript_available": float(self.transcript is not None),
+        }
+
+    @property
+    def timing_evidence(self) -> "AttributionResult | None":
+        """The attribution, but only when turn boundaries can carry timing.
+
+        Latency, floor-transfer and rhythm measures are built from the exact
+        instants speakers start and stop. When the speaker track's fine
+        structure cannot be vouched for -- too many short runs that neither
+        the recognizer nor the laughter detector corroborates -- those
+        instants are decoder artifacts, and a latency median computed from
+        them is a confident number about nothing. Measures that need
+        boundary timing declare this rather than ``attribution``, so on such
+        a session they come out unavailable with a reason instead of wrong.
+
+        Counts, proportions, vision and lexical measures are unaffected:
+        being wrong about the millisecond edge of a turn does not change how
+        many nods someone produced.
+        """
+        if self.attribution is None:
+            return None
+        stats = self.short_run_corroboration()
+        if stats is None:
+            return None
+        limit = self.config.qc.max_uncorroborated_timing
+        if stats["uncorroborated_fraction"] > limit:
+            return None
+        return self.attribution
+
     @property
     def overlap_evidence(self) -> "AttributionResult | None":
         """The attribution, but only when simultaneous speech was measurable.

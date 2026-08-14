@@ -53,9 +53,9 @@ face, without being so wide that it captures unrelated behavior."""
 
 
 def _valence(ctx: AnalysisContext, person: str) -> np.ndarray | None:
-    if not ctx.face or person not in ctx.face:
+    signals = ctx.usable_face(person)
+    if signals is None:
         return None
-    signals = ctx.face[person]
     valence = np.asarray(signals.valence, dtype=np.float64)
     if valence.size == 0:
         return None
@@ -374,11 +374,11 @@ def partner_smile_uptake(ctx: AnalysisContext) -> dict[str, float]:
     out = {}
     for person in ctx.persons:
         other = ctx.other(person)
-        if person not in ctx.face or other not in ctx.face:
+        if ctx.usable_face(person) is None or ctx.usable_face(other) is None:
             out[person] = float("nan")
             continue
         out[person] = _uptake(
-            _onsets(ctx.face[other].smiles), _onsets(ctx.face[person].smiles),
+            _onsets(ctx.usable_face(other).smiles), _onsets(ctx.usable_face(person).smiles),
             ctx.duration,
         )
     return out

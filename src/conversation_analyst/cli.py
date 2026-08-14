@@ -39,7 +39,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     from conversation_analyst.report.codebook import write_codebook
     from conversation_analyst.report.corpus import SessionEntry, write_corpus_report
     from conversation_analyst.report.dashboard import write_dashboard
-    from conversation_analyst.report.qc import assess_quality
+    from conversation_analyst.report.qc import VERDICT_LABELS, assess_quality
     from conversation_analyst.report.tables import measures_long, write_session_tables
     from conversation_analyst.session import iter_sessions
 
@@ -102,7 +102,8 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         available = sum(1 for m in result.measures if m.available)
         elapsed = time.perf_counter() - started
         print(
-            f"  {qc.verdict.upper()} - {available}/{len(result.measures)} values, "
+            f"  {VERDICT_LABELS.get(qc.verdict, qc.verdict.upper())} - "
+            f"{available}/{len(result.measures)} values, "
             f"{len(result.context.turn_set.turns) if result.context.turn_set else 0} turns, "
             f"{elapsed:.0f}s"
         )
@@ -169,7 +170,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         )
         print(f"\nCorpus report -> {index}")
 
-    passed = sum(1 for s in summary if s.get("verdict") == "pass")
+    passed = sum(1 for s in summary if s.get("verdict") in ("pass", "pass_limits"))
     print(f"Summary: {passed}/{len(summary)} sessions passed QC "
           f"-> {output / 'session_summary.csv'}")
     return 0

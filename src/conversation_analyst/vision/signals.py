@@ -100,6 +100,12 @@ class FaceSignals:
     smiles: Segments = field(default_factory=Segments.empty)
     partner_direction: tuple[float, float] = (float("nan"), float("nan"))
     coverage: float = 0.0
+    view_reliable: bool = True
+    """False when the source video cannot support movement measures -- it
+    froze for a large share of the session or shows almost no pixel change.
+    Tracking a held frame produces confident numbers about a picture, so the
+    measures built on these signals are withheld rather than reported."""
+    unreliable_reason: str = ""
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -121,6 +127,8 @@ class BodySignals:
     posture_shifts: Segments = field(default_factory=Segments.empty)
     gestures: Segments = field(default_factory=Segments.empty)
     coverage: float = 0.0
+    view_reliable: bool = True
+    unreliable_reason: str = ""
     warnings: list[str] = field(default_factory=list)
 
 

@@ -179,7 +179,7 @@ class Worker(threading.Thread):
         from conversation_analyst.report.codebook import write_codebook
         from conversation_analyst.report.corpus import SessionEntry, write_corpus_report
         from conversation_analyst.report.dashboard import write_dashboard
-        from conversation_analyst.report.qc import assess_quality
+        from conversation_analyst.report.qc import VERDICT_LABELS, assess_quality
         from conversation_analyst.report.tables import measures_long, measures_wide, write_session_tables
         from conversation_analyst.session import iter_sessions
 
@@ -284,10 +284,12 @@ class Worker(threading.Thread):
 
             available = sum(1 for m in result.measures if m.available)
             n_turns = len(result.context.turn_set.turns) if result.context.turn_set else 0
-            level = {"pass": "ok", "review": "warn", "fail": "fail"}[qc.verdict]
+            level = {"pass": "ok", "pass_limits": "ok", "review": "warn",
+                     "fail": "fail"}.get(qc.verdict, "warn")
             self.send(
                 "log",
-                f"  {qc.verdict.upper()} - {available}/{len(result.measures)} values, "
+                f"  {VERDICT_LABELS.get(qc.verdict, qc.verdict.upper())} - "
+                f"{available}/{len(result.measures)} values, "
                 f"{n_turns} turns",
                 level,
             )

@@ -530,6 +530,7 @@ def analyze_session(
                     track, person, n_frames, frame_hz, cfg.vision,
                     offset=offsets.get(CLOSE_VIEW[person], 0.0),
                 )
+                _mark_view_reliability(signals[person], session, person, context)
                 # Whether a nod was produced while speaking or while
                 # listening is part of what a nod *is* -- Poggi et al. (2010)
                 # build their typology on it and McClave (2000) shows the two
@@ -587,6 +588,7 @@ def analyze_session(
                     track, person, n_frames, frame_hz, cfg.vision,
                     offset=offsets.get(role, 0.0),
                 )
+                _mark_view_reliability(body_signals[person], session, person, context)
                 for warning in body_signals[person].warnings:
                     context.note(warning)
             context.body = body_signals or None
@@ -891,6 +893,40 @@ def _without_forced_workers(cfg: Config) -> Config:
     relaxed = copy.copy(cfg)
     relaxed.tracking_workers = None
     return relaxed
+
+
+def _mark_view_reliability(signals, session: Session, person: str, context: AnalysisContext) -> None:
+    """Decide whether this person's video can support movement measures.
+
+    A view that freezes for a large share of the session, or in which
+    almost no pixels ever change, still tracks 'successfully' -- MediaPipe
+    reports a face at high confidence in every held frame. The tracking is
+    confident about a *picture*. Nods, expressivity, gaze shifts and
+    gestures measured from it describe the encoder's behavior, not the
+    person's, so the signals are marked unreliable and every measure built
+    on them is withheld with this reason. The recording-quality table and
+    the QC verdict both carry it, as a named limit of the recording.
+    """
+    role = session.close_view(person)
+    quality = (context.video_quality or {}).get(role)
+    if quality is None:
+        return
+    qc = context.config.qc
+    reason = ""
+    if np.isfinite(quality.freeze_rate) and quality.freeze_rate > qc.max_freeze_rate:
+        reason = (
+            f"{quality.freeze_rate:.0%} of {role} is frozen frames; movement "
+            "measured from a held picture is fiction"
+        )
+    elif np.isfinite(quality.motion) and quality.motion < qc.min_motion:
+        reason = (
+            f"only {quality.motion:.1%} of pixels in {role} ever change; the "
+            "view cannot support movement measures"
+        )
+    if reason:
+        signals.view_reliable = False
+        signals.unreliable_reason = reason
+        context.note(f"{person}: {reason}; facial/body measures withheld")
 
 
 def _stop_tracking(pool, context: AnalysisContext) -> None:

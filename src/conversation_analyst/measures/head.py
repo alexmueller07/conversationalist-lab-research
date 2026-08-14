@@ -61,8 +61,8 @@ _KINEMATIC_REF = (
 
 def _track(ctx: AnalysisContext, person: str, attribute: str = "nod_track") -> NodTrack | None:
     """The person's nod (or shake) track, if their face was tracked enough."""
-    signals = (ctx.face or {}).get(person)
-    if signals is None or signals.coverage < ctx.config.vision.min_coverage:
+    signals = ctx.usable_face(person)
+    if signals is None:
         return None
     return getattr(signals, attribute, None)
 

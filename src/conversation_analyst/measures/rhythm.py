@@ -94,7 +94,7 @@ def _band_mask(freqs: np.ndarray, duration: float) -> np.ndarray:
     unit="s",
     level=DYAD_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "timing_evidence",),
     interpretation=(
         "Dyads trade multi-minute blocks of vocal activity, typically every "
         "2-5 minutes. The period says how long one person carries before the "
@@ -128,7 +128,7 @@ def vocal_cycle_period(ctx: AnalysisContext) -> float:
     unit="proportion",
     level=DYAD_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "timing_evidence",),
     interpretation=(
         "The strength of the megaturn rhythm, independent of its period. "
         "Warner et al. (1987) found rhythmic organization predicted observer "
@@ -159,7 +159,7 @@ def vocal_cycle_strength(ctx: AnalysisContext) -> float:
     unit="per 5 minutes",
     level=DYAD_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "timing_evidence",),
     interpretation=(
         "Complementary to the cycle period: counts actual handovers of the "
         "carrying role rather than assuming a single stable rhythm. Very low "

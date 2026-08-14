@@ -38,8 +38,9 @@ from typing import Sequence
 import numpy as np
 
 from conversation_analyst.measures.base import registry
+from conversation_analyst.report.qc import VERDICT_LABELS as _VERDICT_LABEL
 
-_VERDICT_ORDER = {"fail": 0, "review": 1, "pass": 2}
+_VERDICT_ORDER = {"fail": 0, "review": 1, "pass_limits": 2, "pass": 3}
 """Sort order for the session table: worst first.
 
 Deliberately not alphabetical and not chronological. The sessions that need
@@ -217,7 +218,7 @@ def _session_table(entries: Sequence[SessionEntry]) -> str:
         rows.append(
             f"<tr><td><strong>{link}</strong></td>"
             f'<td><span class="badge {_esc(entry.verdict)}">'
-            f"{_esc(entry.verdict.upper())}</span></td>"
+            f"{_esc(_VERDICT_LABEL.get(entry.verdict, entry.verdict.upper()))}</span></td>"
             f'<td class="num">{entry.minutes:.1f}</td>'
             f'<td class="num">{entry.n_turns}</td>'
             f'<td class="num">{entry.n_turns / entry.minutes:.1f}</td>'
@@ -226,7 +227,7 @@ def _session_table(entries: Sequence[SessionEntry]) -> str:
             if entry.minutes > 0 else
             f"<tr><td><strong>{link}</strong></td>"
             f'<td><span class="badge {_esc(entry.verdict)}">'
-            f"{_esc(entry.verdict.upper())}</span></td>"
+            f"{_esc(_VERDICT_LABEL.get(entry.verdict, entry.verdict.upper()))}</span></td>"
             f'<td class="num">&mdash;</td><td class="num">&mdash;</td>'
             f'<td class="num">&mdash;</td><td class="num">{coverage}</td>'
             f"<td>{detail}</td></tr>"
@@ -360,7 +361,7 @@ def _common_warnings(entries: Sequence[SessionEntry]) -> str:
 
 def render_corpus_report(entries: Sequence[SessionEntry], title: str = "") -> str:
     """Build the whole-run HTML document."""
-    usable = sum(1 for e in entries if e.verdict in ("pass", "review"))
+    usable = sum(1 for e in entries if e.verdict in ("pass", "pass_limits", "review"))
     heading = title or "Conversation corpus"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">

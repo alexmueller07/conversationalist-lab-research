@@ -1,9 +1,33 @@
 """Whether a session's numbers should be trusted.
 
 A measurement pipeline that always returns numbers is not reporting quality,
-it is hiding it. Every session gets an explicit verdict -- pass, review or
-fail -- with the specific checks that produced it, so that a corpus can be
-filtered on evidence rather than on a spot check of a few dashboards.
+it is hiding it. Every session gets an explicit verdict with the specific
+checks that produced it, so that a corpus can be filtered on evidence rather
+than on a spot check of a few dashboards.
+
+The verdict answers one question: *can the numbers this session reports be
+trusted?* -- not "is this recording perfect". The distinction matters
+because the pipeline already withholds what a recording cannot support: a
+shared-audio session reports no overlap measures, a session with a marginal
+speaker track reports no latency medians. Failing a session over a
+limitation whose every affected measure was already withheld punishes the
+honesty, and it teaches people to ignore the verdict column.
+
+Four verdicts:
+
+``pass``
+    Every check clean. The numbers mean what they say.
+``pass_limits``
+    The recording has a named structural limitation, the affected measures
+    are withheld, and everything actually reported is trustworthy. The
+    limits are listed on the badge. Most Zoom-era recordings land here,
+    because a shared audio feed removes overlap evidence by construction.
+``review``
+    Something a human should weigh before using the session -- low
+    recognition confidence, marginal face coverage, a borderline turn
+    count. The numbers are reported, with reasons to look at them.
+``fail``
+    Something fatal: the reported numbers themselves cannot be trusted.
 
 The checks are deliberately about *inputs*, not about whether the results
 look plausible. Screening out sessions whose values seem surprising is how
@@ -20,7 +44,14 @@ import numpy as np
 from conversation_analyst.context import AnalysisContext
 from conversation_analyst.session import PERSONS
 
-Verdict = Literal["pass", "review", "fail"]
+Verdict = Literal["pass", "pass_limits", "review", "fail"]
+
+VERDICT_LABELS: dict[str, str] = {
+    "pass": "PASS",
+    "pass_limits": "PASS — with noted limits",
+    "review": "REVIEW",
+    "fail": "FAIL",
+}
 
 
 @dataclass
@@ -29,7 +60,12 @@ class QCCheck:
     passed: bool
     value: float | None
     threshold: float | None
-    severity: Literal["fatal", "warning"]
+    severity: Literal["fatal", "limit", "warning"]
+    """``fatal`` fails the session. ``limit`` names a structural property of
+    the recording that the pipeline has already handled by withholding the
+    affected measures -- it caps the verdict at ``pass_limits`` rather than
+    demanding review, because there is nothing for a human to re-judge.
+    ``warning`` asks for a human eye and caps the verdict at ``review``."""
     message: str
 
 
@@ -111,33 +147,55 @@ def assess_quality(context: AnalysisContext, sync=None) -> QCReport:
     # posterior is computed from the same weak evidence that produced the
     # path. The result looks like a conversation with hundreds of turns and
     # a median floor-transfer offset of zero. Nothing downstream detects
-    # this -- the numbers are all finite and superficially plausible -- so it
-    # has to be checked directly against how real turn-taking behaves.
-    if context.attribution is not None and context.duration > 0:
-        state = context.attribution.state
-        if state.size > 1:
-            edges = np.flatnonzero(np.diff(state) != 0)
-            runs = np.diff(np.concatenate(([0], edges + 1, [state.size])))
-            short = float(np.mean(runs < 0.3 * context.frame_hz)) if runs.size else 0.0
+    # this from the numbers alone, so it is checked directly -- but against
+    # *corroboration*, not against the raw count of short runs. Real
+    # conversation is dense with genuine 200 ms vocalisations, and most
+    # short runs on real recordings carry an independently recognized word.
+    # The suspect quantity is the short runs nothing vouches for.
+    stability = context.short_run_corroboration()
+    if stability is not None:
+        raw = stability["raw_short_fraction"]
+        check(
+            "speaker_track_raw", raw, cfg.max_short_state_raw,
+            raw <= cfg.max_short_state_raw, "fatal",
+            f"{raw:.0%} of speaker-state runs are shorter than 300 ms; tracks "
+            "this fragmented measure 50-60% when driven by lip motion alone, "
+            "and nothing built on these boundaries is trustworthy",
+        )
+        uncorroborated = stability["uncorroborated_fraction"]
+        check(
+            "speaker_track_stability", uncorroborated,
+            cfg.max_uncorroborated_short,
+            uncorroborated <= cfg.max_uncorroborated_short, "fatal",
+            f"{uncorroborated:.0%} of speaking runs are short and vouched for "
+            "by nothing -- no recognized word, no laughter. These are states "
+            "the decoder invented, and every measure built on its boundaries "
+            "is unreliable",
+        )
+        if uncorroborated <= cfg.max_uncorroborated_short:
+            timing_ok = uncorroborated <= cfg.max_uncorroborated_timing
             check(
-                "speaker_track_stability", short, cfg.max_short_state_fraction,
-                short <= cfg.max_short_state_fraction, "fatal",
-                f"{short:.0%} of speaker-state runs are shorter than 300 ms; the "
-                "speaker track is flickering rather than tracking turns, so every "
-                "timing measure is unreliable",
+                "timing_precision", uncorroborated, cfg.max_uncorroborated_timing,
+                timing_ok, "limit",
+                f"{uncorroborated:.0%} of speaking runs are uncorroborated "
+                "(sound enough to count turns and behavior, not sound enough "
+                "to trust millisecond boundary timing). Response-latency, "
+                "floor-transfer and rhythm measures are withheld; everything "
+                "reported is unaffected by boundary jitter",
             )
 
     # Both files carrying one shared audio feed does not merely weaken
-    # overlap detection, it removes the evidence for it, and it distorts a
-    # measure that looks unaffected. Reported here rather than left to the
-    # per-measure "unavailable" reasons, because response latency is still
-    # computed and still looks fine.
+    # overlap detection, it removes the evidence for it. A *limit*, not a
+    # review flag: the pipeline detects it, withholds every affected
+    # measure, and right-censoring of latencies is stated on the dashboard.
+    # There is nothing left for a human to re-judge -- only a recording
+    # practice to change next time.
     if context.attribution is not None:
         identifiable = float(
             context.attribution.diagnostics.get("overlap_identifiable", 1.0)
         )
         check(
-            "overlap_measurable", identifiable, 1.0, identifiable > 0.5, "warning",
+            "overlap_measurable", identifiable, 1.0, identifiable > 0.5, "limit",
             "the two files carry the same mixed audio, so simultaneous speech "
             "cannot be detected (measured recall never exceeds 0.26). Overlap "
             "and interruption measures are withheld, and response latencies "
@@ -186,29 +244,30 @@ def assess_quality(context: AnalysisContext, sync=None) -> QCReport:
                 "is not a two-way conversation",
             )
 
-    # Recording quality. These are warnings rather than failures on purpose:
-    # a soft or occasionally frozen recording still yields usable turn-taking
-    # and prosody, and the right response is to know which measures to
-    # discount rather than to discard the session. What must not happen is
-    # for the degradation to go unmentioned, because none of it is visible in
-    # the numbers it damages -- a frozen frame produces confident, stable
-    # tracking of a face that is not moving.
+    # Recording quality. Freezing and near-zero motion are *limits*: the
+    # view cannot support movement measures, the pipeline withholds every
+    # facial and body measure built on it (see the reliability gate in the
+    # pipeline), and what remains reported -- turn-taking, prosody, lexical
+    # -- is untouched by the problem. A frozen frame produces confident,
+    # stable tracking of a face that is not moving, so reporting those
+    # measures with a warning attached was worse than not reporting them.
     for role, quality in (context.video_quality or {}).items():
         if np.isfinite(quality.freeze_rate):
             check(
                 f"video_continuity_{role}", quality.freeze_rate, cfg.max_freeze_rate,
-                quality.freeze_rate <= cfg.max_freeze_rate, "warning",
+                quality.freeze_rate <= cfg.max_freeze_rate, "limit",
                 f"{quality.freeze_rate:.0%} of sampled frame pairs in {role} are "
-                "identical; the picture is freezing, which suppresses nods and "
-                "head movement without reducing tracking confidence",
+                "identical; the picture freezes, so facial and body measures "
+                "from this view are withheld rather than reported from a held "
+                "frame",
             )
         if np.isfinite(quality.motion):
             check(
                 f"video_motion_{role}", quality.motion, cfg.min_motion,
-                quality.motion >= cfg.min_motion, "warning",
+                quality.motion >= cfg.min_motion, "limit",
                 f"only {quality.motion:.1%} of pixels change between frames in "
-                f"{role}; there is very little movement in this picture, so "
-                "nods, gaze shifts and expression changes will be under-detected",
+                f"{role}; the view cannot support movement measures, so facial "
+                "and body measures from it are withheld",
             )
         if quality.height:
             check(
@@ -248,7 +307,13 @@ def assess_quality(context: AnalysisContext, sync=None) -> QCReport:
 
     fatal = [c for c in checks if not c.passed and c.severity == "fatal"]
     warned = [c for c in checks if not c.passed and c.severity == "warning"]
-    verdict: Verdict = "fail" if fatal else ("review" if warned else "pass")
+    limited = [c for c in checks if not c.passed and c.severity == "limit"]
+    verdict: Verdict = (
+        "fail" if fatal
+        else "review" if warned
+        else "pass_limits" if limited
+        else "pass"
+    )
 
     return QCReport(
         session_id=context.session_id,

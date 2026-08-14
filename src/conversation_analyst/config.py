@@ -764,19 +764,45 @@ class QCConfig:
     microphones -- the primary speaker cue -- starts to be dominated by
     noise rather than by who is talking."""
 
-    max_short_state_fraction: float = 0.25
-    """Fraction of *speaking* runs shorter than 300 ms, above which the
-    speaker track is judged to be flickering rather than tracking turns.
+    max_uncorroborated_short: float = 0.35
+    """Fraction of speaking runs that are both shorter than 300 ms and
+    vouched for by nothing -- no recognized word from that person inside
+    them, no laughter -- above which the speaker track is judged broken.
 
-    Real conversation does contain brief speaking states -- backchannels,
-    quick interjections -- but not as a plurality. When weak evidence makes
-    the decoder alternate roughly twice a second it still reports high
-    confidence, because the posterior comes from the same weak evidence, so
-    confidence cannot be used to detect it.
+    The guard used to be the raw short-run fraction at 0.25, calibrated on
+    scripted sessions (ground truth 3-15%, correct decodes 4-16%, lip-only
+    broken tracks 50-60%). On real recordings it failed for the opposite
+    reason it was built: casual conversation is dense with genuine 200 ms
+    vocalisations, and the scripted material under-represented them. On the
+    lab's eight-session corpus the raw fraction ran 15-29% -- four sessions
+    were failed as "flickering" -- while transcript corroboration shows
+    62-87% of those short runs contain an independently recognized word
+    ("yeah", "nice", "oh cool"). They are listener responses, which are the
+    phenomenon, not the noise.
 
-    Calibrated against scripted sessions with known boundaries: ground truth
-    runs 3-15%, a correct decode of the same audio 4-16%, and a track driven
-    by lip motion alone 50-60%."""
+    The metric is therefore the *uncorroborated* fraction, which the same
+    corpus puts at 2.8-8.7% on those sessions -- inside the scripted
+    ground-truth band. A decoder inventing states produces short runs the
+    recognizer finds no words in, so the failure mode the guard exists for
+    still trips it."""
+
+    max_uncorroborated_timing: float = 0.20
+    """Uncorroborated short-run fraction above which boundary-timing
+    measures (response latency, floor-transfer offsets, rhythm) are
+    withheld while the rest of the session is still reported.
+
+    Between this and ``max_uncorroborated_short`` the track is sound enough
+    to say who spoke and how much -- being wrong about a turn's millisecond
+    edge does not change how many nods someone produced -- but not sound
+    enough to put error bars on 200 ms latency differences. Withholding the
+    timing family is the same policy already applied to overlap measures on
+    shared-audio recordings: report what the evidence supports, name what
+    it does not."""
+
+    max_short_state_raw: float = 0.50
+    """Raw short-run fraction above which the track is failed regardless of
+    corroboration. Lip-only broken tracks measure 50-60%; nothing that
+    fragmented is worth corroborating case by case."""
 
     max_overlapping_onsets: float = 0.30
     """Share of turns beginning before the previous speaker finished.

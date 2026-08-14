@@ -54,7 +54,7 @@ def _finite(x: np.ndarray) -> np.ndarray:
     unit="s",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "timing_evidence",),
     interpretation=(
         "Shorter latencies indicate tighter coordination and typically "
         "accompany agreement and engagement; markedly long latencies precede "
@@ -90,7 +90,7 @@ def response_latency_median(ctx: AnalysisContext) -> dict[str, float]:
     unit="s",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "timing_evidence",),
     interpretation=(
         "A narrow range means the person responds on a predictable rhythm. "
         "IQR is used rather than SD because latency distributions are "
@@ -116,7 +116,7 @@ def response_latency_iqr(ctx: AnalysisContext) -> dict[str, float]:
     unit="s",
     level=DYAD_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "timing_evidence",),
     interpretation=(
         "Large asymmetry indicates one partner is driving the pace. Sign is "
         "fixed as A minus B so that values are comparable across sessions."
@@ -702,7 +702,7 @@ def turn_duration_matching(ctx: AnalysisContext) -> float:
     unit="s",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set", "transcript"),
+    requires=("turn_set", "transcript", "timing_evidence",),
     interpretation=(
         "Questions mobilize response (Stivers & Rossano 2010): latencies "
         "after questions run shorter than after statements, and answers "

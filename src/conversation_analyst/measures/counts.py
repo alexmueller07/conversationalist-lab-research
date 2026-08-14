@@ -183,17 +183,11 @@ def turn_count_total(ctx: AnalysisContext) -> float:
 
 
 def _face(ctx: AnalysisContext, person: str):
-    signals = (ctx.face or {}).get(person)
-    if signals is None or signals.coverage < ctx.config.vision.min_coverage:
-        return None
-    return signals
+    return ctx.usable_face(person)
 
 
 def _body(ctx: AnalysisContext, person: str):
-    signals = (ctx.body or {}).get(person)
-    if signals is None or signals.coverage < ctx.config.vision.min_coverage:
-        return None
-    return signals
+    return ctx.usable_body(person)
 
 
 @measure(

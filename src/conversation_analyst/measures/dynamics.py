@@ -72,7 +72,7 @@ def _segment_trend(ctx: AnalysisContext, segments: Segments) -> float:
     unit="s",
     level=PERSON_LEVEL,
     family=FAMILY,
-    requires=("turn_set",),
+    requires=("turn_set", "timing_evidence",),
     interpretation=(
         "Latencies shortening over a first meeting is the clearest available "
         "signature of a pair warming up: the partners become able to project "
@@ -209,8 +209,8 @@ def laughter_trend(ctx: AnalysisContext) -> dict[str, float]:
 def gaze_trend(ctx: AnalysisContext) -> dict[str, float]:
     out = {}
     for p in PERSONS:
-        signals = ctx.face.get(p)
-        if signals is None or signals.coverage < ctx.config.vision.min_coverage:
+        signals = ctx.usable_face(p)
+        if signals is None:
             out[p] = float("nan")
             continue
         looking = Segments.from_mask(signals.on_partner & signals.tracked, ctx.frame_hz)
@@ -232,8 +232,8 @@ def gaze_trend(ctx: AnalysisContext) -> dict[str, float]:
 def smile_trend(ctx: AnalysisContext) -> dict[str, float]:
     out = {}
     for p in PERSONS:
-        signals = ctx.face.get(p)
-        if signals is None or signals.coverage < ctx.config.vision.min_coverage:
+        signals = ctx.usable_face(p)
+        if signals is None:
             out[p] = float("nan")
             continue
         out[p] = _segment_trend(ctx, signals.smiles)

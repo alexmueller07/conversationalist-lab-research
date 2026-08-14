@@ -24,7 +24,7 @@ import numpy as np
 from conversation_analyst.context import AnalysisContext
 from conversation_analyst.measures.base import MeasureValue, registry
 from conversation_analyst.report.player import build_player_data, player_css, render_player
-from conversation_analyst.report.qc import QCReport
+from conversation_analyst.report.qc import QCReport, VERDICT_LABELS
 from conversation_analyst.report.transcript import (
     build_transcript_data,
     render_transcript,
@@ -56,6 +56,8 @@ letter-spacing:.06em}
 .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;
 font-weight:600;letter-spacing:.03em}
 .badge.pass{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.badge.pass_limits{background:color-mix(in srgb,var(--ok) 12%,transparent);
+color:var(--ok);border:1px dashed var(--ok)}
 .badge.review{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
 .badge.fail{background:color-mix(in srgb,var(--fail) 18%,transparent);color:var(--fail)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
@@ -584,7 +586,9 @@ def _withheld_banner(values: Sequence[MeasureValue]) -> str:
         if len(labels) > 6:
             shown += f", and {len(labels) - 6} more"
         explanation = _EXPLAIN.get(
-            "overlap" if "overlap_evidence" in reason else "",
+            "overlap" if "overlap_evidence" in reason
+            else "timing" if "timing_evidence" in reason
+            else "",
             f"Reported as missing rather than estimated. Reason: {_esc(reason)}.",
         )
         blocks.append(
@@ -596,6 +600,14 @@ def _withheld_banner(values: Sequence[MeasureValue]) -> str:
 
 
 _EXPLAIN = {
+    "timing": (
+        "The speaker track is sound enough to say who spoke and how much, "
+        "but a share of its short runs cannot be corroborated by the "
+        "recognizer, so millisecond boundary timing is not trustworthy on "
+        "this recording. Latency, floor-transfer and rhythm measures are "
+        "withheld; counts, proportions and vision measures do not depend on "
+        "boundary jitter and are unaffected."
+    ),
     "overlap": (
         "Both video files carry the same mixed audio, so simultaneous speech "
         "cannot be detected &mdash; measured against known overlap, recall "
@@ -994,7 +1006,7 @@ def render_dashboard(
 
 <h1>Session {_esc(context.session_id)}</h1>
 <p class="sub">
-  <span class="badge {qc.verdict}">{qc.verdict.upper()}</span>
+  <span class="badge {qc.verdict}">{VERDICT_LABELS.get(qc.verdict, qc.verdict.upper())}</span>
   &nbsp;{available} of {len(values)} measure values computed
   &nbsp;&middot;&nbsp; {len(registry)} measures in catalogue
 </p>

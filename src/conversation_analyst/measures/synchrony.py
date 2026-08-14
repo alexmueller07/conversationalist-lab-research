@@ -35,13 +35,27 @@ _REF = (
 
 
 def _paired(ctx: AnalysisContext, source: str, attribute: str):
-    """Fetch the same signal for both partners, or None if unavailable."""
-    store = getattr(ctx, source, None)
-    if not store or "A" not in store or "B" not in store:
+    """Fetch the same signal for both partners, or None if unavailable.
+
+    Synchrony needs *both* views to be live. Correlating a moving face
+    against a frozen one measures the encoder, not the dyad, so the same
+    reliability gate that withholds individual facial measures withholds
+    the coordination measures here.
+    """
+    if source == "face":
+        pair = (ctx.usable_face("A"), ctx.usable_face("B"))
+    elif source == "body":
+        pair = (ctx.usable_body("A"), ctx.usable_body("B"))
+    else:
+        store = getattr(ctx, source, None)
+        pair = (
+            (store or {}).get("A"), (store or {}).get("B")
+        )
+    if pair[0] is None or pair[1] is None:
         return None
     try:
-        a = np.asarray(getattr(store["A"], attribute), dtype=np.float64)
-        b = np.asarray(getattr(store["B"], attribute), dtype=np.float64)
+        a = np.asarray(getattr(pair[0], attribute), dtype=np.float64)
+        b = np.asarray(getattr(pair[1], attribute), dtype=np.float64)
     except AttributeError:
         return None
     if a.size < 10 or b.size < 10:

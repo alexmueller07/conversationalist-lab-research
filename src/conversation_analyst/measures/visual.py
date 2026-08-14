@@ -29,8 +29,7 @@ _GAZE_REF = (
 
 
 def _usable(ctx: AnalysisContext, person: str) -> bool:
-    sig = ctx.face.get(person) if ctx.face else None
-    return sig is not None and sig.coverage >= ctx.config.vision.min_coverage
+    return ctx.usable_face(person) is not None
 
 
 def _masked_proportion(
@@ -384,8 +383,7 @@ def shared_smile_proportion(ctx: AnalysisContext) -> float:
 
 
 def _body_usable(ctx: AnalysisContext, person: str) -> bool:
-    sig = ctx.body.get(person) if ctx.body else None
-    return sig is not None and sig.coverage >= ctx.config.vision.min_coverage
+    return ctx.usable_body(person) is not None
 
 
 @measure(
