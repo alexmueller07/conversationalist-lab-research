@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Conversation Analyst</title>
+<meta name="description" content="Measure a conversation the way the literature says to. 203 documented behavioral measures from per-person video — turn-taking, nods counted by cycle, gaze, prosody, responsiveness — every decision cited, every detector validated.">
+<style>
+:root{--bg:#0d1117;--fg:#e6e8ec;--muted:#8b93a1;--card:#161c26;--card-hi:#1b2330;
+--line:#232b38;--a:#2dd4bf;--a-ink:#082220;--b:#fbbf24}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);
+font:16px/1.6 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+a{color:var(--a)}
+nav{position:sticky;top:0;background:color-mix(in srgb,var(--bg) 88%,transparent);
+backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:10}
+nav .wrap{display:flex;align-items:center;gap:22px;padding:14px 22px}
+.mark{font-weight:800;font-size:17px}
+.mark em{color:var(--a);font-style:normal}
+nav a{color:var(--muted);text-decoration:none;font-size:14px}
+nav a:hover{color:var(--fg)}
+nav .cta{margin-left:auto;background:var(--a);color:var(--a-ink);font-weight:700;
+padding:8px 16px;border-radius:9px}
+.hero{padding:84px 0 40px;text-align:center}
+.hero h1{font-size:clamp(34px,6vw,58px);margin:0 0 14px;line-height:1.12}
+.hero h1 em{color:var(--a);font-style:normal}
+.hero p{color:var(--muted);max-width:62ch;margin:0 auto 30px;font-size:18px}
+.hero .buttons{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-block;padding:13px 26px;border-radius:11px;text-decoration:none;
+font-weight:700;font-size:15px}
+.btn.primary{background:var(--a);color:var(--a-ink)}
+.btn.primary:hover{background:#5eead4}
+.btn.ghost{border:1px solid var(--line);color:var(--fg)}
+.btn.ghost:hover{border-color:var(--a)}
+.shot{margin:48px auto 0;max-width:980px;border-radius:14px;overflow:hidden;
+border:1px solid var(--line);box-shadow:0 30px 80px -20px rgba(0,0,0,.7)}
+.shot img{width:100%;display:block}
+section{padding:70px 0}
+h2{font-size:28px;margin:0 0 8px}
+.lead{color:var(--muted);max-width:64ch;margin:0 0 34px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:13px;
+padding:22px}
+.card h3{margin:0 0 8px;font-size:16.5px}
+.card p{margin:0;color:var(--muted);font-size:14px}
+.card .k{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.07em;
+text-transform:uppercase;color:var(--a);margin-bottom:10px}
+.numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.num{background:var(--card);border:1px solid var(--line);border-radius:13px;
+padding:20px;text-align:center}
+.num b{display:block;font-size:30px;color:var(--a);font-variant-numeric:tabular-nums}
+.num span{color:var(--muted);font-size:13px}
+.num small{display:block;color:var(--muted);font-size:11.5px;margin-top:6px;
+opacity:.8}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:center}
+.split .shot{margin:0}
+@media (max-width:820px){.split{grid-template-columns:1fr}}
+pre{background:var(--card);border:1px solid var(--line);border-radius:11px;
+padding:16px 18px;overflow-x:auto;font-size:13.5px;line-height:1.6}
+code{font-family:ui-monospace,Menlo,Consolas,monospace}
+.step{display:flex;gap:14px;margin:16px 0}
+.step .n{flex:0 0 30px;height:30px;border-radius:9px;background:var(--a);
+color:var(--a-ink);font-weight:800;display:grid;place-items:center}
+.honest{border-left:3px solid var(--b);background:var(--card);border-radius:0 11px 11px 0;
+padding:16px 18px;margin:22px 0;font-size:14.5px;color:var(--muted)}
+.honest b{color:var(--fg)}
+footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--muted);
+font-size:13.5px}
+footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.reveal{opacity:0;transform:translateY(18px);
+transition:opacity .6s ease,transform .6s ease}
+.reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <span class="mark">Conversation <em>Analyst</em></span>
+  <a href="#measures">Measures</a>
+  <a href="#validation">Validation</a>
+  <a href="methods.html">Methods</a>
+  <a href="#download" class="cta">Download</a>
+</div></nav>
+
+<header class="hero wrap">
+  <h1>Measure a conversation<br>the way the <em>literature</em> says to</h1>
+  <p>Point it at two videos of a conversation — one per person. It works out
+  who spoke when, how quickly each replied, what they looked at, when they
+  nodded and how many times each nod bobbed, how tightly each listener's
+  responses tracked the partner — <strong>203 documented measures</strong>,
+  every decision cited, every detector validated before it is trusted.</p>
+  <div class="buttons">
+    <a class="btn primary" href="#download">Download — free &amp; open source</a>
+    <a class="btn ghost" href="methods.html">Read the methods</a>
+  </div>
+  <div class="shot reveal"><img src="assets/app.png"
+    alt="The Conversation Analyst desktop app"></div>
+</header>
+
+<section id="measures"><div class="wrap">
+  <h2>Behavior, counted the way a coder counts it</h2>
+  <p class="lead">Rates hide the facts a human coder writes down. Conversation
+  Analyst reports the count beside every rate, the length of every nod, and
+  who was listening when it happened.</p>
+  <div class="grid">
+    <div class="card reveal"><span class="k">Nods by cycle</span>
+      <h3>Single, double, triple — exact, not impressionistic</h3>
+      <p>Nod lengths follow the cycle definitions of Mori, Den &amp; Jokinen
+      (2025, PLoS ONE). Calibrated against their 9,223 hand-annotated nods:
+      the pipeline reproduces 42.1% single nods against their 42%. Every nod
+      is labelled speaking / listening — a distinction the nod-typology
+      literature is built on.</p></div>
+    <div class="card reveal"><span class="k">Responsiveness</span>
+      <h3>Does their responding track the partner, or a clock?</h3>
+      <p>A conditional-intensity model (Hawkes 1971) separates two listeners
+      with identical backchannel rates: baseline rate, responses evoked per
+      partner pause, and the timescale of the coupling — validated by
+      parameter recovery on simulated listeners.</p></div>
+    <div class="card reveal"><span class="k">Tempo phases</span>
+      <h3>Where the conversation changed gear</h3>
+      <p>Bayesian online changepoint detection (Adams &amp; MacKay 2007) over
+      exchange tempo, with every boundary forced to win an exact Bayes-factor
+      test. Constant-tempo simulations come back as exactly one phase, ten
+      out of ten.</p></div>
+    <div class="card reveal"><span class="k">Turn-taking</span>
+      <h3>Latencies, overlaps, backchannels, repair</h3>
+      <p>Floor transfers centred near the 200 ms the cross-linguistic
+      literature reports (Stivers et al. 2009), backchannels separated from
+      turns, interruptions from projection, hesitations found acoustically
+      because transcripts lose them.</p></div>
+    <div class="card reveal"><span class="k">Transcript</span>
+      <h3>Readable, searchable, honest about itself</h3>
+      <p>The full conversation follows playback; uncertain words are
+      underlined; a lab vocabulary fixes names the recognizer has never
+      heard, and every correction is shown with what was originally
+      heard.</p></div>
+    <div class="card reveal"><span class="k">Verdicts</span>
+      <h3>PASS means the numbers can be trusted</h3>
+      <p>What a recording cannot support is withheld with a stated reason —
+      overlap on shared audio, movement from a frozen view — and the verdict
+      grades what remains. A dash is never a zero.</p></div>
+  </div>
+  <div class="shot reveal" style="margin-top:34px"><img src="assets/nods.png"
+    alt="Nods tabulated by cycle length and by speaking/listening role"></div>
+</div></section>
+
+<section id="validation"><div class="wrap">
+  <h2>Validated five independent ways</h2>
+  <p class="lead">A fitted parameter looks exactly as authoritative as a
+  count while having more ways to be silently wrong — so nothing reaches a
+  report until it survives evidence it cannot grade for itself.</p>
+  <div class="numbers">
+    <div class="num reveal"><b>r&nbsp;=&nbsp;0.997</b>
+      <span>median pitch vs the lab's own Praat runs</span>
+      <small>2.2 Hz median error, 8 sessions, two toolchains</small></div>
+    <div class="num reveal"><b>|r|&nbsp;=&nbsp;0.81–0.93</b>
+      <span>per-frame head pose &amp; smile vs OpenFace</span>
+      <small>16 participants, independent tracking stack</small></div>
+    <div class="num reveal"><b>42.1%</b>
+      <span>single nods, against the published 42%</span>
+      <small>2,178 detected nods vs Mori et al.'s 9,223</small></div>
+    <div class="num reveal"><b>1.00</b>
+      <span>nod recall, precision &amp; cycle accuracy</span>
+      <small>synthetic truth, six seeds, zero false positives</small></div>
+    <div class="num reveal"><b>ρ&nbsp;=&nbsp;0.67</b>
+      <span>smiling ↔ partner-reported enjoyment</span>
+      <small>preliminary, n=16; fixed a-priori panel</small></div>
+    <div class="num reveal"><b>F1 · κ · MAE</b>
+      <span>built-in blind human-coding mode</span>
+      <small>any RA can produce the agreement number</small></div>
+  </div>
+  <div class="honest reveal"><b>What is not claimed:</b> nod-for-nod
+  agreement with a human coder is unmeasured until someone codes sessions in
+  the built-in coding mode — that is why it exists. Criterion correlations at
+  n=16 are directional, not inferential. Sessions whose recordings cannot
+  support a measure report a stated gap, not a guess.</div>
+</div></section>
+
+<section><div class="wrap split">
+  <div>
+    <h2>Every decision, with its citation</h2>
+    <p class="lead" style="margin-bottom:18px">The documentation of record is
+    generated from the same registry that computes the numbers: what was
+    decided, why, and on whose published evidence — Mori, Den &amp; Jokinen;
+    Hadar; Poggi; McClave; Stivers; Hawkes; Adams &amp; MacKay; Ekman;
+    Kendon. A measure cannot exist without appearing there.</p>
+    <a class="btn ghost" href="methods.html">Open the methods page</a>
+  </div>
+  <div class="shot reveal"><img src="assets/docs.png"
+    alt="The documentation page: decision cards with citations"></div>
+</div></section>
+
+<section id="download"><div class="wrap">
+  <h2>Download</h2>
+  <p class="lead">Free and open source (MIT). Windows, macOS and Linux.
+  Needs Python 3.10+; everything else installs itself on first launch.
+  No GPU. Runs entirely on your machine — recordings never leave it.</p>
+  <div class="step"><div class="n">1</div><div>
+    <b>Get the code</b> — <a
+    href="https://github.com/alexmueller07/conversationalist-lab-research">clone
+    or download the repository from GitHub</a>.</div></div>
+  <div class="step"><div class="n">2</div><div>
+    <b>Double-click <code>launch-conversation-analyst.bat</code></b>
+    (Windows) or run <code>./launch-conversation-analyst.sh</code>
+    (macOS/Linux). First run sets everything up — 15–30 minutes, once.</div></div>
+  <div class="step"><div class="n">3</div><div>
+    <b>Point it at a folder of recordings</b> — two videos per conversation,
+    one per person — and click Analyze.</div></div>
+  <pre><code>git clone https://github.com/alexmueller07/conversationalist-lab-research.git
+cd conversationalist-lab-research
+./launch-conversation-analyst.sh</code></pre>
+</div></section>
+
+<footer><div class="wrap">
+  <div>
+    <span class="mark">Conversation <em>Analyst</em></span><br>
+    Built by Alexander Mueller at the Niedenthal Emotions Lab,<br>
+    University of Wisconsin–Madison. MIT licensed.
+  </div>
+  <div style="text-align:right">
+    All screenshots on this page are from synthetic demo data.<br>
+    No participant data appears here or in the repository.
+  </div>
+</div></footer>
+
+<script>
+const io = new IntersectionObserver(
+  entries => entries.forEach(e => e.isIntersecting && e.target.classList.add("in")),
+  {threshold: 0.12});
+document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+</script>
+</body>
+</html>
