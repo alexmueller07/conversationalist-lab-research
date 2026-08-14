@@ -95,6 +95,15 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             offsets={r: result.sync.offset(r) for r in session.views}
             if result.sync else None,
         )
+        from conversation_analyst.report.coding import write_coding_page
+
+        write_coding_page(
+            result.workspace.file("coding.html"),
+            result.context,
+            video_paths=dict(session.views),
+            offsets={r: result.sync.offset(r) for r in session.views}
+            if result.sync else None,
+        )
 
         all_long.append(
             measures_long(session.session_id, result.measures, result.context.metadata)
@@ -288,6 +297,53 @@ def cmd_validate_study(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_agreement(args: argparse.Namespace) -> int:
+    """Score a human coder's file against the detectors."""
+    from conversation_analyst.agreement import (
+        load_human_coding, load_machine_events, score_agreement,
+    )
+
+    human, meta = load_human_coding(args.coding_file)
+    session_id = meta.get("session", "?")
+    session_dir = Path(args.workspace) / str(session_id)
+    machine, duration = load_machine_events(session_dir)
+    duration = float(meta.get("duration") or duration)
+
+    results = score_agreement(human, machine, duration, tolerance_s=args.tolerance)
+    if not results:
+        print("No overlapping behaviors between the coder's file and the "
+              "machine's events.")
+        return 1
+
+    coder = meta.get("coder", "anonymous")
+    print(f"Agreement for session {session_id}, coder {coder} "
+          f"(tolerance ±{args.tolerance:.1f}s):")
+    print(f"  {'behavior':12s} {'who':3s} {'human':>6s} {'machine':>8s} "
+          f"{'F1':>6s} {'recall':>7s} {'precision':>10s} {'onset MAE':>10s} {'kappa':>7s}")
+    for r in sorted(results, key=lambda x: (x.behavior, x.person)):
+        mae = f"{r.boundary_mae_s*1000:.0f} ms" if r.boundary_errors_s else "--"
+        print(f"  {r.behavior:12s} {r.person:3s} {r.n_human:6d} {r.n_machine:8d} "
+              f"{r.f1:6.2f} {r.recall:7.2f} {r.precision:10.2f} {mae:>10s} "
+              f"{r.kappa:7.2f}")
+
+    import pandas as pd
+
+    out = session_dir / f"agreement-{coder}.csv"
+    pd.DataFrame([
+        {
+            "session_id": session_id, "coder": coder,
+            "behavior": r.behavior, "person": r.person,
+            "n_human": r.n_human, "n_machine": r.n_machine,
+            "n_matched": r.n_matched, "f1": r.f1, "recall": r.recall,
+            "precision": r.precision, "onset_mae_s": r.boundary_mae_s,
+            "kappa": r.kappa, "tolerance_s": args.tolerance,
+        }
+        for r in results
+    ]).to_csv(out, index=False)
+    print(f"-> {out}")
+    return 0
+
+
 def cmd_benchmark(args: argparse.Namespace) -> int:
     from conversation_analyst.benchmark import run_benchmark
 
@@ -369,6 +425,16 @@ def build_parser() -> argparse.ArgumentParser:
     study.add_argument("-w", "--workspace", default="workspace",
                        help="analysis workspace holding measures_all.csv")
     study.set_defaults(func=cmd_validate_study)
+
+    agree = sub.add_parser(
+        "agreement",
+        help="score a human coder's exported file against the detectors",
+    )
+    agree.add_argument("coding_file", help="JSON exported by the coding page")
+    agree.add_argument("-w", "--workspace", default="workspace")
+    agree.add_argument("--tolerance", type=float, default=0.5,
+                       help="onset matching tolerance in seconds")
+    agree.set_defaults(func=cmd_agreement)
 
     bench = sub.add_parser(
         "benchmark",
