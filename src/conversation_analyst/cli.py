@@ -297,6 +297,19 @@ def cmd_validate_study(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_docs(args: argparse.Namespace) -> int:
+    """Write the documentation-of-record page."""
+    from conversation_analyst.report.documentation import write_documentation
+
+    path = write_documentation(args.output)
+    print(f"-> {path}")
+    if args.open:
+        import webbrowser
+
+        webbrowser.open(Path(path).resolve().as_uri())
+    return 0
+
+
 def cmd_agreement(args: argparse.Namespace) -> int:
     """Score a human coder's file against the detectors."""
     from conversation_analyst.agreement import (
@@ -425,6 +438,14 @@ def build_parser() -> argparse.ArgumentParser:
     study.add_argument("-w", "--workspace", default="workspace",
                        help="analysis workspace holding measures_all.csv")
     study.set_defaults(func=cmd_validate_study)
+
+    docs = sub.add_parser(
+        "docs", help="write the documentation-of-record page (every "
+                     "decision, its reasoning, its citations)",
+    )
+    docs.add_argument("-o", "--output", default="documentation.html")
+    docs.add_argument("--open", action="store_true", help="open in the browser")
+    docs.set_defaults(func=cmd_docs)
 
     agree = sub.add_parser(
         "agreement",
