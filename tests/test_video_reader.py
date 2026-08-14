@@ -13,7 +13,7 @@ import threading
 import numpy as np
 import pytest
 
-from convlab.media.video import VideoReader
+from conversation_analyst.media.video import VideoReader
 
 
 @pytest.fixture(scope="module")

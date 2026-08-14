@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from convlab.config import Config
-from convlab.isolate import ISOLATABLE, run_isolated
-from convlab.session import Session
+from conversation_analyst.config import Config
+from conversation_analyst.isolate import ISOLATABLE, run_isolated
+from conversation_analyst.session import Session
 
 
 def _session(tmp_path) -> Session:
@@ -106,7 +106,7 @@ class TestIsolationContract:
         assert set(payload["views"]) == {"close_a", "close_b"}
 
     def test_config_survives_the_round_trip(self):
-        from convlab.isolate import _config_from_dict
+        from conversation_analyst.isolate import _config_from_dict
 
         config = Config()
         config.vision.fps = 12.5
@@ -132,7 +132,7 @@ class TestPoolDoesNotDeadlock:
     def test_children_never_write_to_a_pipe(self, tmp_path, monkeypatch):
         import subprocess
 
-        from convlab.isolate import TrackingPool
+        from conversation_analyst.isolate import TrackingPool
 
         seen = []
 
@@ -190,7 +190,7 @@ class TestPoolDoesNotDeadlock:
     def test_waiting_on_one_stage_leaves_the_other_running(self, tmp_path, monkeypatch):
         import subprocess
 
-        from convlab.isolate import TrackingPool
+        from conversation_analyst.isolate import TrackingPool
 
         class _Fake:
             returncode = 0
@@ -228,27 +228,27 @@ class TestWorkerPolicy:
     """
 
     def test_explicit_setting_is_honoured(self):
-        from convlab.isolate import plan_workers
+        from conversation_analyst.isolate import plan_workers
 
         config = Config()
         config.tracking_workers = 3
         assert plan_workers(config, 4) == 3
 
     def test_never_more_workers_than_jobs(self):
-        from convlab.isolate import plan_workers
+        from conversation_analyst.isolate import plan_workers
 
         config = Config()
         config.tracking_workers = 8
         assert plan_workers(config, 2) == 2
 
     def test_no_jobs_means_no_workers(self):
-        from convlab.isolate import plan_workers
+        from conversation_analyst.isolate import plan_workers
 
         assert plan_workers(Config(), 0) == 0
 
     def test_memory_bounds_the_worker_count(self, monkeypatch):
         """One expensive child plus cheap ones, which is what it measures as."""
-        from convlab.isolate import plan_workers
+        from conversation_analyst.isolate import plan_workers
 
         config = Config()
         config.tracking_workers = None
@@ -257,15 +257,15 @@ class TestWorkerPolicy:
         config.tracking_reserve_mb = 500.0
 
         # 2.1 GB free: 500 reserved, 650 for the first, 950 left buys three more.
-        monkeypatch.setattr("convlab.system.available_memory_mb", lambda: 2100.0)
+        monkeypatch.setattr("conversation_analyst.system.available_memory_mb", lambda: 2100.0)
         assert plan_workers(config, 4) == 4
 
         # 1.5 GB free: 350 left after the first buys one more.
-        monkeypatch.setattr("convlab.system.available_memory_mb", lambda: 1500.0)
+        monkeypatch.setattr("conversation_analyst.system.available_memory_mb", lambda: 1500.0)
         assert plan_workers(config, 4) == 2
 
         # 1.0 GB free: nothing left after the first.
-        monkeypatch.setattr("convlab.system.available_memory_mb", lambda: 1000.0)
+        monkeypatch.setattr("conversation_analyst.system.available_memory_mb", lambda: 1000.0)
         assert plan_workers(config, 4) == 1
 
     def test_additional_workers_are_cheaper_than_the_first(self, monkeypatch):
@@ -276,27 +276,27 @@ class TestWorkerPolicy:
         the full amount would demand 5 GB to run four workers, which is why
         the previous one never started a second on an 8 GB machine.
         """
-        from convlab.isolate import plan_workers
+        from conversation_analyst.isolate import plan_workers
 
         config = Config()
         config.tracking_workers = None
-        monkeypatch.setattr("convlab.system.available_memory_mb", lambda: 2100.0)
+        monkeypatch.setattr("conversation_analyst.system.available_memory_mb", lambda: 2100.0)
         assert plan_workers(config, 4) == 4
         assert 4 * config.tracking_first_worker_mb > 2100.0  # would have refused
 
     def test_always_at_least_one_worker(self, monkeypatch):
         """Refusing to start any would be slower than the serial path."""
-        from convlab.isolate import plan_workers
+        from conversation_analyst.isolate import plan_workers
 
         config = Config()
         config.tracking_workers = None
-        monkeypatch.setattr("convlab.system.available_memory_mb", lambda: 100.0)
+        monkeypatch.setattr("conversation_analyst.system.available_memory_mb", lambda: 100.0)
         assert plan_workers(config, 4) == 1
 
     def test_unknown_memory_is_conservative_not_serial(self, monkeypatch):
-        from convlab.isolate import plan_workers
+        from conversation_analyst.isolate import plan_workers
 
         config = Config()
         config.tracking_workers = None
-        monkeypatch.setattr("convlab.system.available_memory_mb", lambda: None)
+        monkeypatch.setattr("conversation_analyst.system.available_memory_mb", lambda: None)
         assert plan_workers(config, 4) == 2

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from convlab.benchmark import BenchmarkReport, word_error_rate
+from conversation_analyst.benchmark import BenchmarkReport, word_error_rate
 
 
 class TestWordErrorRate:

@@ -12,9 +12,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.config import AttributionConfig
-from convlab.speech.attribution import audiovisual_coherence, lip_motion_score
-from convlab.speech.voiceprint import (
+from conversation_analyst.config import AttributionConfig
+from conversation_analyst.speech.attribution import audiovisual_coherence, lip_motion_score
+from conversation_analyst.speech.voiceprint import (
     N_CEPS,
     blocked_accuracy,
     context_features,

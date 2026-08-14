@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from convlab.speech.asr import Word
-from convlab.speech.vocabulary import Vocabulary, phonetic_key
+from conversation_analyst.speech.asr import Word
+from conversation_analyst.speech.vocabulary import Vocabulary, phonetic_key
 
 
 def words(text: str, person: str = "A", t0: float = 0.0, step: float = 0.3):

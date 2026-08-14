@@ -10,8 +10,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.config import AttributionConfig, SynchronyConfig, VisionConfig
-from convlab.speech.attribution import (
+from conversation_analyst.config import AttributionConfig, SynchronyConfig, VisionConfig
+from conversation_analyst.speech.attribution import (
     STATE_A,
     STATE_B,
     STATE_BOTH,
@@ -22,15 +22,15 @@ from convlab.speech.attribution import (
     viterbi,
     _transition_matrix,
 )
-from convlab.synchrony import windowed_lagged_correlation
-from convlab.timeline import Segments
-from convlab.vision.nods import LISTENING, OTHER, SPEAKING, assign_roles, length_histogram
-from convlab.vision.signals import (
+from conversation_analyst.synchrony import windowed_lagged_correlation
+from conversation_analyst.timeline import Segments
+from conversation_analyst.vision.nods import LISTENING, OTHER, SPEAKING, assign_roles, length_histogram
+from conversation_analyst.vision.signals import (
     detect_nods,
     detect_shakes,
     estimate_partner_direction,
 )
-from convlab.vision.tracker import _rotation_to_euler
+from conversation_analyst.vision.tracker import _rotation_to_euler
 
 
 def oscillation(duration, hz, freq, amplitude, start, cycles, noise=0.0, seed=0):

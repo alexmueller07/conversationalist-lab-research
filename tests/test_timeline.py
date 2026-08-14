@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.timeline import Segments, resample_to_grid
+from conversation_analyst.timeline import Segments, resample_to_grid
 
 
 class TestConstruction:

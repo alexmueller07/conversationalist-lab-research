@@ -10,10 +10,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.measures import registry
-from convlab.measures.backchannel import backchannel_rate, backchannel_reciprocity
-from convlab.measures.base import DYAD_LEVEL, PERSON_LEVEL
-from convlab.measures.turntaking import (
+from conversation_analyst.measures import registry
+from conversation_analyst.measures.backchannel import backchannel_rate, backchannel_reciprocity
+from conversation_analyst.measures.base import DYAD_LEVEL, PERSON_LEVEL
+from conversation_analyst.measures.turntaking import (
     fast_response_proportion,
     mean_turn_duration,
     response_latency_asymmetry,
@@ -25,8 +25,8 @@ from convlab.measures.turntaking import (
     turn_count,
     turn_rate,
 )
-from convlab.timeline import Segments
-from convlab.turns import IPU, TurnSet
+from conversation_analyst.timeline import Segments
+from conversation_analyst.turns import IPU, TurnSet
 
 
 class TestRegistry:
@@ -110,7 +110,7 @@ class TestTurnTaking:
         assert talk_time_balance(context) == pytest.approx(1.0)
 
     def test_talk_balance_falls_when_lopsided(self, config):
-        from convlab.context import AnalysisContext
+        from conversation_analyst.context import AnalysisContext
 
         turn_set = TurnSet(
             turns=[], ipus=[], backchannels=[], interruptions=[], duration=10.0,
@@ -128,7 +128,7 @@ class TestTurnTaking:
 
 class TestBackchannels:
     def test_rate_normalised_by_partner_talk_time(self, config):
-        from convlab.context import AnalysisContext
+        from conversation_analyst.context import AnalysisContext
 
         # B produces 2 backchannels while A speaks for 60 s -> 2 per minute.
         speech = {"A": Segments.from_pairs([(0.0, 60.0)]),
@@ -146,7 +146,7 @@ class TestBackchannels:
         assert backchannel_rate(ctx)["B"] == pytest.approx(2.0, rel=1e-3)
 
     def test_reciprocity_is_one_when_equal(self, config):
-        from convlab.context import AnalysisContext
+        from conversation_analyst.context import AnalysisContext
 
         backchannels = [
             IPU("A", 1.0, 1.2, is_backchannel=True),
@@ -161,7 +161,7 @@ class TestBackchannels:
         assert backchannel_reciprocity(ctx) == pytest.approx(1.0)
 
     def test_reciprocity_is_zero_when_one_sided(self, config):
-        from convlab.context import AnalysisContext
+        from conversation_analyst.context import AnalysisContext
 
         backchannels = [IPU("A", 1.0, 1.2, is_backchannel=True) for _ in range(4)]
         turn_set = TurnSet(
@@ -195,7 +195,7 @@ class TestProsodicEntrainment:
         return series
 
     def _correlation(self, seed, accommodation, normalize):
-        from convlab.measures.prosodic import _adjacent_pairs
+        from conversation_analyst.measures.prosodic import _adjacent_pairs
 
         prev, nxt = _adjacent_pairs(
             self._series(seed, accommodation), normalize=normalize
@@ -219,7 +219,7 @@ class TestProsodicEntrainment:
         assert float(np.mean(values)) > 0.5
 
     def test_proximity_stays_in_semitones(self):
-        from convlab.measures.prosodic import _adjacent_pairs
+        from conversation_analyst.measures.prosodic import _adjacent_pairs
 
         prev, nxt = _adjacent_pairs(self._series(0, 0.0), normalize=False)
         # Two speakers ~15 semitones apart must show that separation.
@@ -228,7 +228,7 @@ class TestProsodicEntrainment:
 
 class TestLexical:
     def test_question_classification(self):
-        from convlab.lexicon import classify_question
+        from conversation_analyst.lexicon import classify_question
 
         assert classify_question("What did you study?") == "wh"
         assert classify_question("Did you like it?") == "yes_no"
@@ -237,9 +237,9 @@ class TestLexical:
         assert classify_question("I grew up there.") is None
 
     def test_style_matching_is_one_for_identical_text(self, config):
-        from convlab.context import AnalysisContext
-        from convlab.measures.lexical import linguistic_style_matching
-        from convlab.speech.asr import Transcript, Word
+        from conversation_analyst.context import AnalysisContext
+        from conversation_analyst.measures.lexical import linguistic_style_matching
+        from conversation_analyst.speech.asr import Transcript, Word
 
         text = (
             "i went to the shop and then i saw a friend of mine but we did not "
@@ -254,9 +254,9 @@ class TestLexical:
         assert linguistic_style_matching(ctx) == pytest.approx(1.0)
 
     def test_style_matching_needs_enough_words(self, config):
-        from convlab.context import AnalysisContext
-        from convlab.measures.lexical import linguistic_style_matching
-        from convlab.speech.asr import Transcript, Word
+        from conversation_analyst.context import AnalysisContext
+        from conversation_analyst.measures.lexical import linguistic_style_matching
+        from conversation_analyst.speech.asr import Transcript, Word
 
         ctx = AnalysisContext("t", config, 10.0, config.audio.frame_hz)
         ctx.transcript = Transcript(
@@ -265,7 +265,7 @@ class TestLexical:
         assert np.isnan(linguistic_style_matching(ctx))
 
     def test_type_token_ratio_is_length_independent(self):
-        from convlab.lexicon import type_token_ratio
+        from conversation_analyst.lexicon import type_token_ratio
 
         # The same vocabulary repeated: a longer text must not score lower.
         vocabulary = [f"w{i}" for i in range(100)]

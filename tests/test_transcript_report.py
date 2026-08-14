@@ -13,18 +13,18 @@ import json
 
 import pytest
 
-from convlab.config import Config
-from convlab.context import AnalysisContext
-from convlab.report.transcript import (
+from conversation_analyst.config import Config
+from conversation_analyst.context import AnalysisContext
+from conversation_analyst.report.transcript import (
     LOW_CONFIDENCE,
     build_transcript_data,
     render_transcript,
     transcript_text,
 )
-from convlab.speech.asr import Transcript, Word
-from convlab.speech.vocabulary import Correction
-from convlab.timeline import Segments
-from convlab.turns import Turn, TurnSet
+from conversation_analyst.speech.asr import Transcript, Word
+from conversation_analyst.speech.vocabulary import Correction
+from conversation_analyst.timeline import Segments
+from conversation_analyst.turns import Turn, TurnSet
 
 
 def make_context(words=None, corrections=None, turns=None) -> AnalysisContext:

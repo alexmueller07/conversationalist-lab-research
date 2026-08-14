@@ -12,14 +12,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.config import Config
-from convlab.context import AnalysisContext
-from convlab.measures import registry
-from convlab.session import PERSONS
-from convlab.timeline import Segments
-from convlab.turns import Turn, TurnSet
-from convlab.vision.nods import LISTENING, OTHER, SPEAKING, NodEvent, NodTrack
-from convlab.vision.signals import FaceSignals
+from conversation_analyst.config import Config
+from conversation_analyst.context import AnalysisContext
+from conversation_analyst.measures import registry
+from conversation_analyst.session import PERSONS
+from conversation_analyst.timeline import Segments
+from conversation_analyst.turns import Turn, TurnSet
+from conversation_analyst.vision.nods import LISTENING, OTHER, SPEAKING, NodEvent, NodTrack
+from conversation_analyst.vision.signals import FaceSignals
 
 HZ = 100.0
 DURATION = 120.0

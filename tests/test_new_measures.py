@@ -10,50 +10,50 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.context import AnalysisContext
-from convlab.measures.backchannel import (
+from conversation_analyst.context import AnalysisContext
+from conversation_analyst.measures.backchannel import (
     backchannel_diversity,
     backchannel_incipiency,
     backchannel_specific_rate,
     backchannel_specific_share,
 )
-from convlab.measures.lexical import (
+from conversation_analyst.measures.lexical import (
     compliment_rate,
     dispreference_marker_rate,
     gratitude_rate,
     self_disclosure_rate,
     turn_initial_filler_proportion,
 )
-from convlab.measures.prosodic import speech_rate_entrainment
-from convlab.measures.repair import (
+from conversation_analyst.measures.prosodic import speech_rate_entrainment
+from conversation_analyst.measures.repair import (
     change_of_state_rate,
     other_repair_rate,
     repair_balance,
     self_repair_rate,
 )
-from convlab.measures.rhythm import (
+from conversation_analyst.measures.rhythm import (
     activity_exchange_rate,
     vocal_cycle_period,
     vocal_cycle_strength,
 )
-from convlab.measures.semantic import (
+from conversation_analyst.measures.semantic import (
     followup_question_rate,
     partner_semantic_similarity,
     semantic_similarity_trend,
 )
-from convlab.measures.structure import (
+from conversation_analyst.measures.structure import (
     ending_negotiation_duration,
     greeted_at_open,
     preclosing_count,
 )
-from convlab.measures.turntaking import (
+from conversation_analyst.measures.turntaking import (
     long_gap_rate,
     normative_transition_proportion,
     question_response_latency,
     turn_duration_matching,
 )
-from convlab.timeline import Segments
-from convlab.turns import IPU, Turn, TurnSet
+from conversation_analyst.timeline import Segments
+from conversation_analyst.turns import IPU, Turn, TurnSet
 
 
 def make_turn(index, person, start, end, text="", fto=None, prev=None, ipus=None):

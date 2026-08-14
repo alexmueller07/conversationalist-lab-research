@@ -12,21 +12,21 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.config import Config, FillerConfig
-from convlab.context import AnalysisContext
-from convlab.measures.affect import UPTAKE_WINDOW_S, _uptake
-from convlab.measures.base import registry
-from convlab.media.quality import (
+from conversation_analyst.config import Config, FillerConfig
+from conversation_analyst.context import AnalysisContext
+from conversation_analyst.measures.affect import UPTAKE_WINDOW_S, _uptake
+from conversation_analyst.measures.base import registry
+from conversation_analyst.media.quality import (
     AudioQuality,
     VideoQuality,
     _laplacian_variance,
     measure_audio_quality,
 )
-from convlab.report.qc import assess_quality
-from convlab.semantics import TopicSegment, describe_topics
-from convlab.speech.fillers import detect_filled_pauses
-from convlab.timeline import Segments
-from convlab.turns import Turn
+from conversation_analyst.report.qc import assess_quality
+from conversation_analyst.semantics import TopicSegment, describe_topics
+from conversation_analyst.speech.fillers import detect_filled_pauses
+from conversation_analyst.timeline import Segments
+from conversation_analyst.turns import Turn
 
 HZ = 100.0
 FS = 16_000
@@ -110,13 +110,13 @@ class TestQualityChecks:
 
 class TestFilledPauses:
     def _steady(self, seconds, f0, sample_rate=FS):
-        from convlab.synth import render_filled_pause
+        from conversation_analyst.synth import render_filled_pause
 
         return render_filled_pause(seconds, f0, sample_rate,
                                    rng=np.random.default_rng(3))
 
     def test_a_held_vowel_among_moving_speech_is_found(self):
-        from convlab.synth.audio import render_voice
+        from conversation_analyst.synth.audio import render_voice
 
         rng = np.random.default_rng(1)
         seconds = 40.0
@@ -241,7 +241,7 @@ class TestWithheldBanner:
     """A reader must not have to reconstruct why a whole family is empty."""
 
     def _values(self, n, reason="requires turn_set, overlap_evidence"):
-        from convlab.measures.base import MeasureValue
+        from conversation_analyst.measures.base import MeasureValue
 
         ids = [
             "interruption_rate", "interrupted_rate", "interruption_success_rate",
@@ -255,7 +255,7 @@ class TestWithheldBanner:
         ]
 
     def test_a_whole_family_withheld_is_announced(self):
-        from convlab.report.dashboard import _withheld_banner
+        from conversation_analyst.report.dashboard import _withheld_banner
 
         html = _withheld_banner(self._values(9))
         assert "9 measures were not computed" in html
@@ -265,19 +265,19 @@ class TestWithheldBanner:
         assert "separate audio file" in html, "the reader needs the remedy"
 
     def test_nothing_is_said_when_everything_computed(self):
-        from convlab.measures.base import MeasureValue
-        from convlab.report.dashboard import _withheld_banner
+        from conversation_analyst.measures.base import MeasureValue
+        from conversation_analyst.report.dashboard import _withheld_banner
 
         assert _withheld_banner([MeasureValue("turn_count", "person", "A", 12.0)]) == ""
 
     def test_a_one_off_failure_is_left_to_the_tables(self):
         """Isolated gaps are about the measure, not about the recording."""
-        from convlab.report.dashboard import _withheld_banner
+        from conversation_analyst.report.dashboard import _withheld_banner
 
         assert _withheld_banner(self._values(2, reason="value is not finite")) == ""
 
     def test_an_unrecognized_reason_is_still_reported_verbatim(self):
-        from convlab.report.dashboard import _withheld_banner
+        from conversation_analyst.report.dashboard import _withheld_banner
 
         html = _withheld_banner(self._values(5, reason="requires prosody"))
         assert "5 measures were not computed" in html

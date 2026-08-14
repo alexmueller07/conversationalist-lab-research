@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from convlab.session import Session, discover_sessions, load_manifest
+from conversation_analyst.session import Session, discover_sessions, load_manifest
 
 
 def _touch(path):
@@ -82,13 +82,13 @@ class TestViewTokenMatching:
     """
 
     def test_participant_code_is_not_a_view_token(self, tmp_path):
-        from convlab.session import _classify_view
+        from conversation_analyst.session import _classify_view
 
         for stem in ("AN101_AN101", "AN102_AN101", "1101_101", "ABC12_S3"):
             assert _classify_view(stem) is None, f"{stem} should carry no view token"
 
     def test_genuine_tokens_still_match(self):
-        from convlab.session import _classify_view
+        from conversation_analyst.session import _classify_view
 
         assert _classify_view("dyad012_close_a") == "close_a"
         assert _classify_view("dyad012_close_b") == "close_b"
@@ -147,7 +147,7 @@ class TestVoiceActivitySource:
         """The stage must build its source list from the close-ups only."""
         import inspect
 
-        from convlab import pipeline
+        from conversation_analyst import pipeline
 
         source = inspect.getsource(pipeline.analyze_session)
         assert "CLOSE_VIEW[p] for p in PERSONS" in source
@@ -163,10 +163,10 @@ class TestTurnCountQualityChecks:
 
     @staticmethod
     def _context(n_turns: int, duration: float):
-        from convlab.config import Config
-        from convlab.context import AnalysisContext
-        from convlab.timeline import Segments
-        from convlab.turns import Turn, TurnSet
+        from conversation_analyst.config import Config
+        from conversation_analyst.context import AnalysisContext
+        from conversation_analyst.timeline import Segments
+        from conversation_analyst.turns import Turn, TurnSet
 
         turns, speech_a, speech_b = [], [], []
         step = duration / max(n_turns, 1)
@@ -186,7 +186,7 @@ class TestTurnCountQualityChecks:
         return ctx
 
     def _verdict(self, n_turns, duration):
-        from convlab.report.qc import assess_quality
+        from conversation_analyst.report.qc import assess_quality
 
         report = assess_quality(self._context(n_turns, duration))
         return report, {c.name: c for c in report.checks}
@@ -223,7 +223,7 @@ class TestSyntheticMedia:
     def test_write_session_defaults_to_two_views(self):
         import inspect
 
-        from convlab.synth.media import write_session
+        from conversation_analyst.synth.media import write_session
 
         default = inspect.signature(write_session).parameters["roles"].default
         assert default == ("close_a", "close_b")

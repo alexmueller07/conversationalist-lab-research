@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.report.corpus import (
+from conversation_analyst.report.corpus import (
     SessionEntry,
     _check_family,
     _distribution_strip,
