@@ -53,7 +53,7 @@ download. No GPU required.
 2. **Download this project.** Either:
    - click the green **Code** button above → **Download ZIP** → right-click the
      downloaded file → **Extract All**, or
-   - if you have Git: `git clone https://github.com/alexmueller07/conversationalist-lab-research.git`
+   - if you have Git: `git clone https://github.com/alexmueller07/conversation-analyst.git`
 
 3. **Open the folder** you just extracted or cloned.
 
@@ -77,8 +77,8 @@ download. No GPU required.
 
 2. **Download the project:**
    ```bash
-   git clone https://github.com/alexmueller07/conversationalist-lab-research.git
-   cd conversationalist-lab-research
+   git clone https://github.com/alexmueller07/conversation-analyst.git
+   cd conversation-analyst
    ```
 
 3. **Start it:**
@@ -92,8 +92,8 @@ download. No GPU required.
 
 ```bash
 sudo apt install python3 python3-venv python3-tk git    # Debian/Ubuntu
-git clone https://github.com/alexmueller07/conversationalist-lab-research.git
-cd conversationalist-lab-research
+git clone https://github.com/alexmueller07/conversation-analyst.git
+cd conversation-analyst
 chmod +x launch-conversation-analyst.sh
 ./launch-conversation-analyst.sh
 ```
