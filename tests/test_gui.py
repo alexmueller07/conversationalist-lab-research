@@ -107,7 +107,13 @@ class TestApp:
 
         app = App(root)
         app._handle(Message("progress", text="d1: face tracking", value=42.0))
-        assert app.progress["value"] == pytest.approx(42.0)
+        # The bar eases toward the target on an animation ticker rather
+        # than jumping, so the message sets the target and the ticker
+        # closes the gap frame by frame.
+        assert app._progress_target == pytest.approx(42.0)
+        for _ in range(60):
+            app._animate_tick()
+        assert app.progress["value"] == pytest.approx(42.0, abs=1.0)
         assert "face tracking" in app.status_var.get()
 
     def test_done_message_restores_the_buttons(self, root):

@@ -77,11 +77,12 @@ def _esc(text: object) -> str:
 
 
 _CSS = """
-:root{--bg:#fff;--fg:#0f172a;--muted:#64748b;--line:#e2e8f0;--card:#f8fafc;
---a:#0f766e;--b:#b45309;--ok:#15803d;--warn:#b45309;--fail:#b91c1c;--accent:#4f46e5;}
-@media (prefers-color-scheme:dark){:root{--bg:#0b1120;--fg:#e2e8f0;--muted:#94a3b8;
---line:#1e293b;--card:#111a2e;--a:#2dd4bf;--b:#fbbf24;--ok:#4ade80;--warn:#fbbf24;
---fail:#f87171;--accent:#a5b4fc;}}
+:root{--bg:#0d1117;--fg:#e6e8ec;--muted:#8b93a1;--line:#232b38;--card:#161c26;
+--a:#2dd4bf;--b:#fbbf24;--ok:#4ade80;--warn:#fbbf24;--fail:#f87171;
+--accent:#2dd4bf;}
+@media (prefers-color-scheme:light){:root{--bg:#fff;--fg:#0f172a;
+--muted:#64748b;--line:#e2e8f0;--card:#f8fafc;--a:#0f766e;--b:#b45309;
+--ok:#15803d;--warn:#b45309;--fail:#b91c1c;--accent:#4f46e5;}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
 font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
@@ -107,6 +108,8 @@ tr:last-child td{border-bottom:none}
 .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;
 font-weight:650;letter-spacing:.03em}
 .badge.pass{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.badge.pass_limits{background:color-mix(in srgb,var(--ok) 12%,transparent);
+color:var(--ok);border:1px dashed var(--ok)}
 .badge.review{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
 .badge.fail{background:color-mix(in srgb,var(--fail) 18%,transparent);color:var(--fail)}
 a{color:var(--accent);text-decoration:none}

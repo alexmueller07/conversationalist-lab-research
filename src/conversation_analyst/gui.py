@@ -44,30 +44,48 @@ except ImportError as exc:  # pragma: no cover - headless install
         "Ubuntu run: sudo apt install python3-tk"
     ) from exc
 
-APP_NAME = "Conversationalist"
-APP_TAGLINE = "Conversation analysis for dyadic studies — Niedenthal Emotions Lab"
-APP_TITLE = f"{APP_NAME} — conversation analysis for dyadic studies"
+APP_NAME = "Conversation Analyst"
+APP_TAGLINE = "Measure a conversation the way the literature says to"
+APP_TITLE = f"{APP_NAME} — multimodal conversation measurement"
 
 MODEL_DIR = Path.home() / ".convlab" / "models"
 """One model cache per user. Keeping it out of the results folder means
-changing where results go never re-downloads 27 MB of weights."""
+changing where results go never re-downloads 27 MB of weights. The path
+keeps the engine's historical name so nobody's already-downloaded models
+are abandoned by the rebrand."""
 
 PALETTE = {
-    # Warm near-white ground with ink text, one badger-red accent for the
-    # UW lab identity, and verdict colors kept dark enough to stay legible
-    # against the white cards.
-    "bg": "#FAFAF7",
-    "panel": "#FFFFFF",
-    "text": "#1A1E23",
-    "muted": "#6B7280",
-    "accent": "#B0392E",
-    "accent_dark": "#8E2E25",
-    "accent_faint": "#F4E3E1",
-    "ok": "#166534",
-    "warn": "#B45309",
-    "fail": "#B91C1C",
-    "line": "#E5E1DA",
+    # The Conversation Analyst identity: deep ink surfaces, high-contrast
+    # type, and the two speakers' colors -- teal for A, amber for B -- as
+    # the brand accents, the same pair every report and timeline uses.
+    # Verdict colors are tuned for dark ground.
+    "bg": "#0D1117",
+    "panel": "#161C26",
+    "panel_hi": "#1B2330",
+    "text": "#E6E8EC",
+    "muted": "#8B93A1",
+    "accent": "#2DD4BF",
+    "accent_dark": "#14B8A6",
+    "accent_faint": "#123B37",
+    "accent_ink": "#082220",
+    "accent2": "#FBBF24",
+    "ok": "#4ADE80",
+    "warn": "#FBBF24",
+    "fail": "#F87171",
+    "line": "#232B38",
+    "field": "#0F141D",
 }
+
+def default_results_dir() -> Path:
+    """New installs get the new name; an existing results folder wins.
+
+    Renaming the default out from under someone whose corpus lives in the
+    old folder would scatter their results across two directories."""
+    old = Path.home() / "convlab-results"
+    if old.exists():
+        return old
+    return Path.home() / "conversation-analyst-results"
+
 
 SKIPPABLE = (
     ("asr", "Transcribe speech", "Needed for questions, callbacks and style matching"),
@@ -104,11 +122,11 @@ def _draw_icon(size: int = 32) -> tk.PhotoImage:
             else:
                 image.put(color, to=(x - width, y + step, x, y + step + 1))
 
-    # The partner's bubble sits behind in a lighter tint, ours in front in
-    # the full accent -- a two-voice mark for a two-person tool.
-    faded = "#D08C84"
-    bubble(2, 2, 20, 15, faded)
-    tail(5, 15, faded, leftward=True)
+    # The two speakers' bubbles in the two speakers' colors -- amber behind
+    # for person B, teal in front for person A, the same pair every report
+    # uses. A two-voice mark for a two-person tool.
+    bubble(2, 2, 20, 15, PALETTE["accent2"])
+    tail(5, 15, PALETTE["accent2"], leftward=True)
     bubble(12, 12, 30, 25, PALETTE["accent"])
     tail(27, 25, PALETTE["accent"], leftward=False)
     return image
@@ -374,6 +392,17 @@ class App:
         root.geometry("1180x900")
         root.minsize(880, 640)
         root.configure(bg=PALETTE["bg"])
+        if sys.platform == "win32":  # dark title bar; harmless if it fails
+            try:
+                import ctypes
+
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    ctypes.windll.user32.GetParent(root.winfo_id()),
+                    20,  # DWMWA_USE_IMMERSIVE_DARK_MODE
+                    ctypes.byref(ctypes.c_int(1)), 4,
+                )
+            except Exception:
+                pass
         try:
             # Kept as an attribute deliberately: Tk holds no reference of
             # its own, and a garbage-collected PhotoImage blanks the icon.
@@ -410,7 +439,10 @@ class App:
         style.configure("TFrame", background=PALETTE["bg"])
         style.configure("Card.TFrame", background=PALETTE["panel"])
         style.configure("TLabel", background=PALETTE["bg"], font=(family, 10))
-        style.configure("Wordmark.TLabel", font=(family, 20, "bold"))
+        style.configure("Wordmark.TLabel", font=(family, 20, "bold"),
+                        foreground=PALETTE["text"])
+        style.configure("WordmarkAccent.TLabel", font=(family, 20, "bold"),
+                        foreground=PALETTE["accent"])
         style.configure("Muted.TLabel", foreground=PALETTE["muted"],
                         font=(family, 9))
         style.configure("Card.TLabel", background=PALETTE["panel"],
@@ -421,16 +453,27 @@ class App:
                         foreground=PALETTE["muted"], font=(family, 10))
         # The step number renders as a small accent chip: padding turns the
         # label's own background into the badge, no canvas drawing needed.
+        # Teal demands dark text; white on teal fails contrast.
         style.configure("StepNumber.TLabel", background=PALETTE["accent"],
-                        foreground="#FFFFFF", font=(family, 10, "bold"),
-                        padding=(7, 1))
+                        foreground=PALETTE["accent_ink"],
+                        font=(family, 10, "bold"), padding=(7, 1))
         style.configure("StepTitle.TLabel", background=PALETTE["panel"],
                         font=(family, 11, "bold"))
-        style.configure("TButton", font=(family, 10), padding=(12, 6))
-        style.configure("Ghost.TButton", font=(family, 9), padding=(8, 3))
+        style.configure("TButton", font=(family, 10), padding=(12, 6),
+                        background=PALETTE["panel_hi"],
+                        foreground=PALETTE["text"],
+                        bordercolor=PALETTE["line"],
+                        lightcolor=PALETTE["panel_hi"],
+                        darkcolor=PALETTE["panel_hi"], relief="flat")
+        style.map("TButton",
+                  background=[("active", PALETTE["line"])],
+                  bordercolor=[("focus", PALETTE["accent"])])
+        style.configure("Ghost.TButton", font=(family, 9), padding=(8, 3),
+                        background=PALETTE["panel"])
+        style.map("Ghost.TButton", background=[("active", PALETTE["panel_hi"])])
         style.configure("Card.TCheckbutton", background=PALETTE["panel"],
                         font=(family, 10),
-                        indicatorbackground="#FFFFFF",
+                        indicatorbackground=PALETTE["field"],
                         indicatorforeground=PALETTE["accent"],
                         focuscolor=PALETTE["panel"])
         style.map(
@@ -438,11 +481,11 @@ class App:
             background=[("active", PALETTE["panel"])],
             indicatorbackground=[("selected", PALETTE["accent"]),
                                  ("active", PALETTE["accent_faint"])],
-            indicatorforeground=[("selected", "#FFFFFF")],
+            indicatorforeground=[("selected", PALETTE["accent_ink"])],
         )
         style.configure("Card.TRadiobutton", background=PALETTE["panel"],
                         font=(family, 10),
-                        indicatorbackground="#FFFFFF",
+                        indicatorbackground=PALETTE["field"],
                         indicatorforeground=PALETTE["accent"],
                         focuscolor=PALETTE["panel"])
         style.map(
@@ -450,9 +493,12 @@ class App:
             background=[("active", PALETTE["panel"])],
             indicatorbackground=[("selected", PALETTE["accent"]),
                                  ("active", PALETTE["accent_faint"])],
-            indicatorforeground=[("selected", "#FFFFFF")],
+            indicatorforeground=[("selected", PALETTE["accent_ink"])],
         )
-        style.configure("TEntry", padding=6, fieldbackground="#FFFFFF",
+        style.configure("TEntry", padding=6,
+                        fieldbackground=PALETTE["field"],
+                        foreground=PALETTE["text"],
+                        insertcolor=PALETTE["accent"],
                         bordercolor=PALETTE["line"],
                         lightcolor=PALETTE["line"], darkcolor=PALETTE["line"])
         style.map("TEntry", bordercolor=[("focus", PALETTE["accent"])],
@@ -467,12 +513,15 @@ class App:
                         relief="flat", font=(family, 9, "bold"))
         style.map("Treeview.Heading",
                   background=[("active", PALETTE["panel"])])
-        style.map("Treeview", background=[("selected", PALETTE["accent"])],
-                  foreground=[("selected", "#FFFFFF")])
+        style.map("Treeview",
+                  background=[("selected", PALETTE["accent_faint"])],
+                  foreground=[("selected", PALETTE["text"])])
         style.configure("Horizontal.TProgressbar",
                         background=PALETTE["accent"],
-                        troughcolor="#ECE9E2", borderwidth=0, thickness=8)
-        style.configure("Vertical.TScrollbar", background="#D8D4CB",
+                        troughcolor=PALETTE["field"], borderwidth=0,
+                        thickness=8)
+        style.configure("Vertical.TScrollbar",
+                        background=PALETTE["panel_hi"],
                         troughcolor=PALETTE["bg"], bordercolor=PALETTE["bg"],
                         arrowcolor=PALETTE["muted"])
 
@@ -499,7 +548,11 @@ class App:
         menubar.add_cascade(label="Tools", menu=tools)
 
         help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="How it works", command=self._open_docs)
+        help_menu.add_command(
+            label="Documentation — every decision, with citations",
+            command=self._open_docs)
+        help_menu.add_command(label="Code a session by hand…",
+                              command=self._explain_coding)
         help_menu.add_command(label=f"About {APP_NAME}", command=self._show_about)
         menubar.add_cascade(label="Help", menu=help_menu)
 
@@ -550,7 +603,10 @@ class App:
         # -- identity ----------------------------------------------------
         header = ttk.Frame(outer)
         header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        ttk.Label(header, text=APP_NAME, style="Wordmark.TLabel").pack(anchor="w")
+        wordmark = ttk.Frame(header)
+        wordmark.pack(anchor="w")
+        ttk.Label(wordmark, text="Conversation", style="Wordmark.TLabel").pack(side="left")
+        ttk.Label(wordmark, text=" Analyst", style="WordmarkAccent.TLabel").pack(side="left")
         ttk.Label(header, text=APP_TAGLINE, style="Muted.TLabel").pack(
             anchor="w", pady=(1, 0))
 
@@ -559,7 +615,7 @@ class App:
         paths.columnconfigure(1, weight=1)
 
         self.input_var = tk.StringVar()
-        self.output_var = tk.StringVar(value=str(Path.home() / "convlab-results"))
+        self.output_var = tk.StringVar(value=str(default_results_dir()))
 
         ttk.Label(paths, text="Videos folder", style="Card.TLabel").grid(
             row=0, column=0, sticky="w", pady=4)
@@ -647,9 +703,10 @@ class App:
         # actually show up.
         self.run_button = tk.Button(
             actions, text="Analyze", command=self._start,
-            background=PALETTE["accent"], foreground="#FFFFFF",
-            activebackground=PALETTE["accent_dark"], activeforeground="#FFFFFF",
-            disabledforeground="#E4B9B4",
+            background=PALETTE["accent"], foreground=PALETTE["accent_ink"],
+            activebackground=PALETTE["accent_dark"],
+            activeforeground=PALETTE["accent_ink"],
+            disabledforeground="#3F6B66",
             font=(self.font_family, 12, "bold"),
             relief="flat", borderwidth=0, cursor="hand2",
             padx=32, pady=8,
@@ -668,9 +725,25 @@ class App:
 
         self.progress = ttk.Progressbar(run, mode="determinate", maximum=100)
         self.progress.grid(row=1, column=0, sticky="ew", pady=(12, 0))
+
+        status_row = ttk.Frame(run, style="Card.TFrame")
+        status_row.grid(row=2, column=0, sticky="w", pady=(6, 0))
+        # The status dot breathes while a run is live -- a 12 px canvas
+        # animated by the same ticker that eases the progress bar, so a
+        # stalled interface is visibly distinguishable from a working one.
+        self.status_dot = tk.Canvas(
+            status_row, width=12, height=12, highlightthickness=0,
+            background=PALETTE["panel"])
+        self.status_dot.pack(side="left", padx=(0, 7))
+        self._dot_item = self.status_dot.create_oval(
+            2, 2, 10, 10, fill=PALETTE["muted"], outline="")
         self.status_var = tk.StringVar(value="Ready.")
-        ttk.Label(run, textvariable=self.status_var, style="CardHint.TLabel").grid(
-            row=2, column=0, sticky="w", pady=(4, 0))
+        ttk.Label(status_row, textvariable=self.status_var,
+                  style="CardHint.TLabel").pack(side="left")
+
+        self._progress_target = 0.0
+        self._pulse_phase = 0.0
+        self.root.after(33, self._animate_tick)
 
         # -- results ----------------------------------------------------
         #
@@ -902,7 +975,7 @@ class App:
 
         self.worker = Worker(
             target=target,
-            output=self.output_var.get().strip() or str(Path.home() / "convlab-results"),
+            output=self.output_var.get().strip() or str(default_results_dir()),
             skip=skip,
             # Models live in one place per user, not beside the results, so
             # that changing the output folder never triggers a re-download.
@@ -955,26 +1028,72 @@ class App:
         if target:
             webbrowser.open(Path(target).as_uri())
 
-    def _open_docs(self) -> None:
-        """Open the plain-language guide that ships beside the source.
+    def _animate_tick(self) -> None:
+        """One 30 fps frame: ease the bar, breathe the dot.
 
-        ``os.startfile`` hands the file to whatever the user actually reads
-        Markdown with; a browser tab is the fallback that exists everywhere
-        else. Wheel installs do not carry docs/, so a missing file is
-        reported rather than raised.
+        Easing rather than jumping is not decoration on a tool whose runs
+        take minutes: a bar that glides toward each stage boundary reads as
+        alive between updates, where a bar that leaps every forty seconds
+        reads as hung the rest of the time.
         """
-        doc = Path(__file__).resolve().parents[2] / "docs" / "HOW-IT-WORKS.md"
-        if not doc.exists():
-            messagebox.showinfo(
-                "Guide not found",
-                "HOW-IT-WORKS.md was not found beside this install.\n\n"
-                f"Expected at:\n{doc}",
-            )
-            return
         try:
-            os.startfile(doc)  # type: ignore[attr-defined]  # Windows only
-        except (AttributeError, OSError):
-            webbrowser.open(doc.as_uri())
+            current = float(self.progress["value"])
+            target = self._progress_target
+            if abs(target - current) > 0.05:
+                self.progress.configure(value=current + (target - current) * 0.18)
+            running = self.worker is not None and self.worker.is_alive()
+            if running:
+                import math
+
+                self._pulse_phase = (self._pulse_phase + 0.10) % (2 * math.pi)
+                # Breathe between the faint and full accent by mixing the
+                # two hex colors -- tkinter has no alpha, so mix by hand.
+                mix = 0.5 + 0.5 * math.sin(self._pulse_phase)
+                lo = (18, 59, 55)     # accent_faint
+                hi = (45, 212, 191)   # accent
+                color = "#%02x%02x%02x" % tuple(
+                    int(a + (b - a) * mix) for a, b in zip(lo, hi)
+                )
+                self.status_dot.itemconfigure(self._dot_item, fill=color)
+            else:
+                self.status_dot.itemconfigure(
+                    self._dot_item,
+                    fill=PALETTE["ok"] if self._progress_target >= 100
+                    else PALETTE["muted"],
+                )
+        except tk.TclError:  # window closing
+            return
+        self.root.after(33, self._animate_tick)
+
+    def _open_docs(self) -> None:
+        """Generate and open the documentation of record.
+
+        Generated fresh on each open so the page always matches the
+        installed version's registry -- every decision, its reasoning, its
+        citations, and the full measure catalogue.
+        """
+        from conversation_analyst.report.documentation import write_documentation
+
+        target = MODEL_DIR.parent / "documentation.html"
+        try:
+            write_documentation(target)
+        except OSError as exc:
+            messagebox.showinfo("Documentation", f"Could not write the page: {exc}")
+            return
+        webbrowser.open(target.resolve().as_uri())
+
+    def _explain_coding(self) -> None:
+        messagebox.showinfo(
+            "Code a session by hand",
+            "Every analyzed session gets a coding.html next to its "
+            "dashboard.\n\nOpen it, mark nods, smiles and laughs with "
+            "single keys while the video plays (the page shows no "
+            "detections, on purpose), export the file, then run:\n\n"
+            "  conversation-analyst agreement <exported file>\n\n"
+            "to get event F1, onset error and Cohen's kappa against the "
+            "detectors. Twenty minutes of coding turns 'does it agree with "
+            "a person?' from an open question into a number.",
+        )
 
     def _show_about(self) -> None:
         # Imported here, not at module top: the package __init__ pulls in
@@ -1040,7 +1159,7 @@ class App:
         if message.kind == "log":
             self._log(message.text, message.level)
         elif message.kind == "progress":
-            self.progress.configure(value=message.value)
+            self._progress_target = float(message.value)
             self.status_var.set(message.text)
         elif message.kind == "session":
             info = message.payload or {}
