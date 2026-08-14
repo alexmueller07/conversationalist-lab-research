@@ -223,6 +223,10 @@ class TestEveryRateHasACount:
         # Per-backchannel-type rates: the counts exist as
         # backchannel_specific_share, keyed by type rather than by name.
         "backchannel_specific_rate",
+        # A fitted model parameter (the Hawkes baseline intensity), not an
+        # event rate; the events behind it are already counted by
+        # backchannel_count and nod_count_listening.
+        "responsiveness_baseline",
         # Named differently on purpose; checked separately below.
         "mutual_gaze_episode_rate",
         "transition_overlap_rate",
