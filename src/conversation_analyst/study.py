@@ -210,6 +210,116 @@ def convergence_summary(comparison: pd.DataFrame) -> pd.DataFrame:
 
 
 # ----------------------------------------------------------------------
+# Convergent validity: our tracking vs the lab's OpenFace runs
+# ----------------------------------------------------------------------
+
+OPENFACE_COLUMNS = ["timestamp", "confidence", "success",
+                    "pose_Rx", "pose_Ry", "AU12_r", "AU06_r"]
+"""What is read from each OpenFace file. The files carry 714 columns; these
+are the ones our signals have counterparts for. Reading only them keeps a
+90 MB-per-participant corpus tractable."""
+
+
+def openface_convergence(
+    openface_zip: str | Path, workspace: Path, max_sessions: int | None = None
+) -> pd.DataFrame:
+    """Frame-level agreement between our tracking and the lab's OpenFace runs.
+
+    The lab ran OpenFace (Baltrusaitis et al. 2018) over every participant
+    video before this pipeline existed -- an entirely independent tracking
+    front-end (different landmark model, different pose solver, different
+    smile estimator). For every analyzed participant, our per-frame head
+    pitch, head yaw and smile channel are resampled onto OpenFace's clock
+    and correlated. High agreement means the *signals* the detectors run on
+    are right, front-end-independently; where it is low, the recording is
+    worth watching before trusting either tool.
+
+    Sign conventions and offsets differ between the tools (OpenFace pitch
+    is radians, opposite sign, camera-relative), so agreement is assessed
+    with correlation rather than absolute error, and the sign is aligned
+    per pair before reporting.
+    """
+    import zipfile
+
+    zpath = Path(openface_zip)
+    if not zpath.exists():
+        return pd.DataFrame()
+
+    z = zipfile.ZipFile(zpath)
+    by_stem = {
+        Path(info.filename).stem: info.filename
+        for info in z.infolist()
+        if info.filename.endswith(".csv")
+        and "/" in info.filename.strip("/")
+        and Path(info.filename).stem[0:1].isalnum()
+        and Path(info.filename).parent.name == "CSV Files Dyad"
+    }
+
+    rows: list[dict] = []
+    parquets = sorted(workspace.glob("*/timeline.parquet"))
+    if max_sessions is not None:
+        parquets = parquets[:max_sessions]
+    for parquet in parquets:
+        session_dir = parquet.parent
+        manifest = session_dir / "manifest.json"
+        if not manifest.exists():
+            continue
+        import json
+
+        views = json.loads(manifest.read_text(encoding="utf-8")).get("views", {})
+        timeline = pd.read_parquet(parquet)
+        hz = 100.0
+
+        for person, role in (("A", "close_a"), ("B", "close_b")):
+            stem = Path(views.get(role, "")).stem
+            if stem not in by_stem:
+                continue
+            of = pd.read_csv(
+                z.open(by_stem[stem]),
+                usecols=lambda c: c.strip() in OPENFACE_COLUMNS,
+                skipinitialspace=True,
+            )
+            of = of[(of.success == 1) & (of.confidence >= 0.8)]
+            if len(of) < 500:
+                continue
+
+            ours = {
+                "head_pitch": timeline.get(f"head_pitch_{person}"),
+                "head_yaw": timeline.get(f"head_yaw_{person}"),
+                "smile": timeline.get(f"smile_{person}"),
+            }
+            theirs = {
+                "head_pitch": np.degrees(of.pose_Rx.to_numpy()),
+                "head_yaw": np.degrees(of.pose_Ry.to_numpy()),
+                "smile": of.AU12_r.to_numpy(),
+            }
+            t_of = of.timestamp.to_numpy()
+            for signal, our_series in ours.items():
+                if our_series is None:
+                    continue
+                our_values = our_series.to_numpy(dtype=float)
+                idx = np.clip((t_of * hz).astype(int), 0, our_values.size - 1)
+                a = our_values[idx]
+                b = theirs[signal]
+                ok = np.isfinite(a) & np.isfinite(b)
+                if ok.sum() < 500:
+                    continue
+                r = float(np.corrcoef(a[ok], b[ok])[0, 1])
+                rows.append(
+                    {
+                        "session_id": session_dir.name,
+                        "person": person,
+                        "participant": stem.split("_")[0],
+                        "signal": signal,
+                        "r_vs_openface": abs(r),
+                        "sign_agrees": r > 0,
+                        "n_frames": int(ok.sum()),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+# ----------------------------------------------------------------------
 # Known-groups and criterion validity
 # ----------------------------------------------------------------------
 
@@ -312,16 +422,25 @@ class StudyValidation:
     criterion_panel: pd.DataFrame
     criterion_exploratory: pd.DataFrame
     n_sessions: int
+    openface: pd.DataFrame = field(default_factory=pd.DataFrame)
     notes: list[str] = field(default_factory=list)
 
 
-def run_study_validation(study_path: str | Path, workspace: str | Path) -> StudyValidation:
+def run_study_validation(
+    study_path: str | Path,
+    workspace: str | Path,
+    openface_zip: str | Path | None = None,
+) -> StudyValidation:
     workspace = Path(workspace)
     study = StudyData.load(study_path)
 
     comparison = praat_convergence(study, workspace)
     measures = person_measures(workspace)
     notes: list[str] = []
+
+    openface = pd.DataFrame()
+    if openface_zip is not None:
+        openface = openface_convergence(openface_zip, workspace)
 
     n_sessions = comparison.session_id.nunique() if len(comparison) else 0
     n_people = measures.participant.nunique()
@@ -339,6 +458,7 @@ def run_study_validation(study_path: str | Path, workspace: str | Path) -> Study
         criterion_panel=criterion(study, measures, panel_only=True),
         criterion_exploratory=criterion(study, measures, panel_only=False),
         n_sessions=n_sessions,
+        openface=openface,
         notes=notes,
     )
 
@@ -354,6 +474,8 @@ def write_study_report(result: StudyValidation, out_dir: str | Path) -> Path:
     result.criterion_exploratory.to_csv(
         out / "study-criterion-exploratory.csv", index=False
     )
+    if len(result.openface):
+        result.openface.to_csv(out / "study-openface-convergence.csv", index=False)
 
     path = out / "validation-study.html"
     path.write_text(_render(result), encoding="utf-8")
@@ -405,6 +527,23 @@ border-radius:0 8px 8px 0;margin:8px 0;font-size:13.5px}
 """
 
 
+def _openface_block(result: StudyValidation) -> str:
+    if not len(result.openface):
+        return '<p class="na">OpenFace files were not provided for this run.</p>'
+    summary = (
+        result.openface.groupby("signal")
+        .agg(
+            participants=("r_vs_openface", "size"),
+            median_r=("r_vs_openface", "median"),
+            min_r=("r_vs_openface", "min"),
+        )
+        .reset_index()
+    )
+    return _table(summary) + "<details><summary>Per participant</summary>" + _table(
+        result.openface
+    ) + "</details>"
+
+
 def _render(result: StudyValidation) -> str:
     notes = "".join(f'<div class="note">{_esc(n)}</div>' for n in result.notes)
     return f"""<!doctype html>
@@ -437,6 +576,16 @@ per-person and exclude exactly those frames. Our lower tail values are the
 expected signature of that exclusion, not a disagreement about the voices.</p>
 <details><summary>Per-session comparison</summary>
 {_table(result.convergence, "{:.2f}")}</details>
+
+<h2>Convergent validity — our tracking vs the lab's OpenFace runs</h2>
+<p class="sub">The lab ran OpenFace (Baltrusaitis et al. 2018) over every
+participant video — an entirely independent tracking stack: different
+landmark model, different pose solver, different smile estimator. Per-frame
+correlations between our signals and OpenFace's, per participant. Yaw's
+sign is opposite by convention in the two tools (flipped consistently in
+100% of participants), so magnitudes are reported. Where a participant's
+agreement is low, watch the recording before trusting either tool.</p>
+{_openface_block(result)}
 
 <h2>Known-groups — do measures separate the study's skill conditions?</h2>
 <p class="sub">Participants were selected by conversational skill. Positive

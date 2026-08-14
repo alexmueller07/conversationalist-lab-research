@@ -277,7 +277,12 @@ def cmd_validate_study(args: argparse.Namespace) -> int:
     """Compare pipeline output against the study's own records."""
     from conversation_analyst.study import run_study_validation, write_study_report
 
-    result = run_study_validation(args.study, args.workspace)
+    openface = args.openface
+    if openface is None:
+        # The lab's OpenFace export, if it sits where downloads land.
+        candidate = Path.home() / "Downloads" / "CSV Files Dyad.zip"
+        openface = str(candidate) if candidate.exists() else None
+    result = run_study_validation(args.study, args.workspace, openface_zip=openface)
     path = write_study_report(result, args.workspace)
 
     print(f"Praat convergence over {result.n_sessions} session(s):")
@@ -287,6 +292,10 @@ def cmd_validate_study(args: argparse.Namespace) -> int:
             f"median |err| {row.median_abs_error_hz:6.2f} Hz  "
             f"(lab {row.lab_mean:6.1f}, ours {row.our_mean:6.1f})"
         )
+    if len(result.openface):
+        for _, row in (result.openface.groupby("signal")
+                       .r_vs_openface.median().reset_index().iterrows()):
+            print(f"  OpenFace convergence {row.signal:11s} median |r| = {row.r_vs_openface:.3f}")
     if len(result.criterion_panel):
         consistent = (result.criterion_panel.consistent == "yes").sum()
         directional = (result.criterion_panel.consistent != "n/a").sum()
@@ -437,6 +446,10 @@ def build_parser() -> argparse.ArgumentParser:
     study.add_argument("study", help="path to the study zip or extracted folder")
     study.add_argument("-w", "--workspace", default="workspace",
                        help="analysis workspace holding measures_all.csv")
+    study.add_argument("--openface", default=None,
+                       help="zip or folder of the lab's OpenFace CSVs for "
+                            "cross-toolchain convergence (auto-detected in "
+                            "Downloads when omitted)")
     study.set_defaults(func=cmd_validate_study)
 
     docs = sub.add_parser(

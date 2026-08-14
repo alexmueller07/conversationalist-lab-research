@@ -272,17 +272,23 @@ DECISIONS: tuple[Decision, ...] = (
     # ---- validation frame --------------------------------------------------
     Decision(
         "Validation",
-        "Detectors are validated four independent ways: synthetic material "
+        "Detectors are validated five independent ways: synthetic material "
         "with planted events; the lab's own hand-run Praat statistics on "
         "the same recordings (median pitch r = 0.997, 2.2 Hz median "
-        "error); the study's skill groups and partner reports; and a "
-        "built-in blind coding mode that scores any RA's marks against the "
-        "detectors (event F1 at +/-0.5 s, onset error, Cohen's kappa).",
+        "error); frame-level convergence with the lab's OpenFace runs -- an "
+        "entirely independent tracking stack -- at median |r| 0.81 for head "
+        "pitch, 0.93 for yaw and 0.81 for the smile channel against AU12, "
+        "across 16 participants; the study's skill groups and partner "
+        "reports; and a built-in blind coding mode that scores any RA's "
+        "marks against the detectors (event F1 at +/-0.5 s, onset error, "
+        "Cohen's kappa).",
         "No single line is sufficient: synthetic truth proves mechanics, "
-        "convergence proves agreement with an independent toolchain, "
-        "criterion links to instruments psychology already trusts, and "
-        "human coding is the standard the field ultimately asks for.",
+        "cross-toolchain convergence proves the signals are right "
+        "independently of the front-end, criterion links to instruments "
+        "psychology already trusts, and human coding is the standard the "
+        "field ultimately asks for.",
         (
+            "Baltrusaitis, Zadeh, Lim & Morency (2018) IEEE FG -- OpenFace 2.0",
             "Cohen (1960) Educ. Psychol. Meas. 20:37",
             "Bakeman & Quera (2011) Sequential Analysis and Observational "
             "Methods for the Behavioral Sciences",
