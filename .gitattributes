@@ -19,3 +19,10 @@
 *.task binary
 *.tflite binary
 *.parquet binary
+
+# Kept out of source archives: the website (with its screenshots) and
+# installer build outputs are distribution artifacts, not the app.
+site/ export-ignore
+installer/dist/ export-ignore
+installer/payload/ export-ignore
+workspace/ export-ignore
