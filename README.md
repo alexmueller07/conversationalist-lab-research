@@ -1,16 +1,37 @@
-# convlab
+# Conversation Analyst
 
-**Measure what makes someone a good conversationalist, from video.**
+**Measure a conversation the way the literature says to.**
+
+Website: **[conversation-analyst.vercel.app](https://conversation-analyst.vercel.app)**
+· Engine name: `conversation_analyst` (historically `convlab`)
 
 Point it at a folder of recorded conversations — **two videos per pair, one
 per person**. It works out who
 spoke when, how quickly each replied, what they looked at, when they nodded,
 smiled and laughed, how pleasant they looked and how much that followed
 their partner, how their speech and movement tracked one another, and how all
-of that changed as the conversation went on — **195 measures**, each
+of that changed as the conversation went on — **203 measures**, each
 defined and unit-labeled in a codebook, plus a visual report per pair.
 
-![The convlab desktop application](docs/images/app.png)
+![The Conversation Analyst desktop application](site/assets/app.png)
+
+## How it is validated
+
+Five independent lines, every number measured rather than aspirational:
+
+| Line | Result |
+|---|---|
+| Synthetic ground truth | nod recall/precision/cycle-count 1.00; zero false positives from dips, shakes, drift |
+| The lab's own Praat runs | median pitch **r = 0.997**, 2.2 Hz median error, 8 sessions |
+| The lab's OpenFace runs (independent tracking stack) | per-frame head pitch **\|r\| = 0.81**, yaw **0.93**, smile vs AU12 **0.81**, 16 participants |
+| Published nod distribution (Mori, Den & Jokinen 2025) | **42.1 %** single nods vs their 42 %; 97.6 % within five cycles vs their >95 % |
+| Study criterion (preliminary, n=16) | smiling ↔ partner-reported enjoyment **ρ = 0.67**; 8/12 a-priori directional tests consistent |
+
+Plus a built-in **blind human-coding mode**: any RA can code a session
+against the video and get event F1, onset error and Cohen's κ versus the
+detectors — the standard the field ultimately asks for, as a 20-minute task.
+What is *not* claimed: nod-for-nod human agreement is unmeasured until
+someone codes sessions; that is precisely why the coding mode exists.
 
 ---
 
@@ -36,7 +57,7 @@ download. No GPU required.
 
 3. **Open the folder** you just extracted or cloned.
 
-4. **Double-click `launch-convlab.bat`.**
+4. **Double-click `launch-conversation-analyst.bat`.**
 
    The first run installs everything — you'll see a black window with progress
    text for 15–30 minutes. Leave it alone until the app appears. Every run
@@ -62,8 +83,8 @@ download. No GPU required.
 
 3. **Start it:**
    ```bash
-   chmod +x launch-convlab.sh
-   ./launch-convlab.sh
+   chmod +x launch-conversation-analyst.sh
+   ./launch-conversation-analyst.sh
    ```
    First run takes 5–15 minutes.
 
@@ -73,8 +94,8 @@ download. No GPU required.
 sudo apt install python3 python3-venv python3-tk git    # Debian/Ubuntu
 git clone https://github.com/alexmueller07/conversationalist-lab-research.git
 cd conversationalist-lab-research
-chmod +x launch-convlab.sh
-./launch-convlab.sh
+chmod +x launch-conversation-analyst.sh
+./launch-conversation-analyst.sh
 ```
 
 ---
@@ -208,7 +229,7 @@ spare. Turning body tracking off entirely roughly halves what remains.
 Re-running is much faster than the first pass, because every slow stage is
 cached — face and body tracks, the transcript, voice activity, prosody and
 laughter. Adding a measure and re-running a corpus costs seconds per
-session, not minutes. `convlab benchmark` measures cold and warm runtime on
+session, not minutes. `conversation-analyst benchmark` measures cold and warm runtime on
 your own machine.
 
 ---
@@ -220,7 +241,7 @@ results/
 ├── measures_all.csv        every pair, every measure — this is the one to analyze
 ├── index.html              open this first: every session, what passed,
 │                          what was withheld, and every distribution
-├── codebook.csv            what all 195 measures mean
+├── codebook.csv            what all 203 measures mean
 ├── session_summary.csv     pass / review / fail per pair
 └── dyad012/
     ├── dashboard.html      the visual report
@@ -378,7 +399,7 @@ error**, overlap detection at **0.97 precision**.
 
 # Validation
 
-`convlab validate` builds material whose answer is known by construction, runs
+`conversation-analyst validate` builds material whose answer is known by construction, runs
 the real detectors on it, and scores them. All 29 checks pass:
 
 | Check | Result |
@@ -404,7 +425,7 @@ the real detectors on it, and scores them. All 29 checks pass:
 
 ## Benchmark
 
-`convlab benchmark` goes further than validation: it measures the
+`conversation-analyst benchmark` goes further than validation: it measures the
 recognizer's **word error rate** against scripted synthetic speech, runs the
 full pipeline end-to-end on real .mp4 files and scores the measured turn
 counts, backchannel counts, response latencies and question detection
@@ -492,13 +513,17 @@ The app is a thin shell over a library and a CLI.
 ```bash
 pip install -e ".[semantic,dev]"
 
-convlab gui                        # the desktop app
-convlab analyze recordings/ -o out/
-convlab analyze sessions.json -o out/     # explicit manifest
-convlab demo -o out/
-convlab validate                   # ground-truth checks (29+)
-convlab benchmark                  # accuracy incl. WER + cold/warm runtime
-convlab codebook -o docs/measures.md
+conversation-analyst-gui                  # the desktop app
+conversation-analyst analyze recordings/ -o out/
+conversation-analyst analyze sessions.json -o out/   # explicit manifest
+conversation-analyst demo -o out/
+conversation-analyst validate-study <study.zip> -w out/   # vs the study's records
+conversation-analyst agreement coding-<session>-<coder>.json -w out/
+conversation-analyst docs --open          # documentation of record
+# `convlab` still works as an alias for one release
+conversation-analyst validate                   # ground-truth checks (29+)
+conversation-analyst benchmark                  # accuracy incl. WER + cold/warm runtime
+conversation-analyst codebook -o docs/measures.md
 pytest                             # 341 tests, no models or media needed
 ```
 
@@ -516,7 +541,7 @@ relative to the manifest, so it can travel with the recordings:
 ```
 
 Save it as `sessions.json` next to the videos and point the app or
-`convlab analyze` at that file instead of the folder.
+`conversation-analyst analyze` at that file instead of the folder.
 
 Pipeline order, and why:
 
@@ -527,7 +552,7 @@ probe → decode audio → align cameras → voice activity → recording qualit
                               coherence · learned voice model, HMM decoded)
       → turns → transcription → turns again
       → prosody · semantics · body · hesitations · laughter
-      → 195 measures → tables · codebook · QC · dashboard
+      → 203 measures → tables · codebook · QC · dashboard
 ```
 
 Attribution runs *after* face tracking so mouth movement can inform it. Turn
@@ -568,7 +593,7 @@ a common silent failure on lab Windows machines).
 
 - [`docs/HOW-IT-WORKS.md`](docs/HOW-IT-WORKS.md) — **start here**: full walkthrough of every stage and how each measure is defined
 - [`docs/METHODS.md`](docs/METHODS.md) — algorithms, thresholds, and their justification
-- [`docs/measures.md`](docs/measures.md) — the generated catalogue of all 195 measures
+- [`docs/measures.md`](docs/measures.md) — the generated catalogue of all 203 measures
 
 ---
 

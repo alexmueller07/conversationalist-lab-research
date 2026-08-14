@@ -1,6 +1,6 @@
 # Measure catalogue
 
-195 measures across 18 families. Generated from the registry; do not edit by hand.
+203 measures across 20 families. Generated from the registry; do not edit by hand.
 
 ## Affect (11)
 
@@ -478,7 +478,7 @@ Laughter episodes per minute in the final third minus the first.
 ### `response_latency_trend` -- Change in response latency
 
 - **Level:** person &nbsp; **Unit:** s
-- **Requires:** turn_set
+- **Requires:** turn_set, timing_evidence
 
 This person's median response latency in the final third of the conversation minus the first third. Negative means they got faster.
 
@@ -1243,6 +1243,39 @@ Total words recognized for this person.
 
 Average number of words in this person's floor-holding turns.
 
+## Phases (3)
+
+### `phase_count` -- Tempo phases
+
+- **Level:** dyad &nbsp; **Unit:** count
+- **Requires:** phases
+
+Number of distinct exchange-tempo regimes found by changepoint detection over turn onsets, with each boundary required to win an exact Bayes-factor test (log BF > 3) against the merged model.
+
+*Interpretation.* One phase is a conversation that held a single gear; on constant-tempo simulations the detector reports exactly one phase 10/10 times, so multiple phases reflect real structure.
+
+- Adams & MacKay (2007) arXiv:0710.3742 -- Bayesian online changepoint detection
+
+### `phase_mean_duration` -- Mean phase length
+
+- **Level:** dyad &nbsp; **Unit:** s
+- **Requires:** phases
+
+Mean duration of the tempo phases, in seconds.
+
+- Adams & MacKay (2007) arXiv:0710.3742 -- Bayesian online changepoint detection
+
+### `phase_tempo_range` -- Tempo range across phases
+
+- **Level:** dyad &nbsp; **Unit:** ratio
+- **Requires:** phases
+
+Fastest phase's turn rate divided by the slowest phase's, both in turns per minute.
+
+*Interpretation.* How much the conversation's gears differ. 1.0 by construction for single-phase sessions; large values describe conversations that swing between rapid exchange and long holdings of the floor.
+
+- Adams & MacKay (2007) arXiv:0710.3742 -- Bayesian online changepoint detection
+
 ## Prosody (13)
 
 ### `f0_median` -- Median pitch
@@ -1423,12 +1456,79 @@ Explicit self-corrections per 100 words -- 'I mean', 'or rather', 'no wait'. Cut
 - Levelt (1983) Cognition 14:41 -- monitoring and self-repair in speech
 - Schegloff, Jefferson & Sacks (1977) Language 53:361
 
+## Responsiveness (5)
+
+### `responsiveness_baseline` -- Baseline response rate
+
+- **Level:** person &nbsp; **Unit:** per minute of listening
+- **Requires:** responsiveness
+
+Fitted baseline rate of listener responses (nods while listening plus vocal backchannels) per minute of listening, independent of what the partner just did -- the 'internal clock' component.
+
+*Interpretation.* High baseline with low coupling describes someone who responds a lot but on their own schedule; the reverse describes someone whose responses track the partner.
+
+- Hawkes (1971) Biometrika 58:83 -- mutually exciting point processes
+- Ogata (1981) IEEE Trans. Inf. Theory 27:23 -- thinning simulation, used to validate parameter recovery
+- Yngve (1970) CLS 6:567 -- backchannels at transition-relevance places
+
+### `responsiveness_coupling_gain` -- Coupling evidence
+
+- **Level:** person &nbsp; **Unit:** nats per response
+- **Requires:** responsiveness
+
+Log-likelihood improvement of the excitation model over the best internal-clock-only model, per response. A model-comparison statistic, not a behavior count.
+
+*Interpretation.* Near zero: the partner's pauses explain nothing about when this person responded, whatever the fitted parameters say. This is the honesty check for the family; read it first.
+
+- Hawkes (1971) Biometrika 58:83 -- mutually exciting point processes
+- Ogata (1981) IEEE Trans. Inf. Theory 27:23 -- thinning simulation, used to validate parameter recovery
+- Yngve (1970) CLS 6:567 -- backchannels at transition-relevance places
+
+### `responsiveness_evoked` -- Responses evoked per partner pause
+
+- **Level:** person &nbsp; **Unit:** responses per opportunity
+- **Requires:** responsiveness
+
+Expected number of listener responses evoked by each completed partner utterance unit: the excitation jump times its timescale (alpha x tau).
+
+*Interpretation.* The headline coupling quantity, and the best-identified one: on simulated listeners the product recovers more accurately than either factor. Near zero means the partner's pauses do not move this person's responding at all.
+
+- Hawkes (1971) Biometrika 58:83 -- mutually exciting point processes
+- Ogata (1981) IEEE Trans. Inf. Theory 27:23 -- thinning simulation, used to validate parameter recovery
+- Yngve (1970) CLS 6:567 -- backchannels at transition-relevance places
+
+### `responsiveness_evoked_share` -- Share of responses evoked by the partner
+
+- **Level:** person &nbsp; **Unit:** proportion
+- **Requires:** responsiveness
+
+Fraction of this person's listener responses attributable to excitation by the partner's completed units rather than to the baseline.
+
+*Interpretation.* 1.0 would mean every response was pulled by a partner pause; 0 means responding is entirely self-paced. On simulated listeners with no coupling the fitted share stays below 0.10 (validation gate), so values above ~0.25 reflect real coupling rather than fitting artifact.
+
+- Hawkes (1971) Biometrika 58:83 -- mutually exciting point processes
+- Ogata (1981) IEEE Trans. Inf. Theory 27:23 -- thinning simulation, used to validate parameter recovery
+- Yngve (1970) CLS 6:567 -- backchannels at transition-relevance places
+
+### `responsiveness_timescale` -- Response timescale
+
+- **Level:** person &nbsp; **Unit:** s
+- **Requires:** responsiveness
+
+Fitted decay timescale of the elevated response readiness after a partner pause, in seconds.
+
+*Interpretation.* Roughly: how long a pause keeps the listener 'primed'. Interpret with the evoked measure -- the timescale of a near-zero coupling is noise.
+
+- Hawkes (1971) Biometrika 58:83 -- mutually exciting point processes
+- Ogata (1981) IEEE Trans. Inf. Theory 27:23 -- thinning simulation, used to validate parameter recovery
+- Yngve (1970) CLS 6:567 -- backchannels at transition-relevance places
+
 ## Rhythm (3)
 
 ### `activity_exchange_rate` -- Carry exchange rate
 
 - **Level:** dyad &nbsp; **Unit:** per 5 minutes
-- **Requires:** turn_set
+- **Requires:** turn_set, timing_evidence
 
 How many times per five minutes the role of 'the one doing most of the talking' flipped, measured as sign changes of the talk balance smoothed over fifteen seconds.
 
@@ -1441,7 +1541,7 @@ How many times per five minutes the role of 'the one doing most of the talking' 
 ### `vocal_cycle_period` -- Vocal activity cycle period
 
 - **Level:** dyad &nbsp; **Unit:** s
-- **Requires:** turn_set
+- **Requires:** turn_set, timing_evidence
 
 Dominant period, in seconds, of the oscillation in which partner carries the talk -- found as the spectral peak of the second-by-second talk balance within a one-to-six-minute band. Withheld for conversations under five minutes.
 
@@ -1454,7 +1554,7 @@ Dominant period, in seconds, of the oscillation in which partner carries the tal
 ### `vocal_cycle_strength` -- Vocal activity cyclicity
 
 - **Level:** dyad &nbsp; **Unit:** proportion
-- **Requires:** turn_set
+- **Requires:** turn_set, timing_evidence
 
 Share of the talk balance's spectral power that falls in the one-to-six-minute band. High values mean the pair genuinely alternated long blocks of carrying the conversation; low values mean the balance wandered without periodic structure.
 
@@ -1822,7 +1922,7 @@ Share of the conversation in which both people were speaking at once.
 ### `question_response_latency` -- Response latency after questions
 
 - **Level:** person &nbsp; **Unit:** s
-- **Requires:** turn_set, transcript
+- **Requires:** turn_set, transcript, timing_evidence
 
 Median floor-transfer offset of this person's responses to turns the partner ended as a question. At least five question-responses required; compare against response_latency_median to see the mobilization effect.
 
@@ -1834,7 +1934,7 @@ Median floor-transfer offset of this person's responses to turns the partner end
 ### `response_latency_asymmetry` -- Response latency asymmetry
 
 - **Level:** dyad &nbsp; **Unit:** s
-- **Requires:** turn_set
+- **Requires:** turn_set, timing_evidence
 
 Person A's median response latency minus person B's. Positive means A consistently takes longer to come in than B does.
 
@@ -1843,7 +1943,7 @@ Person A's median response latency minus person B's. Positive means A consistent
 ### `response_latency_iqr` -- Response latency variability
 
 - **Level:** person &nbsp; **Unit:** s
-- **Requires:** turn_set
+- **Requires:** turn_set, timing_evidence
 
 Interquartile range of this person's floor transfer offsets. Measures how consistent their timing is, independently of how fast it is.
 
@@ -1855,7 +1955,7 @@ Interquartile range of this person's floor transfer offsets. Measures how consis
 ### `response_latency_median` -- Median response latency
 
 - **Level:** person &nbsp; **Unit:** s
-- **Requires:** turn_set
+- **Requires:** turn_set, timing_evidence
 
 Median floor transfer offset for turns in which this person is the responder: the signed interval between the partner's turn ending and this person starting. Negative values mean they began before the partner finished.
 

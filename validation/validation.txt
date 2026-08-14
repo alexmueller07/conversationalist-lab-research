@@ -5,7 +5,8 @@ convlab validation
   [PASS] sync offset recovery          max error (ms) =   0.0000 (<= 10.0)  5 offsets from 0 to 11 s
   [PASS] nod recall                    recall =   1.0000 (>= 0.85)  7 planted
   [PASS] nod precision                 precision =   1.0000 (>= 0.85)  
-  [PASS] nod vs single dips            false positives =   0.0000 (<= 0.0)  0.6-cycle dips must not count
+  [PASS] nod length accuracy           share with the right cycle count =   1.0000 (>= 0.85)  lengths 1-4 planted; a triple reported as a single is a category error, not a rounding one
+  [PASS] nod vs single dips            false positives =   0.0000 (<= 0.0)  one unreturned movement must not count
   [PASS] nod vs head shakes            false positives =   0.0000 (<= 0.0)  yaw oscillation must not read as pitch
   [PASS] nod vs postural drift         false positives =   0.0000 (<= 0.0)  slow drift only
   [PASS] synchrony false positive      max |z| on independent signals =   1.0564 (<= 1.96)  raw correlation was 0.32 -- why the baseline matters
@@ -13,22 +14,28 @@ convlab validation
   [PASS] interjection is not a turn    turns found =   3.0000 (<= 3.0)  A(0-30) B(12-14) B(31-39) A(40-45): the interjection must not split A's turn
   [PASS] interjection latency          worst |offset| (s) =   1.0000 (<= 2.0)  no response latency may be inflated by a mid-turn incursion
   [PASS] interjection is recorded      failed interruptions =   1.0000 (>= 1.0)  speech that loses the floor is still an event
-  [PASS] speech detection              F1 per person =   0.9358 (>= 0.88)  2 scripted sessions
-  [PASS] speaker identity confusion    error rate =   0.0010 (<= 0.03)  wrong person named, among committed single-speaker frames
-  [PASS] speaker attribution           strict state accuracy =   0.8966 (>= 0.86)  single-speaker frames; also counts frames labeled as overlap
-  [PASS] overlap precision             precision =   0.9787 (>= 0.75)  simultaneous speech
-  [PASS] overlap recall                recall =   0.5981 (>= 0.5)  under-detection is the safer failure here
-  [PASS] turn detection precision      precision =   0.9045 (>= 0.85)  
-  [PASS] turn detection recall         recall =   0.9500 (>= 0.88)  
-  [PASS] turn onset accuracy           median error (ms) =   8.9879 (<= 60.0)  against exact scripted onsets
-  [PASS] response latency accuracy     median error (ms) =   7.0512 (<= 80.0)  session median floor transfer offset
-  [PASS] backchannel precision         precision =   1.0000 (>= 0.85)  
-  [FAIL] backchannel recall            recall =   0.6389 (>= 0.7)  
-  [PASS] shared-audio identity         error rate =   0.0366 (<= 0.05)  same audio in both files; speakers separated by voice model
+  [PASS] responsiveness recovery       median relative error of alpha*tau =   0.0840 (<= 0.3)  planted (mu, alpha, tau) over three regimes
+  [PASS] responsiveness null           evoked share with no planted coupling =   0.0929 (<= 0.1)  an uncoupled listener must not acquire a coupling
+  [PASS] phase recovery                planted 4x tempo changes found (of 10) =   8.0000 (>= 7.0)  two boundaries within 60 s of the planted gear changes
+  [PASS] phase null                    constant tempo reported as one phase (of 10) =  10.0000 (>= 9.0)  false structure is the failure mode that matters most
+  [PASS] callback precision            precision =   0.9667 (>= 0.8)  29 true positives, 1 false
+  [PASS] callback recall               recall =   1.0000 (>= 0.8)  0 missed across 7 scripts
+  [PASS] speech detection              F1 per person =   0.9398 (>= 0.88)  4 scripted sessions
+  [PASS] speaker identity confusion    error rate =   0.0012 (<= 0.03)  wrong person named, among committed single-speaker frames
+  [PASS] speaker attribution           strict state accuracy =   0.9054 (>= 0.86)  single-speaker frames; also counts frames labeled as overlap
+  [PASS] overlap precision             precision =   0.9691 (>= 0.75)  simultaneous speech
+  [PASS] overlap recall                recall =   0.5775 (>= 0.5)  under-detection is the safer failure here
+  [PASS] turn detection precision      precision =   0.9295 (>= 0.85)  
+  [PASS] turn detection recall         recall =   0.9750 (>= 0.88)  
+  [PASS] turn onset accuracy           median error (ms) =   5.9434 (<= 60.0)  against exact scripted onsets
+  [PASS] response latency accuracy     median error (ms) =  25.9237 (<= 80.0)  session median floor transfer offset
+  [PASS] backchannel precision         precision =   0.9643 (>= 0.85)  
+  [PASS] backchannel recall            recall =   0.7421 (>= 0.7)  
+  [PASS] shared-audio identity         error rate =   0.0252 (<= 0.05)  same audio in both files; speakers separated by voice model
   [PASS] shared-audio track stability  short speaking runs =   0.0981 (<= 0.25)  the flickering failure; ground truth is 0.09
-  [PASS] shared-audio turn boundaries  overlapping onsets =   0.0304 (<= 0.3)  ground truth 0.16; under-detected here because overlap is not identifiable from one feed
-  [PASS] filled pause precision        precision =   1.0000 (>= 0.9)  0 spurious across 2 sessions
-  [PASS] filled pause recall           recall =   0.8125 (>= 0.8)  32 held vowels planted at known positions
+  [PASS] shared-audio turn boundaries  overlapping onsets =   0.0252 (<= 0.3)  ground truth 0.17; under-detected here because overlap is not identifiable from one feed
+  [PASS] filled pause precision        precision =   1.0000 (>= 0.9)  0 spurious across 4 sessions
+  [PASS] filled pause recall           recall =   0.8689 (>= 0.8)  61 held vowels planted at known positions
 --------------------------------------------------------------------------------------
-  26/27 checks passed
+  34/34 checks passed
   note: Synthetic material cannot establish accuracy on human participants. These checks establish that known events produce correct numbers.
