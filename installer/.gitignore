@@ -1,0 +1,4 @@
+# Build outputs; the built installer ships from site/downloads/.
+payload/
+dist/
+app.ico

@@ -194,23 +194,34 @@ transition:opacity .6s ease,transform .6s ease}
 
 <section id="download"><div class="wrap">
   <h2>Download</h2>
-  <p class="lead">Free and open source (MIT). Windows, macOS and Linux.
-  Needs Python 3.10+; everything else installs itself on first launch.
-  No GPU. Runs entirely on your machine — recordings never leave it.</p>
+  <p class="lead">Free and open source (MIT). No GPU needed. Everything runs
+  on your machine — recordings never leave it.</p>
+
+  <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:26px">
+    <a class="btn primary" href="downloads/Conversation-Analyst-Setup-1.0.0.exe"
+       download>⊞&nbsp; Download for Windows — v1.0.0 installer</a>
+    <a class="btn ghost" href="downloads/conversation-analyst-1.0.0-source.zip"
+       download>macOS / Linux — v1.0.0 (zip)</a>
+  </div>
+
   <div class="step"><div class="n">1</div><div>
-    <b>Get the code</b> — <a
-    href="https://github.com/alexmueller07/conversation-analyst">clone
-    or download the repository from GitHub</a>.</div></div>
+    <b>Run the installer.</b> It installs for your user account — no
+    administrator password, and it appears in Add/Remove Programs like
+    anything else. Windows may show a "protected your PC" notice for new
+    software: click <i>More info → Run anyway</i>.</div></div>
   <div class="step"><div class="n">2</div><div>
-    <b>Double-click <code>launch-conversation-analyst.bat</code></b>
-    (Windows) or run <code>./launch-conversation-analyst.sh</code>
-    (macOS/Linux). First run sets everything up — 15–30 minutes, once.</div></div>
+    <b>Start it from the Start Menu or Desktop.</b> The first launch sets up
+    the analysis engine — about 1.6&nbsp;GB of scientific libraries, once,
+    with progress shown. Every later launch opens in seconds.</div></div>
   <div class="step"><div class="n">3</div><div>
     <b>Point it at a folder of recordings</b> — two videos per conversation,
     one per person — and click Analyze.</div></div>
-  <pre><code>git clone https://github.com/alexmueller07/conversation-analyst.git
-cd conversation-analyst
-./launch-conversation-analyst.sh</code></pre>
+
+  <p class="lead" style="margin-top:22px;font-size:14px">
+  <b>macOS / Linux:</b> unzip, then run
+  <code>./launch-conversation-analyst.sh</code> (needs Python&nbsp;3.10+ with
+  Tk — <code>brew install python python-tk</code> on a Mac). Same one-time
+  setup on first run.</p>
 </div></section>
 
 <footer><div class="wrap">
@@ -220,7 +231,8 @@ cd conversation-analyst
     University of Wisconsin–Madison. MIT licensed.
   </div>
   <div style="text-align:right">
-    All screenshots on this page are from synthetic demo data.<br>
+    <a href="https://github.com/alexmueller07/conversation-analyst">Source on GitHub</a>
+    · All screenshots are synthetic demo data.<br>
     No participant data appears here or in the repository.
   </div>
 </div></footer>
