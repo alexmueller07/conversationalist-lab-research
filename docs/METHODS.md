@@ -455,6 +455,76 @@ phrases across segments, far more damaging to per-turn measures than the
 small fluency gain is worth. Known hallucination phrases ("thanks for
 watching", "subtitles by…") are dropped.
 
+### 6a. Names the recognizer has never heard
+
+Whisper handles ordinary conversation well and then writes **"Sunny
+Portland" for SUNY Cortland**. The acoustics genuinely are close and the
+wrong reading is the one its language model has seen thousands of times more
+often. This is a vocabulary gap, not a capacity one: a larger model does not
+reliably fix it, because the correct string may not be in the training data
+at any size. Two interventions, in this order.
+
+**Bias the decoder.** The lab's list of expected names — campus buildings,
+Wisconsin places, the universities participants transfer from — is passed to
+faster-whisper as `hotwords`, which conditions the decoder so the right
+spelling is *in* the search rather than absent from it. This is the better
+fix because the acoustic evidence is still available to arbitrate.
+
+**Repair what still came out wrong.** A second pass compares runs of one to
+four recognized words against the same list using a phonetic key (a
+cut-down Metaphone: sound-alike graphemes collapse, vowels drop, doubled
+consonants collapse, word-final silent letters go) and rewrites a run when
+the match is close. `SUNYCORTLAND → SNKRTLND` against `SUNNYPORTLAND →
+SNPRTLND` scores 0.87 on that key; the threshold is 0.86.
+
+The pass is deliberately timid, because a false correction is worse than a
+miss. It needs a strong phonetic match, it will not touch a run that is
+already an exact entry, and a single word must also match on spelling, so an
+ordinary "sunny" in "a sunny day" is never promoted to a university. Tested
+against a set of ordinary sentences containing *sunny*, *Portland*, *Madison*
+and *common*, none is rewritten.
+
+**Timing is preserved exactly.** A rewritten run keeps the start of its first
+word and the end of its last, redistributing that span across the
+replacement's words in proportion to their length. Words are measurements as
+much as they are text; a correction pass that moved them would corrupt every
+latency in the session.
+
+**Nothing is changed silently.** Every rewrite is stored on the transcript,
+cached with it, listed in the session report with what was originally heard
+and the match score, and highlighted in the transcript panel. If a correction
+is wrong, the vocabulary entry is wrong — the fix is a line in
+`configs/vocabulary.txt` and a re-run, not a code change.
+
+**Measured.** `convlab benchmark` synthesizes eight sentences whose proper
+nouns this recognizer reliably gets wrong and scores whether the *name* came
+out right — not word error rate, because a sentence can score a good WER
+while mangling the only word anyone cares about:
+
+| | Names correct |
+|---|---|
+| Recognizer alone | 5 / 8 |
+| \+ vocabulary bias | **7 / 8** |
+| \+ phonetic repair | 7 / 8 |
+
+Unbiased, it produced "SUNY **Courtland**", "**Market Now**" for Marquette and
+"**Oak layer**" for Eau Claire. Biasing fixes the first two. The repair pass
+adds nothing on this set, which is the expected ordering: biasing works while
+the acoustic evidence is still available, and repair only catches what
+survives it.
+
+"Oak layer" stays wrong, and that is the detector being conservative on
+purpose — its phonetic distance from "Eau Claire" is 0.75, below the 0.86
+threshold, and lowering the bar far enough to catch it would start rewriting
+ordinary speech into place names. A miss is recoverable by watching the
+video; a false correction is a silent error in the data.
+
+**Temperature fallback** is enabled, so a block whose output fails Whisper's
+own compression-ratio and log-probability checks is decoded again with more
+randomness. That is the standard remedy for the repetition loops that
+otherwise emit one phrase a hundred times, and it costs time only on the
+blocks that need it.
+
 ---
 
 ## 6b. Hesitations
@@ -654,17 +724,95 @@ and 33 body landmarks. VIDEO running mode carries state between frames, and
 camcorder files do repeat presentation timestamps, so timestamps come from a
 monotonic counter derived from but not equal to frame time.
 
-**Nods.** A nod is an *oscillation* in head pitch, not a single dip. Pitch is
-band-passed to 0.8–4 Hz, enveloped, and a candidate is kept only if it
-completes ≥ 1.2 cycles. Requiring periodicity is what separates agreement
-from a glance downward; the orthogonal axis is compared so a diagonal head
-roll is not counted as both a nod and a shake.
+### 9.1 Nods, counted by cycle
 
-Measured: precision 1.00, recall 1.00, and **zero** false positives from
-single dips (0.6 cycles), from head shakes, or from slow postural drift. The
-1.2-cycle threshold sits between the ~0.6 a dip produces and the 2–3 of a
-real nod; measured counts fall below nominal ones because a nod tapers at
-both ends.
+A rate is not what a human coder produces. An RA reports that someone nodded
+forty-one times, that most were a single down-and-up, that eleven were
+doubles, and that nearly all of them came while listening. Those are four
+facts and division destroys three of them, so the detector produces all four.
+
+**Definitions, taken from Mori, Den & Jokinen (2025).** They annotated 9,223
+nods in the Chiba Three Party Conversation Corpus, and their definitions are
+adopted verbatim:
+
+- a nod is "a gesture consisting of continuous one or more vertical head
+  movements regardless of whether the nod motion begins with an upward or
+  downward movement";
+- "a cycle [is] a consecutive upward and downward movement as the basic unit
+  of analysis", and when a nod comprises an odd number of half-cycles the
+  trailing half-cycle counts as a cycle;
+- magnitude is "the scalar value of the difference between the lowest and
+  highest points of the head within a cycle".
+
+A nod's **length** is its cycle count, which makes *single*, *double* and
+*triple* exact rather than impressionistic.
+
+**Detection.** Head pitch is smoothed with a moving average (80 ms) and cut
+at inflection points. Each half-cycle is admitted if its implied cycle
+frequency falls in 0.8–5 Hz and its peak-to-trough excursion clears the
+amplitude bar; contiguous admitted half-cycles chain into one nod, and a
+gap longer than 200 ms starts a new one. The band comes from Hadar, Steiner,
+Grant & Rose (1983), who measured conversational head oscillation at
+0.2–7 Hz and split it into slow (0.2–1.8), ordinary (1.9–3.6) and rapid
+(3.7–7.0 Hz); the band spans the ordinary and rapid classes and the fast end
+of the slow one, because below 0.8 Hz the head is drifting rather than
+nodding. The orthogonal axis is compared so that a diagonal sweep is not
+counted as both a nod and a shake.
+
+**Two thresholds, not one.** Mori et al. report magnitude declining
+systematically from a nod's first cycle to its last — real nods taper. A
+single amplitude threshold therefore amputates the quiet end of a long nod
+and reports a triple as a single. Starting a nod requires 2.0°; continuing
+one already under way requires half that. A run that never reaches the onset
+bar at all is not a nod.
+
+**Two deliberate departures.** A lone half-cycle is not counted, although
+their scheme admits one: their annotations were human-confirmed and these
+are not, and a single downward movement with no return is indistinguishable
+from postural drift, a glance at the table, or a slump. And a long flat in
+the pitch trace ends the movement rather than being carried across, because
+the head can stop as well as reverse — and a frozen video is exactly a head
+that appears to stop.
+
+**Calibration against the published distribution.** The pair (2.0°, 0.5) was
+not chosen by eye. Over the sixteen close-up recordings in the lab's test
+corpus — 2,178 detected nods — the full pipeline produces **42.1 % single
+nods and 97.6 % at five cycles or fewer**, against the **42 %** and "more
+than 95 %" Mori et al. report for their 9,223 human-checked nods; the longest
+nod found is 13 cycles against their 19. Requiring full amplitude on every
+cycle instead gives 57 % single and a longest of 11; halving the continuation
+floor again gives 39 % and starts admitting movement at the tracker's noise
+level.
+
+> Agreement on the *shape* of the distribution is evidence that the detector
+> is carving nods at roughly the right joints. It is **not** evidence that it
+> agrees with a human coder nod-for-nod on this corpus, which nobody has
+> measured. Getting that number needs a few sessions coded by hand, and it
+> remains the single largest open gap in this pipeline.
+
+**Speaker versus listener.** Every nod is labelled by what its producer was
+doing at its midpoint — holding the floor, listening while the partner held
+it, or neither. The midpoint rather than the onset, because a listener's nod
+often begins as the speaker stops and anchoring on onset pushes a visible
+share across the boundary. The split is not a refinement: Poggi, D'Errico &
+Vincze (2010) organise their entire typology of nods by whether the nodder is
+the Speaker, the Interlocutor or a Third Listener, and McClave (2000)
+documents speakers using head movement for inclusivity, intensification,
+marking direct quotation and enumerating list items — work that has nothing
+to do with the listener's acknowledgement described by Dittmann & Llewellyn
+(1968) and Bavelas, Coates & Johnson (2000). Summing them gives a number
+about neither.
+
+**Synthetic validation.** Against traces with known cycle counts: nods of 1,
+2, 3 and 5 cycles are recovered at exactly those lengths; three half-cycles
+report as length 2 per the odd-half-cycle rule; a nod tapering to 60 % per
+cycle keeps its full length; and there are **zero** false positives from
+single dips, from head shakes, or from slow postural drift. Nothing is
+detected inside a tracking gap.
+
+**Shakes** use the same machinery on the yaw axis with a wider amplitude bar
+(3.0°), because the yaw axis picks up every reorientation of the head toward
+and away from the partner and those are not disagreement.
 
 **Gaze.** Camera geometry is not recorded and varies per session, so a fixed
 "straight ahead is the partner" assumption would be wrong by an unknown
@@ -790,3 +938,23 @@ makes a failed camera indistinguishable from an absence of behavior.
 - Bavelas, Coates & Johnson (2000) *JPSP* 79:941 — listener responses
 - Kendon (1967) *Acta Psychologica* 26:22 — gaze direction in conversation
 - Provine (1993) *Ethology* 95:291 — laughter as a social vocalisation
+
+### Head movement
+
+- Mori, Den & Jokinen (2025) *PLoS ONE* 20(5):e0323448 — structure of nods in
+  conversation; the cycle definition, the magnitude definition, and the
+  length distribution this detector is calibrated against
+  (doi:10.1371/journal.pone.0323448)
+- Poggi, D'Errico & Vincze (2010) *LREC 2010*:2570 — types of nods, a
+  typology organised by Speaker / Interlocutor / Third Listener role, with
+  number of repetitions among the production features
+- McClave (2000) *J. Pragmatics* 32(7):855 — linguistic functions of
+  speakers' head movements: inclusivity, intensification, direct quotation,
+  list enumeration (doi:10.1016/S0378-2166(99)00079-X)
+- Hadar, Steiner, Grant & Rose (1983) *Human Movement Science* 2(1–2):35 —
+  conversational head movement at 0.2–7 Hz, in slow / ordinary / rapid classes
+- Hadar, Steiner & Rose (1985) *J. Nonverbal Behavior* 9(4):214 — head
+  movement during listening turns; cyclic movements signal yes/no, linear
+  ones anticipate a claim for the floor
+- Dittmann & Llewellyn (1968) *JPSP* 9:79 — head nods as listener responses
+  to vocalization (doi:10.1037/h0025722)

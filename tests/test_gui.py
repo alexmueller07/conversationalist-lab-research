@@ -12,7 +12,7 @@ import queue
 
 import pytest
 
-from convlab.gui import Message
+from conversation_analyst.gui import Message
 
 tk = pytest.importorskip("tkinter")
 
@@ -36,7 +36,7 @@ def app(root):
     assertions meaningful: without it every widget reports zero width and a
     clipping check would pass trivially.
     """
-    from convlab.gui import App
+    from conversation_analyst.gui import App
 
     built = App(root)
     root.geometry("1180x900")
@@ -51,7 +51,7 @@ def app(root):
 
 class TestApp:
     def test_builds_and_realises_every_widget(self, root):
-        from convlab.gui import App
+        from conversation_analyst.gui import App
 
         app = App(root)
         root.update_idletasks()
@@ -60,15 +60,15 @@ class TestApp:
         assert str(app.dashboard_button["state"]) == "disabled"
 
     def test_every_skippable_stage_has_a_toggle(self, root):
-        from convlab.gui import SKIPPABLE, App
+        from conversation_analyst.gui import SKIPPABLE, App
 
         app = App(root)
         assert set(app.stage_vars) == {key for key, _, _ in SKIPPABLE}
         assert all(var.get() for var in app.stage_vars.values())
 
     def test_skip_list_matches_the_cli_choices(self, root):
-        from convlab.cli import build_parser
-        from convlab.gui import SKIPPABLE
+        from conversation_analyst.cli import build_parser
+        from conversation_analyst.gui import SKIPPABLE
 
         parser = build_parser()
         analyze = parser._subparsers._group_actions[0].choices["analyze"]
@@ -78,7 +78,7 @@ class TestApp:
         )
 
     def test_log_appends_and_stays_readonly(self, root):
-        from convlab.gui import App
+        from conversation_analyst.gui import App
 
         app = App(root)
         app._log("hello", "ok")
@@ -86,7 +86,7 @@ class TestApp:
         assert str(app.log["state"]) == "disabled", "log must not be user-editable"
 
     def test_session_message_enables_the_report_button(self, root):
-        from convlab.gui import App, Message
+        from conversation_analyst.gui import App, Message
 
         app = App(root)
         app._handle(Message("session", payload={
@@ -96,22 +96,28 @@ class TestApp:
         assert app.dashboards["d1"].endswith("dashboard.html")
 
     def test_running_session_message_does_not_enable_the_button(self, root):
-        from convlab.gui import App, Message
+        from conversation_analyst.gui import App, Message
 
         app = App(root)
         app._handle(Message("session", payload={"session_id": "d1", "verdict": "running"}))
         assert str(app.dashboard_button["state"]) == "disabled"
 
     def test_progress_message_moves_the_bar(self, root):
-        from convlab.gui import App, Message
+        from conversation_analyst.gui import App, Message
 
         app = App(root)
         app._handle(Message("progress", text="d1: face tracking", value=42.0))
-        assert app.progress["value"] == pytest.approx(42.0)
+        # The bar eases toward the target on an animation ticker rather
+        # than jumping, so the message sets the target and the ticker
+        # closes the gap frame by frame.
+        assert app._progress_target == pytest.approx(42.0)
+        for _ in range(60):
+            app._animate_tick()
+        assert app.progress["value"] == pytest.approx(42.0, abs=1.0)
         assert "face tracking" in app.status_var.get()
 
     def test_done_message_restores_the_buttons(self, root):
-        from convlab.gui import App, Message
+        from conversation_analyst.gui import App, Message
 
         app = App(root)
         app.run_button.configure(state="disabled")
@@ -128,7 +134,7 @@ class TestStartupFailure:
         An uncaught startup exception there produces no window and no output
         at all, so main() has to turn it into something a user can report.
         """
-        import convlab.gui as gui
+        import conversation_analyst.gui as gui
 
         monkeypatch.setattr(gui.tk, "Tk", lambda: (_ for _ in ()).throw(
             RuntimeError("no display for you")))
@@ -153,7 +159,7 @@ class TestWorker:
         """
         import queue as _queue
 
-        from convlab.gui import Worker
+        from conversation_analyst.gui import Worker
 
         for name in ("d1_close_a.mp4", "d1_close_b.mp4", "d2_close_a.mp4"):
             (tmp_path / name).write_bytes(b"\x00" * 64)
@@ -173,7 +179,7 @@ class TestWorker:
         assert not any(m.kind == "error" for m in messages), text
 
     def test_stop_flag_is_observable(self):
-        from convlab.gui import Worker
+        from conversation_analyst.gui import Worker
 
         worker = Worker("in", "out", (), "models", queue.Queue(), lenient=False)
         assert not worker.stopping
@@ -181,7 +187,7 @@ class TestWorker:
         assert worker.stopping
 
     def test_send_puts_a_typed_message(self):
-        from convlab.gui import Worker
+        from conversation_analyst.gui import Worker
 
         outbox: queue.Queue = queue.Queue()
         worker = Worker("in", "out", (), "models", outbox, lenient=False)
@@ -192,9 +198,9 @@ class TestWorker:
 
 class TestPipelineHooks:
     def test_cancel_raises_at_a_stage_boundary(self):
-        from convlab.pipeline import Canceled, SessionResult, _StageTimer
-        from convlab.config import Config
-        from convlab.context import AnalysisContext
+        from conversation_analyst.pipeline import Canceled, SessionResult, _StageTimer
+        from conversation_analyst.config import Config
+        from conversation_analyst.context import AnalysisContext
 
         ctx = AnalysisContext("t", Config(), 10.0, 100.0)
         result = SessionResult(session=None, context=ctx)  # type: ignore[arg-type]
@@ -203,9 +209,9 @@ class TestPipelineHooks:
                 pass  # pragma: no cover
 
     def test_progress_is_called_with_stage_position(self):
-        from convlab.config import Config
-        from convlab.context import AnalysisContext
-        from convlab.pipeline import PIPELINE_STAGES, SessionResult, _StageTimer
+        from conversation_analyst.config import Config
+        from conversation_analyst.context import AnalysisContext
+        from conversation_analyst.pipeline import PIPELINE_STAGES, SessionResult, _StageTimer
 
         seen = []
         ctx = AnalysisContext("t", Config(), 10.0, 100.0)
@@ -215,9 +221,9 @@ class TestPipelineHooks:
         assert seen == [("asr", PIPELINE_STAGES.index("asr"), len(PIPELINE_STAGES))]
 
     def test_a_failing_stage_is_still_suppressed(self):
-        from convlab.config import Config
-        from convlab.context import AnalysisContext
-        from convlab.pipeline import SessionResult, _StageTimer
+        from conversation_analyst.config import Config
+        from conversation_analyst.context import AnalysisContext
+        from conversation_analyst.pipeline import SessionResult, _StageTimer
 
         ctx = AnalysisContext("t", Config(), 10.0, 100.0)
         result = SessionResult(session=None, context=ctx)  # type: ignore[arg-type]
@@ -263,7 +269,7 @@ class TestResultsTable:
 
     def test_open_report_prefers_the_whole_run_page(self, app, monkeypatch, tmp_path):
         opened: list[str] = []
-        monkeypatch.setattr("convlab.gui.webbrowser.open", opened.append)
+        monkeypatch.setattr("conversation_analyst.gui.webbrowser.open", opened.append)
         app.dashboards["dyad01"] = str(tmp_path / "dyad01" / "dashboard.html")
         app._handle(Message("report", text=str(tmp_path / "index.html")))
         app._open_dashboard()
@@ -274,7 +280,7 @@ class TestResultsTable:
 
     def test_open_report_falls_back_to_a_dashboard(self, app, monkeypatch, tmp_path):
         opened: list[str] = []
-        monkeypatch.setattr("convlab.gui.webbrowser.open", opened.append)
+        monkeypatch.setattr("conversation_analyst.gui.webbrowser.open", opened.append)
         app.dashboards["dyad01"] = str(tmp_path / "dyad01" / "dashboard.html")
         app._open_dashboard()
         assert opened and opened[0].endswith("dashboard.html")

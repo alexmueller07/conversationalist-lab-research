@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from convlab.system import (
+from conversation_analyst.system import (
     ASR_MODEL_COMMIT_MB,
     SAFETY_MARGIN_MB,
     available_memory_mb,
@@ -59,7 +59,7 @@ class TestFitAsrModel:
         assert model == "large-v3" and note == ""
 
     def test_unknown_memory_leaves_the_request_alone(self, monkeypatch):
-        monkeypatch.setattr("convlab.system.available_memory_mb", lambda: None)
+        monkeypatch.setattr("conversation_analyst.system.available_memory_mb", lambda: None)
         assert fit_asr_model("small.en")[0] == "small.en"
 
     def test_multilingual_request_stays_multilingual(self):

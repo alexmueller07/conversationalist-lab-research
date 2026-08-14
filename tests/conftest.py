@@ -11,10 +11,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.config import Config
-from convlab.context import AnalysisContext
-from convlab.timeline import Segments
-from convlab.turns import IPU, Turn, TurnSet
+from conversation_analyst.config import Config
+from conversation_analyst.context import AnalysisContext
+from conversation_analyst.timeline import Segments
+from conversation_analyst.turns import IPU, Turn, TurnSet
 
 
 def make_turn(index, person, start, end, text="", fto=None, prev=None, ipus=None):

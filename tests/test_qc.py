@@ -13,12 +13,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from convlab.config import Config
-from convlab.context import AnalysisContext
-from convlab.report.qc import assess_quality
-from convlab.speech.attribution import AttributionResult, Calibration
-from convlab.timeline import Segments
-from convlab.turns import Turn, TurnSet
+from conversation_analyst.config import Config
+from conversation_analyst.context import AnalysisContext
+from conversation_analyst.report.qc import assess_quality
+from conversation_analyst.speech.attribution import AttributionResult, Calibration
+from conversation_analyst.timeline import Segments
+from conversation_analyst.turns import Turn, TurnSet
 
 
 def _context(state: np.ndarray, turns: list[Turn], duration: float) -> AnalysisContext:

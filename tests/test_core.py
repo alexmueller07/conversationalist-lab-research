@@ -7,10 +7,10 @@ import json
 import numpy as np
 import pytest
 
-from convlab.config import Config
-from convlab.media.audio import frame_count, frame_energy, log_energy_envelope
-from convlab.session import Session, SessionError, discover_sessions, load_manifest
-from convlab.workspace import Workspace, make_key
+from conversation_analyst.config import Config
+from conversation_analyst.media.audio import frame_count, frame_energy, log_energy_envelope
+from conversation_analyst.session import Session, SessionError, discover_sessions, load_manifest
+from conversation_analyst.workspace import Workspace, make_key
 
 
 class TestConfig:

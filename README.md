@@ -1,16 +1,37 @@
-# convlab
+# Conversation Analyst
 
-**Measure what makes someone a good conversationalist, from video.**
+**Measure a conversation the way the literature says to.**
+
+Website: **[conversation-analyst.vercel.app](https://conversation-analyst.vercel.app)**
+· Engine name: `conversation_analyst` (historically `convlab`)
 
 Point it at a folder of recorded conversations — **two videos per pair, one
 per person**. It works out who
 spoke when, how quickly each replied, what they looked at, when they nodded,
 smiled and laughed, how pleasant they looked and how much that followed
 their partner, how their speech and movement tracked one another, and how all
-of that changed as the conversation went on — **161 measures**, each
+of that changed as the conversation went on — **203 measures**, each
 defined and unit-labeled in a codebook, plus a visual report per pair.
 
-![The convlab desktop application](docs/images/app.png)
+![The Conversation Analyst desktop application](site/assets/app.png)
+
+## How it is validated
+
+Five independent lines, every number measured rather than aspirational:
+
+| Line | Result |
+|---|---|
+| Synthetic ground truth | nod recall/precision/cycle-count 1.00; zero false positives from dips, shakes, drift |
+| The lab's own Praat runs | median pitch **r = 0.997**, 2.2 Hz median error, 8 sessions |
+| The lab's OpenFace runs (independent tracking stack) | per-frame head pitch **\|r\| = 0.81**, yaw **0.93**, smile vs AU12 **0.81**, 16 participants |
+| Published nod distribution (Mori, Den & Jokinen 2025) | **42.1 %** single nods vs their 42 %; 97.6 % within five cycles vs their >95 % |
+| Study criterion (preliminary, n=16) | smiling ↔ partner-reported enjoyment **ρ = 0.67**; 8/12 a-priori directional tests consistent |
+
+Plus a built-in **blind human-coding mode**: any RA can code a session
+against the video and get event F1, onset error and Cohen's κ versus the
+detectors — the standard the field ultimately asks for, as a 20-minute task.
+What is *not* claimed: nod-for-nod human agreement is unmeasured until
+someone codes sessions; that is precisely why the coding mode exists.
 
 ---
 
@@ -32,11 +53,11 @@ download. No GPU required.
 2. **Download this project.** Either:
    - click the green **Code** button above → **Download ZIP** → right-click the
      downloaded file → **Extract All**, or
-   - if you have Git: `git clone https://github.com/alexmueller07/conversationalist-lab-research.git`
+   - if you have Git: `git clone https://github.com/alexmueller07/conversation-analyst.git`
 
 3. **Open the folder** you just extracted or cloned.
 
-4. **Double-click `launch-convlab.bat`.**
+4. **Double-click `launch-conversation-analyst.bat`.**
 
    The first run installs everything — you'll see a black window with progress
    text for 15–30 minutes. Leave it alone until the app appears. Every run
@@ -56,14 +77,14 @@ download. No GPU required.
 
 2. **Download the project:**
    ```bash
-   git clone https://github.com/alexmueller07/conversationalist-lab-research.git
-   cd conversationalist-lab-research
+   git clone https://github.com/alexmueller07/conversation-analyst.git
+   cd conversation-analyst
    ```
 
 3. **Start it:**
    ```bash
-   chmod +x launch-convlab.sh
-   ./launch-convlab.sh
+   chmod +x launch-conversation-analyst.sh
+   ./launch-conversation-analyst.sh
    ```
    First run takes 5–15 minutes.
 
@@ -71,10 +92,10 @@ download. No GPU required.
 
 ```bash
 sudo apt install python3 python3-venv python3-tk git    # Debian/Ubuntu
-git clone https://github.com/alexmueller07/conversationalist-lab-research.git
-cd conversationalist-lab-research
-chmod +x launch-convlab.sh
-./launch-convlab.sh
+git clone https://github.com/alexmueller07/conversation-analyst.git
+cd conversation-analyst
+chmod +x launch-conversation-analyst.sh
+./launch-conversation-analyst.sh
 ```
 
 ---
@@ -145,8 +166,12 @@ parse — not forty minutes later.
 
 **3. Choose where results go** (or accept the default).
 
-**4. Untick anything you don't need.** *Track body* is the slowest stage;
-turning it off roughly halves the runtime.
+**4. Untick anything you don't need, and set the Speed.** Face and body
+tracking together are about 93 % of the runtime and cost roughly the same as
+each other, so turning *Track body* off roughly halves a run. **Fastest**
+runs all four tracking jobs at once and needs about 1.5 GB free — close other
+applications first. **Automatic** picks from the memory available when the
+run starts, which on a busy laptop is often one or two.
 
 **5. Click Analyze.** Progress and a running log appear as it works. **Stop**
 is safe at any point — it finishes the current step and leaves valid output.
@@ -159,20 +184,53 @@ is safe at any point — it finishes the current step and leaves valid output.
 
 ## How long it takes
 
-Roughly **two to four times the length of the recording** on a normal laptop
-with no graphics card, depending on memory. Body tracking samples at
-12.5 Hz by default (gesture and posture live below 3 Hz), which halves the
-pose landmarker's work with oversampling to spare. On a machine with free
-memory for two MediaPipe processes, the two participants' videos are
-tracked concurrently, roughly halving the vision stages — the pipeline's
-dominant cost. Both knobs are in the config (`vision.body_fps`,
-`parallel_tracking`); `convlab benchmark` measures the runtime on your
-machine.
+**Vision is the whole story.** Across the lab's sixteen-file test corpus,
+face and body landmarking were **93 % of total stage time** — 126 minutes out
+of 135. Everything else together, including transcription, is noise by
+comparison. So the only question that matters for runtime is how many
+tracking jobs run at once.
+
+A session has **four independent tracking jobs**: a face track and a body
+track for each participant. They do not depend on each other or on anything
+else in the pipeline, so all four start before the audio stages do, and each
+is joined only where its result is first needed. Body tracking therefore
+overlaps transcription, prosody and semantics rather than queueing behind
+them, and on a machine with room it stops contributing to wall-clock at all.
+
+Measured on the lab laptop (12 threads, 8 GB, no graphics card). A single
+tracking child runs the face landmarker at about 60 frames a second and the
+pose landmarker at about 35, using 1.2 of the twelve logical cores — so
+running them one after another leaves nine tenths of the machine idle for
+the twenty minutes that dominates a session. Four children at once return
+**1.9× the frames per second in aggregate**, which is most of what a
+15 W laptop chip has to give; the rest goes to its power limit rather than
+to the work.
+
+**Check the log line that says how many workers it chose.** The automatic
+policy reads free memory, and on a laptop with a browser open it will often
+pick one or two. Closing other applications before a run is the single
+fastest thing available; failing that, set `tracking_workers: 4` in the
+config to force it. A tracking child costs about 520 MB for the first and
+only ~200 MB for each one after — MediaPipe's images are shared between
+processes — so four fit in about 1.2 GB, not the 5 GB an earlier and wrong
+estimate assumed.
+
+Two smaller savings, both free: frames are decoded ahead of the tracker on a
+background thread, and a frame byte-identical to the one before it reuses the
+previous result instead of being landmarked again. The second matters on
+conferencing recordings that freeze, where it can remove most of the work;
+it changes nothing about the output, because an identical image produces an
+identical answer.
+
+Body tracking samples at 12.5 Hz by default (gesture and posture live below
+3 Hz), which halves the pose landmarker's frame count with oversampling to
+spare. Turning body tracking off entirely roughly halves what remains.
 
 Re-running is much faster than the first pass, because every slow stage is
 cached — face and body tracks, the transcript, voice activity, prosody and
 laughter. Adding a measure and re-running a corpus costs seconds per
-session, not minutes.
+session, not minutes. `conversation-analyst benchmark` measures cold and warm runtime on
+your own machine.
 
 ---
 
@@ -183,12 +241,15 @@ results/
 ├── measures_all.csv        every pair, every measure — this is the one to analyze
 ├── index.html              open this first: every session, what passed,
 │                          what was withheld, and every distribution
-├── codebook.csv            what all 161 measures mean
+├── codebook.csv            what all 203 measures mean
 ├── session_summary.csv     pass / review / fail per pair
 └── dyad012/
     ├── dashboard.html      the visual report
+    ├── transcript.txt      the whole conversation, timestamped, for reading
     ├── tables/turns.csv    every turn, with its text and timing
     ├── tables/events.csv   nods, smiles, laughs, interruptions, callbacks
+    ├── tables/nods.csv     one row per nod: cycles, magnitude, speaking or
+    │                       listening — for modelling nods individually
     ├── timeline.parquet    frame-level signals, for re-analysis
     ├── qc.json             every quality check and its result
     └── manifest.json       exact settings used, for reproducibility
@@ -221,23 +282,68 @@ real effect gets thrown away.
 
 | Family | n | Examples |
 |---|---|---|
-| Turn taking | 17 | response latency median/IQR, talk-time balance, silence rate, longest lapse |
-| Interruption | 7 | interruption vs transition overlap, success rate, floor retention |
-| Backchannel | 6 | rate per minute of *partner* speech, coverage, placement within turn |
-| Lexical | 16 | question rate and openness, hedging, fillers, pronouns, politeness, style matching |
-| Prosody | 10 | pitch variability in semitones, jitter, shimmer, entrainment |
-| Semantic | 12 | response coherence, topic count and duration, **long-range callbacks** |
-| Gaze | 6 | gaze at partner while speaking vs listening, mutual gaze episodes |
-| Head | 3 | nod rate while listening, head shakes |
-| Facial expression | 5 | smiling, **Duchenne ratio**, expressivity, brow raises, shared smiling |
-| Body | 3 | gesture rate, postural shifts, self-touch |
-| Laughter | 4 | laughter rate, **shared laughter**, reciprocity |
-| Synchrony | 7 | smile / head / expressivity / loudness coordination, **above chance** |
+| Turn taking | 26 | response latency median/IQR, talk-time balance, silence rate, longest lapse |
+| Lexical | 25 | question rate and openness, hedging, fillers, pronouns, politeness, style matching |
+| **Head** | **20** | **nods by length — single, double, triple, longer — and split by whether the person was speaking or listening** |
+| **Counts** | **20** | **the raw number behind every rate in the catalogue** |
+| Semantic | 16 | response coherence, topic count and duration, **long-range callbacks** |
+| Prosody | 13 | pitch variability in semitones, jitter, shimmer, entrainment |
+| Affect | 11 | facial valence while speaking vs listening, and how it moved |
+| Backchannel | 10 | rate per minute of *partner* speech, coverage, placement within turn |
 | Dynamics | 8 | change from the first third to the last: latency, silence, gaze, smiling |
+| Facial expression | 8 | smiling, **Duchenne ratio**, expressivity, brow raises, shared smiling |
+| Gaze | 7 | gaze at partner while speaking vs listening, mutual gaze episodes |
+| Interruption | 7 | interruption vs transition overlap, success rate, floor retention |
+| Synchrony | 7 | smile / head / expressivity / loudness coordination, **above chance** |
+| Laughter | 4 | laughter rate, **shared laughter**, reciprocity |
+| Repair | 4 | self- and other-initiated repair, change-of-state tokens |
+| Body | 3 | gesture rate, postural shifts, self-touch |
+| Rhythm | 3 | tempo of exchange and how steady it is |
+| Structure | 3 | how the conversation is shaped over its length |
 
 Full definitions: [`docs/measures.md`](docs/measures.md).
 
-Two deserve their own note.
+Three deserve their own note.
+
+**Nods, counted by cycle.** A nod is not one thing. One down-and-up is a
+different signal from a run of four, and a nod produced while listening is
+doing different work from one produced mid-sentence by the person talking.
+The detector follows Mori, Den & Jokinen (2025), who annotated 9,223 nods and
+define a *cycle* as one consecutive up-and-down movement; a nod's length is
+its cycle count, so **single**, **double** and **triple** are exact. Every nod
+is also labelled by whether its producer was speaking, listening, or neither
+— a distinction Poggi, D'Errico & Vincze (2010) build their whole typology of
+nods on, and which McClave (2000) shows matters because speakers use head
+movement for intensification and quotation rather than for agreement.
+
+Calibrated against the published distribution: on the lab's own sixteen
+recordings the detector finds **42.1 % single nods and 97.6 % at five cycles
+or fewer**, over 2,178 nods, against Mori et al.'s 42 % and "more than 95 %". That agreement is
+evidence the detector is cutting nods at roughly the right joints; it is not
+evidence it agrees with a human coder nod-for-nod, which nobody has measured
+yet and which remains this pipeline's largest open gap.
+
+**A count beside every rate.** A rate is a count divided by a denominator, and
+dividing throws the count away. "1.4 laughs per minute" is eight laughs in a
+six-minute conversation and twenty-two in a sixteen-minute one, and a reader
+who sees only 1.4 cannot tell which — nor whether the number rests on eight
+events or eight hundred. Every rate in the catalogue now has its count
+registered alongside it, and a test fails if a new rate is added without one.
+
+**Names the recognizer has never heard.** Whisper handles conversation well
+and then writes "Sunny Portland" for SUNY Cortland — the acoustics are close
+and the wrong reading is the one it has seen a thousand times more often.
+That is a vocabulary gap, not a capacity one, so a bigger model does not
+reliably fix it. `configs/vocabulary.txt` holds the names the lab expects to
+hear; they are passed to the recognizer as hotwords while it decodes, and a
+conservative phonetic pass repairs what still comes out wrong. Measured over
+eight sentences whose proper nouns this recognizer gets wrong, names correct
+went from **5/8 to 7/8**.
+
+**When you notice a name coming out wrong, add a line to that file and
+re-run.** That is the fix — no code change, no new model. Every correction it
+makes is listed in the report with what was originally heard, so nothing is
+changed silently.
 
 **Long-range callbacks** — a turn that revives something dropped at least four
 turns earlier. Embedding similarity alone is useless here: any two turns about
@@ -293,7 +399,7 @@ error**, overlap detection at **0.97 precision**.
 
 # Validation
 
-`convlab validate` builds material whose answer is known by construction, runs
+`conversation-analyst validate` builds material whose answer is known by construction, runs
 the real detectors on it, and scores them. All 29 checks pass:
 
 | Check | Result |
@@ -319,7 +425,7 @@ the real detectors on it, and scores them. All 29 checks pass:
 
 ## Benchmark
 
-`convlab benchmark` goes further than validation: it measures the
+`conversation-analyst benchmark` goes further than validation: it measures the
 recognizer's **word error rate** against scripted synthetic speech, runs the
 full pipeline end-to-end on real .mp4 files and scores the measured turn
 counts, backchannel counts, response latencies and question detection
@@ -407,13 +513,17 @@ The app is a thin shell over a library and a CLI.
 ```bash
 pip install -e ".[semantic,dev]"
 
-convlab gui                        # the desktop app
-convlab analyze recordings/ -o out/
-convlab analyze sessions.json -o out/     # explicit manifest
-convlab demo -o out/
-convlab validate                   # ground-truth checks (29+)
-convlab benchmark                  # accuracy incl. WER + cold/warm runtime
-convlab codebook -o docs/measures.md
+conversation-analyst-gui                  # the desktop app
+conversation-analyst analyze recordings/ -o out/
+conversation-analyst analyze sessions.json -o out/   # explicit manifest
+conversation-analyst demo -o out/
+conversation-analyst validate-study <study.zip> -w out/   # vs the study's records
+conversation-analyst agreement coding-<session>-<coder>.json -w out/
+conversation-analyst docs --open          # documentation of record
+# `convlab` still works as an alias for one release
+conversation-analyst validate                   # ground-truth checks (29+)
+conversation-analyst benchmark                  # accuracy incl. WER + cold/warm runtime
+conversation-analyst codebook -o docs/measures.md
 pytest                             # 341 tests, no models or media needed
 ```
 
@@ -431,7 +541,7 @@ relative to the manifest, so it can travel with the recordings:
 ```
 
 Save it as `sessions.json` next to the videos and point the app or
-`convlab analyze` at that file instead of the folder.
+`conversation-analyst analyze` at that file instead of the folder.
 
 Pipeline order, and why:
 
@@ -442,7 +552,7 @@ probe → decode audio → align cameras → voice activity → recording qualit
                               coherence · learned voice model, HMM decoded)
       → turns → transcription → turns again
       → prosody · semantics · body · hesitations · laughter
-      → 161 measures → tables · codebook · QC · dashboard
+      → 203 measures → tables · codebook · QC · dashboard
 ```
 
 Attribution runs *after* face tracking so mouth movement can inform it. Turn
@@ -483,7 +593,7 @@ a common silent failure on lab Windows machines).
 
 - [`docs/HOW-IT-WORKS.md`](docs/HOW-IT-WORKS.md) — **start here**: full walkthrough of every stage and how each measure is defined
 - [`docs/METHODS.md`](docs/METHODS.md) — algorithms, thresholds, and their justification
-- [`docs/measures.md`](docs/measures.md) — the generated catalogue of all 161 measures
+- [`docs/measures.md`](docs/measures.md) — the generated catalogue of all 203 measures
 
 ---
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from convlab.config import TurnConfig
-from convlab.timeline import Segments
-from convlab.turns import (
+from conversation_analyst.config import TurnConfig
+from conversation_analyst.timeline import Segments
+from conversation_analyst.turns import (
     BACKCHANNEL_LEXICON,
     build_ipus,
     build_turn_set,

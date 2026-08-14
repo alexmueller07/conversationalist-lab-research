@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "convlab"
-version = "0.1.0"
-description = "Multimodal measurement of dyadic conversation quality from three-camera recordings"
+name = "conversation-analyst"
+version = "1.0.0"
+description = "Conversation Analyst: multimodal measurement of dyadic conversation from per-person video"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -32,10 +32,12 @@ semantic = ["sentence-transformers>=2.2", "torch>=2.0"]
 dev = ["pytest>=7.4", "pytest-cov>=4.1"]
 
 [project.scripts]
-convlab = "convlab.cli:main"
+conversation-analyst = "conversation_analyst.cli:main"
+# Kept for one release so nothing that learned the old name breaks.
+convlab = "conversation_analyst.cli:main"
 
 [project.gui-scripts]
-convlab-gui = "convlab.gui:main"
+conversation-analyst-gui = "conversation_analyst.gui:main"
 # A gui-script rather than a console script: on Windows this produces a
 # launcher that opens no console window, so double-clicking the app does not
 # leave a black terminal sitting behind it.
@@ -44,7 +46,7 @@ convlab-gui = "convlab.gui:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-convlab = ["resources/*.json", "resources/*.txt", "report/assets/*"]
+conversation_analyst = ["resources/*.json", "resources/*.txt", "report/assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

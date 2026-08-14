@@ -12,12 +12,12 @@ import json
 import numpy as np
 import pytest
 
-from convlab.config import Config
-from convlab.context import AnalysisContext
-from convlab.report.player import STATE_HZ, build_player_data, render_player
-from convlab.speech.attribution import AttributionResult, Calibration
-from convlab.timeline import Segments
-from convlab.turns import Turn, TurnSet
+from conversation_analyst.config import Config
+from conversation_analyst.context import AnalysisContext
+from conversation_analyst.report.player import STATE_HZ, build_player_data, render_player
+from conversation_analyst.speech.attribution import AttributionResult, Calibration
+from conversation_analyst.timeline import Segments
+from conversation_analyst.turns import Turn, TurnSet
 
 
 @pytest.fixture
