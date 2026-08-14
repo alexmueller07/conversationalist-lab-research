@@ -264,6 +264,30 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0 if report.passed else 1
 
 
+def cmd_validate_study(args: argparse.Namespace) -> int:
+    """Compare pipeline output against the study's own records."""
+    from conversation_analyst.study import run_study_validation, write_study_report
+
+    result = run_study_validation(args.study, args.workspace)
+    path = write_study_report(result, args.workspace)
+
+    print(f"Praat convergence over {result.n_sessions} session(s):")
+    for _, row in result.convergence_by_stat.iterrows():
+        print(
+            f"  {row.statistic:6s} r={row.r:+.3f}  "
+            f"median |err| {row.median_abs_error_hz:6.2f} Hz  "
+            f"(lab {row.lab_mean:6.1f}, ours {row.our_mean:6.1f})"
+        )
+    if len(result.criterion_panel):
+        consistent = (result.criterion_panel.consistent == "yes").sum()
+        directional = (result.criterion_panel.consistent != "n/a").sum()
+        print(f"Criterion panel: {consistent}/{directional} in the predicted direction")
+    for note in result.notes:
+        print(f"  NOTE: {note}")
+    print(f"-> {path}")
+    return 0
+
+
 def cmd_benchmark(args: argparse.Namespace) -> int:
     from conversation_analyst.benchmark import run_benchmark
 
@@ -335,6 +359,16 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--quick", action="store_true",
                           help="fewer seeds and no transcription")
     validate.set_defaults(func=cmd_validate)
+
+    study = sub.add_parser(
+        "validate-study",
+        help="compare pipeline output against the study's own records "
+             "(Praat values, skill groups, partner reports)",
+    )
+    study.add_argument("study", help="path to the study zip or extracted folder")
+    study.add_argument("-w", "--workspace", default="workspace",
+                       help="analysis workspace holding measures_all.csv")
+    study.set_defaults(func=cmd_validate_study)
 
     bench = sub.add_parser(
         "benchmark",
