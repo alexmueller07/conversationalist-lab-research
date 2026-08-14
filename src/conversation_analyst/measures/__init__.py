@@ -34,6 +34,7 @@ from conversation_analyst.measures import laughter as _laughter  # noqa: F401
 from conversation_analyst.measures import synchrony as _synchrony  # noqa: F401
 from conversation_analyst.measures import dynamics as _dynamics  # noqa: F401
 from conversation_analyst.measures import counts as _counts  # noqa: F401
+from conversation_analyst.measures import interaction_models as _interaction_models  # noqa: F401
 
 __all__ = [
     "registry",

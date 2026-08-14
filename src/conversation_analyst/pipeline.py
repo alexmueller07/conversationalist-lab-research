@@ -59,7 +59,8 @@ PIPELINE_STAGES: tuple[str, ...] = (
     "probe", "decode_audio", "sync", "vad", "recording_quality",
     "face_tracking", "attribution",
     "turns_provisional", "asr", "turns", "prosody", "semantics",
-    "face_signals", "body_tracking", "filled_pauses", "laughter", "measures",
+    "face_signals", "body_tracking", "filled_pauses", "laughter",
+    "interaction_models", "measures",
 )
 """Stage order, for progress reporting. Stages may be skipped, so a caller
 showing a progress bar should treat this as the maximum rather than a
@@ -665,6 +666,59 @@ def analyze_session(
                 stage.skip("; ".join(payload["warnings"]) or "unavailable")
 
     _stop_tracking(tracking, context)
+
+    # ---- 14b. interaction models ---------------------------------------
+    #
+    # The two model-based descriptions: tempo phases (where the exchange
+    # changed gear) and listener-responsiveness signatures (how tightly
+    # each person's nods and backchannels couple to the partner's pauses).
+    # Both are derived entirely from artifacts already computed, so this
+    # stage costs milliseconds and never touches media.
+    if context.turn_set is not None and context.turn_set.turns:
+        with stage_ctx("interaction_models") as stage:
+            from conversation_analyst.phases import detect_phases
+            from conversation_analyst.responsiveness import fit_responsiveness
+
+            onsets = np.array([t.start for t in context.turn_set.turns])
+            context.phases = detect_phases(onsets, context.duration)
+
+            fits = {}
+            for person in PERSONS:
+                partner = context.other(person)
+                # Opportunities: the partner completing an inter-pausal
+                # unit -- the transition-relevance places of the
+                # backchannel literature.
+                opportunities = np.array([
+                    u.end
+                    for t in context.turn_set.turns if t.person == partner
+                    for u in t.ipus
+                ])
+                # Responses: vocal backchannels, plus nods produced while
+                # listening when face signals exist.
+                responses = [
+                    u.start for u in context.turn_set.backchannels
+                    if u.person == person
+                ]
+                face = context.usable_face(person)
+                if face is not None:
+                    from conversation_analyst.vision.nods import LISTENING
+
+                    responses += [
+                        e.start for e in face.nod_track.of_role(LISTENING)
+                    ]
+                fit = fit_responsiveness(
+                    person, np.sort(np.array(responses, dtype=float)),
+                    opportunities, context.listening_segments(person),
+                )
+                if fit is not None:
+                    fits[person] = fit
+                    for warning in fit.warnings:
+                        context.note(warning)
+            context.responsiveness = fits or None
+            stage.report.detail = (
+                f"{context.phases.n_phases} phases; responsiveness fits: "
+                f"{', '.join(sorted(fits)) or 'none identifiable'}"
+            )
 
     # ---- 15. measures --------------------------------------------------
     with stage_ctx("measures") as stage:

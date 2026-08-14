@@ -661,6 +661,96 @@ def _match(truth, detected, tolerance: float):
 # ----------------------------------------------------------------------
 
 
+def validate_responsiveness(report: ValidationReport) -> None:
+    """The Hawkes-family fitter must recover planted signatures.
+
+    Simulated listeners with known (mu, alpha, tau) via Ogata thinning; the
+    fitted product alpha*tau (responses evoked per opportunity) must land
+    near truth, and a listener with NO coupling must not acquire one --
+    the null case is the one that protects the family from over-reading.
+    """
+    from conversation_analyst.responsiveness import (
+        fit_responsiveness, simulate_responses,
+    )
+    from conversation_analyst.timeline import Segments
+
+    rng = np.random.default_rng(5)
+    listening = Segments.from_pairs([(k * 60.0, k * 60.0 + 30.0) for k in range(20)])
+    triggers = np.sort(rng.uniform(0, 1200, 300))
+
+    errors = []
+    for seed, (mu, alpha, tau) in enumerate(
+        [(0.02, 0.30, 1.0), (0.05, 0.15, 2.5), (0.01, 0.60, 0.5)]
+    ):
+        sim_rng = np.random.default_rng(seed)
+        events = simulate_responses(mu, alpha, tau, triggers, listening, sim_rng)
+        fit = fit_responsiveness("A", events, triggers, listening)
+        if fit is None:
+            errors.append(1.0)
+            continue
+        truth = alpha * tau
+        errors.append(abs(fit.evoked_per_opportunity - truth) / truth)
+
+    null_events = simulate_responses(
+        0.08, 0.0, 1.0, triggers, listening, np.random.default_rng(3)
+    )
+    null_fit = fit_responsiveness("A", null_events, triggers, listening)
+    null_share = null_fit.evoked_share if null_fit is not None else 1.0
+
+    report.add(
+        Check(
+            "responsiveness recovery", "median relative error of alpha*tau",
+            float(np.median(errors)), 0.30, "max",
+            "planted (mu, alpha, tau) over three regimes",
+        ),
+        Check(
+            "responsiveness null", "evoked share with no planted coupling",
+            float(null_share), 0.10, "max",
+            "an uncoupled listener must not acquire a coupling",
+        ),
+    )
+
+
+def validate_phases(report: ValidationReport) -> None:
+    """Tempo changepoints must be found, and stationary tempo left alone."""
+    from conversation_analyst.phases import detect_phases
+
+    def onsets(rate_per_min, t0, t1, rng):
+        n = rng.poisson(rate_per_min * (t1 - t0) / 60.0)
+        return np.sort(rng.uniform(t0, t1, n))
+
+    strong = 0
+    for seed in range(10):
+        rng = np.random.default_rng(seed)
+        events = np.concatenate([
+            onsets(20, 0, 200, rng), onsets(5, 200, 420, rng),
+            onsets(18, 420, 620, rng),
+        ])
+        found = detect_phases(events, 620.0).boundaries
+        strong += (
+            len(found) == 2
+            and abs(found[0] - 200) <= 60 and abs(found[1] - 420) <= 60
+        )
+
+    nulls = 0
+    for seed in range(10):
+        rng = np.random.default_rng(100 + seed)
+        nulls += detect_phases(onsets(12, 0, 620, rng), 620.0).n_phases == 1
+
+    report.add(
+        Check(
+            "phase recovery", "planted 4x tempo changes found (of 10)",
+            float(strong), 7.0, "min",
+            "two boundaries within 60 s of the planted gear changes",
+        ),
+        Check(
+            "phase null", "constant tempo reported as one phase (of 10)",
+            float(nulls), 9.0, "min",
+            "false structure is the failure mode that matters most",
+        ),
+    )
+
+
 def run_validation(
     output_dir: str | Path | None = None,
     seeds: tuple[int, ...] = (3, 7, 11, 17),
@@ -678,6 +768,8 @@ def run_validation(
     validate_nods(report)
     validate_synchrony(report)
     validate_turn_boundaries(report)
+    validate_responsiveness(report)
+    validate_phases(report)
     if not quick:
         validate_callbacks(report)
     validate_speech_chain(

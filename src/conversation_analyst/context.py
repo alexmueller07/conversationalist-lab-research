@@ -59,6 +59,13 @@ class AnalysisContext:
     # -- derived --------------------------------------------------------
     topics: Any | None = None
     semantics: Any | None = None
+    responsiveness: Any | None = None
+    """Per-person fitted listener-responsiveness signatures
+    (:class:`conversation_analyst.responsiveness.ResponsivenessFit`), or
+    None when no fit was identifiable."""
+    phases: Any | None = None
+    """Tempo phase segmentation
+    (:class:`conversation_analyst.phases.PhaseSegmentation`)."""
 
     # -- recording quality ----------------------------------------------
     video_quality: dict[str, Any] | None = None
